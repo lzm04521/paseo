@@ -1,0 +1,54 @@
+{
+  "name": "@getpaseo/relay",
+  "version": "0.2.5",
+  "description": "Paseo relay for bridging daemon and client connections",
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "node": "./dist/index.js",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./e2ee": {
+      "types": "./dist/e2ee.d.ts",
+      "node": "./dist/e2ee.js",
+      "import": "./src/e2ee.ts",
+      "default": "./src/e2ee.ts"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare-adapter.d.ts",
+      "node": "./dist/cloudflare-adapter.js",
+      "import": "./src/cloudflare-adapter.ts",
+      "default": "./src/cloudflare-adapter.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node ../../scripts/clean-package-dist.mjs",
+    "build": "tsc -p tsconfig.json --incremental false",
+    "build:clean": "npm run clean && npm run build",
+    "prepack": "npm run build:clean",
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "base64-js": "^1.5.1",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/ws": "^8.5.8",
+    "typescript": "^5.2.2",
+    "vitest": "^4.1.6"
+  }
+}

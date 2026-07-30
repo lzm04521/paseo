@@ -1,0 +1,51 @@
+import { withUnistyles } from "react-native-unistyles";
+import {
+  Archive,
+  ArrowDownUp,
+  Download,
+  GitCommitHorizontal,
+  GitMerge,
+  RefreshCcw,
+  Upload,
+} from "lucide-react-native";
+import { GitActionsSplitButton } from "@/git/actions-split-button";
+import { useGitActions } from "@/git/use-actions";
+import type { Theme } from "@/styles/theme";
+
+interface WorkspaceActionsProps {
+  serverId: string;
+  cwd: string;
+  hideLabels?: boolean;
+}
+
+const ThemedGitCommitHorizontal = withUnistyles(GitCommitHorizontal);
+const ThemedDownload = withUnistyles(Download);
+const ThemedUpload = withUnistyles(Upload);
+const ThemedArrowDownUp = withUnistyles(ArrowDownUp);
+const ThemedGitMerge = withUnistyles(GitMerge);
+const ThemedRefreshCcw = withUnistyles(RefreshCcw);
+const ThemedArchive = withUnistyles(Archive);
+
+const mutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+});
+
+const ICONS = {
+  commit: <ThemedGitCommitHorizontal size={16} uniProps={mutedColorMapping} />,
+  pull: <ThemedDownload size={16} uniProps={mutedColorMapping} />,
+  push: <ThemedUpload size={16} uniProps={mutedColorMapping} />,
+  pullAndPush: <ThemedArrowDownUp size={16} uniProps={mutedColorMapping} />,
+  merge: <ThemedGitMerge size={16} uniProps={mutedColorMapping} />,
+  mergeFromBase: <ThemedRefreshCcw size={16} uniProps={mutedColorMapping} />,
+  archive: <ThemedArchive size={16} uniProps={mutedColorMapping} />,
+};
+
+export function WorkspaceActions({ serverId, cwd, hideLabels }: WorkspaceActionsProps) {
+  const { gitActions } = useGitActions({
+    serverId,
+    cwd,
+    icons: ICONS,
+  });
+
+  return <GitActionsSplitButton gitActions={gitActions} hideLabels={hideLabels} />;
+}
