@@ -44,6 +44,11 @@ export function identityColor(name: IdentityColorName): string {
   return IDENTITY_COLORS[name];
 }
 
+/** The same hue at 10% alpha, for fills that sit behind text of the full-strength color. */
+export function identityTint(name: IdentityColorName): string {
+  return `${IDENTITY_COLORS[name]}1a`;
+}
+
 function hashIdentityKey(key: string): number {
   let hash = 0;
   for (const character of key) {

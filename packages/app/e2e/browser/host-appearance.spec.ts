@@ -129,6 +129,7 @@ test.describe("Host appearance", () => {
     expect(titleBox).not.toBeNull();
     expect(rowBox).not.toBeNull();
     expect(kebabBox).not.toBeNull();
+    await expect(badge).toHaveCSS("flex-shrink", "0");
     expect(titleBox!.width).toBeGreaterThan(0);
     expect(kebabBox!.x + kebabBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   });
