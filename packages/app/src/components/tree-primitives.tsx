@@ -12,6 +12,12 @@ import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 // drift apart.
 export const TREE_INDENT_PER_LEVEL = 16;
 export const WORKSPACE_FILE_ROW_VERTICAL_PADDING = SPACING[1.5];
+/**
+ * Trailing glyph rail shared with the explorer X and Changes options chevron.
+ * The extra 2px is optical: text ink ends inside its layout box, while the
+ * header icons' strokes extend to theirs.
+ */
+export const WORKSPACE_FILE_ROW_TRAILING_PADDING = SPACING[4] + 2;
 
 /** Left padding for a tree row at `depth`. Shared by folder rows and file headers
  * in the Changes tree so their indentation can't drift apart. */
@@ -52,7 +58,13 @@ export function TreeIndentGuides({ depth }: { depth: number }) {
 /** Rotating disclosure chevron for a directory row (points right; rotates down when expanded). */
 export function TreeChevron({ expanded }: { expanded: boolean }) {
   return (
-    <View style={expanded ? [styles.chevron, styles.chevronExpanded] : styles.chevron}>
+    <View
+      style={
+        expanded
+          ? [styles.chevron, styles.chevronExpanded]
+          : [styles.chevron, styles.chevronCollapsed]
+      }
+    >
       <ThemedChevronRight size={16} uniProps={foregroundMutedIconColorMapping} />
     </View>
   );
@@ -73,7 +85,13 @@ const styles = StyleSheet.create((theme: Theme) => ({
     justifyContent: "center",
     flexShrink: 0,
   },
+  // Lucide's right-pointing path occupies the middle of its square view box.
+  // Move the painted edge—not the 16px layout slot—onto the tree's glyph rail.
+  chevronCollapsed: {
+    left: -4,
+  },
   chevronExpanded: {
+    left: -2,
     transform: [{ rotate: "90deg" }],
   },
 }));

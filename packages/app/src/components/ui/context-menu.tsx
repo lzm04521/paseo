@@ -1,4 +1,10 @@
-import { useCallback, type PropsWithChildren, type ReactElement, type Ref } from "react";
+import {
+  useCallback,
+  type ComponentProps,
+  type PropsWithChildren,
+  type ReactElement,
+  type Ref,
+} from "react";
 import {
   Platform,
   Pressable,
@@ -31,12 +37,22 @@ import {
  * docs/menus.md. Only the way it opens is different from `dropdown-menu.tsx`.
  */
 
-export { MenuRoot as ContextMenu };
 export { MenuItem as ContextMenuItem };
 export { MenuLabel as ContextMenuLabel };
 export { MenuSeparator as ContextMenuSeparator };
 export { MenuHint as ContextMenuHint };
 export type { ActionStatus } from "@/components/ui/menu";
+
+/**
+ * Context menus use the mobile menu convention by default: long press opens a bottom sheet on a
+ * compact layout, while right click opens an anchored popover on a wide layout.
+ */
+export function ContextMenu({
+  compactMode = "sheet",
+  ...props
+}: ComponentProps<typeof MenuRoot>): ReactElement {
+  return <MenuRoot {...props} compactMode={compactMode} />;
+}
 
 export function ContextMenuContent(props: MenuSurfaceProps): ReactElement | null {
   return <MenuSurface {...props} />;
@@ -85,7 +101,7 @@ export function ContextMenuTrigger({
   disabled,
   style,
   enabled = true,
-  enabledOnMobile = false,
+  enabledOnMobile = true,
   enabledOnWeb = true,
   longPressDelayMs,
   triggerRef,

@@ -48,6 +48,7 @@ import { DiffFolderRow } from "@/git/diff-folder-row";
 import {
   TreeIndentGuides,
   treeRowPaddingLeft,
+  WORKSPACE_FILE_ROW_TRAILING_PADDING,
   WORKSPACE_FILE_ROW_VERTICAL_PADDING,
 } from "@/components/tree-primitives";
 import { MaterialFileIcon } from "@/components/material-file-icon";
@@ -92,6 +93,7 @@ import { useCheckoutGitActionsStore } from "@/git/actions-store";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useOverlayFlatListScrollbar } from "@/components/ui/overlay-scrollbar/use-overlay-flat-list-scrollbar";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { usePanelStore } from "@/stores/panel-store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
@@ -125,8 +127,11 @@ export function resolveDiffLayout(
   return canUseSplitLayout ? layout : "unified";
 }
 
-function fileHeaderPressableStyle({ pressed }: PressableStateCallbackType) {
-  return [styles.fileHeader, pressed && styles.fileHeaderPressed];
+function fileHeaderPressableStyle({
+  hovered,
+  pressed,
+}: PressableStateCallbackType & { hovered?: boolean }) {
+  return [styles.fileHeader, (Boolean(hovered) || pressed) && styles.fileHeaderActive];
 }
 
 interface HighlightedTextProps {
@@ -972,6 +977,10 @@ const DiffFileHeader = memo(function DiffFileHeader({
     };
   }, []);
 
+  const handleLongPress = useCallback(() => {
+    pressHandledRef.current = true;
+  }, []);
+
   const handlePressOut = useCallback(
     (event: { nativeEvent: { pageX: number; pageY: number } }) => {
       if (
@@ -1051,13 +1060,13 @@ const DiffFileHeader = memo(function DiffFileHeader({
   } else {
     trigger = (
       <ContextMenuTrigger
-        enabledOnMobile={false}
         testID={testID ? `${testID}-toggle` : undefined}
         style={headerPressableStyle}
         // Android: prevent parent pan/scroll gestures from canceling the tap release.
         cancelable={false}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        onLongPress={handleLongPress}
         onPress={toggleExpanded}
       >
         {headerContent}
@@ -1831,6 +1840,7 @@ interface SharedDiffViewProps {
 }
 
 export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffViewProps) {
+  const isCompact = useIsCompactFormFactor();
   const { layout, wrapLines, codeFontSize, monoFontFamily } = displayPreferences;
   const diffBodyLineHeight = Math.round(codeFontSize * 1.5);
   const typographyKey = [monoFontFamily, codeFontSize, diffBodyLineHeight].join(":");
@@ -1876,6 +1886,8 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
     [allFolderPathSet, collapsedFolders],
   );
   const diffListRef = useRef<FlatList<DiffFlatItem>>(null);
+  const scrollbar = useOverlayFlatListScrollbar(diffListRef, { enabled: !isCompact });
+  const { onLayout: updateScrollbarLayout, onScroll: updateScrollbarOffset } = scrollbar;
   const consumedFocusRequestRef = useRef<string | null>(null);
   const pendingFocusRequestRef = useRef<string | null>(null);
   const diffListScrollOffsetRef = useRef(0);
@@ -2025,17 +2037,25 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
     [getBodyHeightKey, scheduleHeightVersionUpdate],
   );
 
-  const handleDiffListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    diffListScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-  }, []);
+  const handleDiffListScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      diffListScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+      updateScrollbarOffset(event);
+    },
+    [updateScrollbarOffset],
+  );
 
-  const handleDiffListLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    if (!Number.isFinite(height) || height <= 0) {
-      return;
-    }
-    diffListViewportHeightRef.current = height;
-  }, []);
+  const handleDiffListLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const height = event.nativeEvent.layout.height;
+      if (!Number.isFinite(height) || height <= 0) {
+        return;
+      }
+      diffListViewportHeightRef.current = height;
+      updateScrollbarLayout(event);
+    },
+    [updateScrollbarLayout],
+  );
 
   const computeItemOffset = useCallback(
     (predicate: (item: DiffFlatItem) => boolean): number | null => {
@@ -2269,26 +2289,30 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
   );
 
   return (
-    <FlatList
-      ref={diffListRef}
-      data={flatItems}
-      renderItem={renderFlatItem}
-      keyExtractor={flatKeyExtractor}
-      getItemLayout={getFlatItemLayout}
-      stickyHeaderIndices={stickyHeaderIndices}
-      extraData={flatExtraData}
-      style={styles.scrollView}
-      contentContainerStyle={styles.contentContainer}
-      testID="git-diff-scroll"
-      onLayout={handleDiffListLayout}
-      onScroll={handleDiffListScroll}
-      scrollEventThrottle={16}
-      showsVerticalScrollIndicator
-      removeClippedSubviews={false}
-      initialNumToRender={12}
-      maxToRenderPerBatch={12}
-      windowSize={10}
-    />
+    <View style={styles.scrollContainer}>
+      <FlatList
+        ref={diffListRef}
+        data={flatItems}
+        renderItem={renderFlatItem}
+        keyExtractor={flatKeyExtractor}
+        getItemLayout={getFlatItemLayout}
+        stickyHeaderIndices={stickyHeaderIndices}
+        extraData={flatExtraData}
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        testID="git-diff-scroll"
+        onLayout={handleDiffListLayout}
+        onScroll={handleDiffListScroll}
+        onContentSizeChange={scrollbar.onContentSizeChange}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={!scrollbar.enabled}
+        removeClippedSubviews={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={10}
+      />
+      {scrollbar.overlay}
+    </View>
   );
 }
 
@@ -3050,6 +3074,11 @@ const styles = StyleSheet.create((theme) => ({
   scrollView: {
     flex: 1,
   },
+  scrollContainer: {
+    flex: 1,
+    minHeight: 0,
+    position: "relative",
+  },
   contentContainer: {
     paddingBottom: theme.spacing[8],
   },
@@ -3110,15 +3139,15 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: theme.spacing[3],
-    paddingRight: theme.spacing[3],
+    paddingRight: WORKSPACE_FILE_ROW_TRAILING_PADDING,
     paddingVertical: WORKSPACE_FILE_ROW_VERTICAL_PADDING,
     gap: theme.spacing[1],
     minWidth: 0,
     zIndex: 2,
     elevation: 2,
   },
-  fileHeaderPressed: {
-    opacity: 0.7,
+  fileHeaderActive: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
   },
   fileHeaderLeft: {
     flexDirection: "row",

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Archive, CircleCheck, Copy, MoreVertical, Pencil, Pin, PinOff } from "lucide-react-native";
-import { isNative, isWeb } from "@/constants/platform";
+import { isWeb } from "@/constants/platform";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -110,7 +110,7 @@ function SidebarWorkspaceMenuItems({
 }: SidebarWorkspaceMenuItemsProps & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   const archiveTrailing = useMemo(
-    () => (archiveShortcutKeys && !isNative ? <Shortcut chord={archiveShortcutKeys} /> : null),
+    () => (archiveShortcutKeys ? <Shortcut chord={archiveShortcutKeys} /> : null),
     [archiveShortcutKeys],
   );
 
@@ -205,7 +205,7 @@ export function SidebarWorkspaceMenu({
 }: SidebarWorkspaceMenuProps) {
   const { t } = useTranslation();
   return (
-    <DropdownMenu>
+    <DropdownMenu compactMode="sheet">
       <DropdownMenuTrigger
         hitSlop={8}
         style={triggerStyle}
@@ -215,7 +215,7 @@ export function SidebarWorkspaceMenu({
       >
         {renderTriggerIcon}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" width={260}>
+      <DropdownMenuContent align="end" width={260} sheetTitle={t("sidebar.workspace.actions.menu")}>
         <SidebarWorkspaceMenuItems
           surface="dropdown"
           workspaceKey={workspaceKey}
@@ -339,6 +339,9 @@ const styles = StyleSheet.create((theme) => ({
     padding: 2,
     borderRadius: 4,
     marginLeft: 2,
+    // MoreVertical paints only around the center of its SVG. Keep the padded hit box, but
+    // pull the painted dots through that unused view-box space onto the trailing-content rail.
+    marginRight: -7,
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,

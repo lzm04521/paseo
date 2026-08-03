@@ -62,7 +62,7 @@ export function SidebarWorkspaceTrailingContent({
 function WorkspaceTimestamp({ enteredAt }: { enteredAt: Date }) {
   const label = useCompactTimeAgo(enteredAt);
   return (
-    <Text style={styles.timestamp} numberOfLines={1}>
+    <Text style={styles.timestamp} numberOfLines={1} testID="sidebar-workspace-timestamp">
       {label}
     </Text>
   );

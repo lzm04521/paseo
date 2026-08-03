@@ -23,6 +23,9 @@ sheets the same way a phone does.
 flipping every menu in the app to sheets at once is not a change anyone can review. Opt a menu in
 when you have actually looked at it on a phone.
 
+`ContextMenu` is the exception: it defaults to `compactMode="sheet"` and enables native long press.
+Disable mobile triggering explicitly on draggable rows, where long press belongs to drag instead.
+
 ## Pages
 
 A submenu is a page, declared as data on the surface and reached by a `MenuSubTrigger` whose `id`
@@ -114,6 +117,10 @@ its own.
   identity changes — a pushed page taller than the one it replaced is clipped without that.
 - **Sheets size to content.** `enableDynamicSizing`, not fixed snap points. A pushed page is
   rarely the height of the page before it.
+- **The sheet's content is teleported out of the menu's subtree**, so `MenuSheetSurface` rebuilds
+  both menu contexts through the sheet's `contextBridge`. Providing them around the modal puts
+  them on the wrong side of the portal and every item inside throws. Gotcha 7 in
+  [floating-panels.md](floating-panels.md).
 - **One overlay per menu.** Submenus render inside their parent's layer and paint no second
   backdrop, so there is exactly one `Modal` on native no matter how deep the menu goes.
 - Anchoring, flipping, and edge clamping live in `menu-anchor.ts` and are unit-tested. Fix

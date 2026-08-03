@@ -12,6 +12,7 @@ import {
   TreeChevron,
   TreeIndentGuides,
   treeRowPaddingLeft,
+  WORKSPACE_FILE_ROW_TRAILING_PADDING,
   WORKSPACE_FILE_ROW_VERTICAL_PADDING,
 } from "@/components/tree-primitives";
 import { type Theme } from "@/styles/theme";
@@ -103,7 +104,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
   folderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingRight: theme.spacing[3],
+    paddingRight: WORKSPACE_FILE_ROW_TRAILING_PADDING,
     paddingVertical: WORKSPACE_FILE_ROW_VERTICAL_PADDING,
     gap: theme.spacing[1],
     minWidth: 0,

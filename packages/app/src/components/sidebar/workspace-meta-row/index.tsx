@@ -31,9 +31,6 @@ export { selectWorkspaceScriptSummary, type WorkspaceScriptSummary } from "./scr
  */
 const META_ICON_SIZE = 12;
 
-/** Carried over from the host pill: a host can carry an arbitrary custom label. */
-const MAX_HOST_LABEL_WIDTH = 96;
-
 const ThemedServer = withUnistyles(Server);
 const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);
@@ -283,16 +280,14 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     flexShrink: 0,
   },
-  // A host label is arbitrary user text and the only item on the line that can be long, so
-  // it is the one that gets capped and truncated. The change request, CI and service items
-  // are bounded by their own content and must never be the thing that gives way.
+  // The host is the only unbounded item, so it consumes the remaining width and gives way
+  // before the bounded change request, CI, and service items.
   hostItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
     minWidth: 0,
-    flexShrink: 0,
-    maxWidth: MAX_HOST_LABEL_WIDTH,
+    flexShrink: 1,
   },
   itemPressed: {
     opacity: 0.82,

@@ -17,9 +17,10 @@ import { ChevronLeft } from "lucide-react-native";
 import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
+  type ContextBridge,
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import type { Theme } from "@/styles/theme";
-import { useMenuContext, MenuDepthProvider } from "./menu-context";
+import { useMenuContext, MenuContextProvider, MenuDepthProvider } from "./menu-context";
 import { currentPageId, isSubPageOpen } from "./menu-navigation";
 import { AnchoredSurface, MenuOverlay } from "./menu-overlay";
 import type { Alignment, Placement } from "./menu-anchor";
@@ -327,40 +328,51 @@ function MenuSheetSurface({
   const openPage = openPageId ? pages.find((page) => page.id === openPageId) : null;
   const depth = menu.path.length;
 
+  // The sheet's content is teleported out of this subtree, so both menu contexts have to be
+  // rebuilt on the other side. Providing them around the modal instead would put them on the
+  // wrong side of the portal and every item inside would throw. See `ContextBridge`.
+  const contextBridge = useCallback<ContextBridge>(
+    (content) => (
+      <MenuContextProvider value={menu}>
+        <MenuSurfaceContext.Provider value={surfaceValue}>{content}</MenuSurfaceContext.Provider>
+      </MenuContextProvider>
+    ),
+    [menu, surfaceValue],
+  );
+
   return (
-    <MenuSurfaceContext.Provider value={surfaceValue}>
-      <ThemedBottomSheetModal
-        ref={sheetRef}
-        // Content-sized rather than fixed snap points: a pushed page is rarely the same height
-        // as the page it replaced, and a fixed sheet would either clip it or leave dead space.
-        enableDynamicSizing
-        onChange={handleSheetChange}
-        onDismiss={handleSheetDismiss}
-        backdropComponent={renderBackdrop}
-        enablePanDownToClose
-        keyboardBehavior="extend"
-        keyboardBlurBehavior="restore"
+    <ThemedBottomSheetModal
+      ref={sheetRef}
+      contextBridge={contextBridge}
+      // Content-sized rather than fixed snap points: a pushed page is rarely the same height
+      // as the page it replaced, and a fixed sheet would either clip it or leave dead space.
+      enableDynamicSizing
+      onChange={handleSheetChange}
+      onDismiss={handleSheetDismiss}
+      backdropComponent={renderBackdrop}
+      enablePanDownToClose
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={styles.sheetScrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        testID={testID ? `${testID}-content` : undefined}
       >
-        <BottomSheetScrollView
-          contentContainerStyle={styles.sheetScrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          testID={testID ? `${testID}-content` : undefined}
-        >
-          {openPage ? (
-            <>
-              <MenuSheetHeader title={openPage.title} onBack={menu.goBack} />
-              <MenuDepthProvider value={depth}>{openPage.content}</MenuDepthProvider>
-            </>
-          ) : (
-            <>
-              {sheetTitle ? <MenuSheetHeader title={sheetTitle} onBack={null} /> : null}
-              <MenuDepthProvider value={0}>{children}</MenuDepthProvider>
-            </>
-          )}
-        </BottomSheetScrollView>
-      </ThemedBottomSheetModal>
-    </MenuSurfaceContext.Provider>
+        {openPage ? (
+          <>
+            <MenuSheetHeader title={openPage.title} onBack={menu.goBack} />
+            <MenuDepthProvider value={depth}>{openPage.content}</MenuDepthProvider>
+          </>
+        ) : (
+          <>
+            {sheetTitle ? <MenuSheetHeader title={sheetTitle} onBack={null} /> : null}
+            <MenuDepthProvider value={0}>{children}</MenuDepthProvider>
+          </>
+        )}
+      </BottomSheetScrollView>
+    </ThemedBottomSheetModal>
   );
 }
 
