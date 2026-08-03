@@ -22,6 +22,9 @@ import {
   treeRowPaddingLeft,
   WORKSPACE_FILE_ROW_TRAILING_PADDING,
   WORKSPACE_FILE_ROW_VERTICAL_PADDING,
+  WORKSPACE_TREE_ICON_LABEL_GAP,
+  WORKSPACE_TREE_ICON_SIZE,
+  WORKSPACE_TREE_LOADING_ICON_SIZE,
 } from "@/components/tree-primitives";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
@@ -185,10 +188,15 @@ function TreeRowItem({
           <View style={styles.entryIcon}>
             {(() => {
               if (!isDirectory) {
-                return <MaterialFileIcon fileName={entry.name} size={16} />;
+                return <MaterialFileIcon fileName={entry.name} size={WORKSPACE_TREE_ICON_SIZE} />;
               }
               if (loading) {
-                return <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />;
+                return (
+                  <ThemedLoadingSpinner
+                    size={WORKSPACE_TREE_LOADING_ICON_SIZE}
+                    uniProps={foregroundMutedColorMapping}
+                  />
+                );
               }
               return <TreeChevron expanded={isExpanded} />;
             })()}
@@ -1074,10 +1082,14 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: WORKSPACE_TREE_ICON_LABEL_GAP,
     minWidth: 0,
   },
   entryIcon: {
+    width: WORKSPACE_TREE_ICON_SIZE,
+    height: WORKSPACE_TREE_ICON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   entryName: {

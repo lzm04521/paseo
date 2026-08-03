@@ -494,25 +494,34 @@ test("workspace file panes keep their controls on shared alignment rails", async
   const fileHoverColor = await fileRow.evaluate((row) => getComputedStyle(row).backgroundColor);
   expect(fileHoverColor).toBe(folderHoverColor);
 
-  const [folderStat, fileStat, optionsChevron, explorerCloseIcon, diffModeLabel] =
+  const diffFolderName = folderRow.getByText("src", { exact: true });
+  const diffFileName = fileRow.getByText("use-mounted-tab-set.ts", { exact: true });
+  const diffFolderIconLocator = folderRow.locator("svg").first();
+  const diffFileIconLocator = fileRow.locator("svg").first();
+  const [diffFolderIcon, diffFileIcon, diffFolderNameBounds, diffFileNameBounds] =
     await Promise.all([
-      readTextInkBounds(page.getByTestId("diff-folder-src-stat"), "last"),
-      readTextInkBounds(page.getByTestId("diff-file-0-stat"), "last"),
-      readSvgInkBounds(page.getByTestId("changes-options-menu").locator("svg")),
-      readSvgInkBounds(page.getByTestId("explorer-close").locator("svg")),
-      readTextInkBounds(page.getByTestId("changes-diff-status-trigger")),
+      readSvgInkBounds(diffFolderIconLocator),
+      readSvgInkBounds(diffFileIconLocator),
+      diffFolderName.boundingBox(),
+      diffFileName.boundingBox(),
     ]);
-  const expandedFolderChevron = await readSvgInkBounds(folderRow.locator("svg"));
+  expect(diffFolderNameBounds).not.toBeNull();
+  expect(diffFileNameBounds).not.toBeNull();
+  const diffTreeIconNameGap = diffFolderNameBounds!.x - diffFolderIcon.right;
+  expectSameRail(diffTreeIconNameGap, diffFileNameBounds!.x - diffFileIcon.right);
+
+  const [folderStat, fileStat, optionsChevron, explorerCloseIcon] = await Promise.all([
+    readTextInkBounds(page.getByTestId("diff-folder-src-stat"), "last"),
+    readTextInkBounds(page.getByTestId("diff-file-0-stat"), "last"),
+    readSvgInkBounds(page.getByTestId("changes-options-menu").locator("svg")),
+    readSvgInkBounds(page.getByTestId("explorer-close").locator("svg")),
+  ]);
   expectSameRail(folderStat.right, fileStat.right);
   expectSameRail(flatFileStat.right, fileStat.right);
   expectSameRail(fileStat.right, explorerCloseIcon.right);
   expectSameRail(fileStat.right, optionsChevron.right);
   expectSameRail(optionsChevron.right, explorerCloseIcon.right);
-  expectSameRail(expandedFolderChevron.left, diffModeLabel.left);
-
   await folderRow.click();
-  const collapsedFolderChevron = await readSvgInkBounds(folderRow.locator("svg"));
-  expectSameRail(collapsedFolderChevron.left, diffModeLabel.left);
   await folderRow.click();
   await dragOverlayScrollbarDown(page, diffScroll);
 
@@ -536,15 +545,49 @@ test("workspace file panes keep their controls on shared alignment rails", async
   expect(fileMenuBounds!.y).toBeGreaterThan(fileExplorerRowBounds!.y + 10);
   await page.keyboard.press("Escape");
 
-  const [sortLabel, firstRowIcon, treeBounds, rowBounds] = await Promise.all([
+  const directoryRow = page.getByTestId(/^file-explorer-row-\d+$/).filter({ hasText: "src" });
+  const directoryName = directoryRow.getByText("src", { exact: true });
+  const [collapsedDirectoryIcon, collapsedDirectoryNameBounds] = await Promise.all([
+    readSvgInkBounds(directoryRow.locator("svg").first()),
+    directoryName.boundingBox(),
+  ]);
+  expect(collapsedDirectoryNameBounds).not.toBeNull();
+
+  await directoryRow.click();
+  const nestedFileRow = page
+    .getByTestId(/^file-explorer-row-\d+$/)
+    .filter({ hasText: "use-mounted-tab-set.ts" });
+  await expect(nestedFileRow).toBeVisible();
+  const [expandedDirectoryIcon, expandedDirectoryNameBounds, fileIcon, fileNameBounds] =
+    await Promise.all([
+      readSvgInkBounds(directoryRow.locator("svg").first()),
+      directoryName.boundingBox(),
+      readSvgInkBounds(nestedFileRow.locator("svg").first()),
+      nestedFileRow.getByText("use-mounted-tab-set.ts", { exact: true }).boundingBox(),
+    ]);
+  expect(expandedDirectoryNameBounds).not.toBeNull();
+  expect(fileNameBounds).not.toBeNull();
+  expect(expandedDirectoryNameBounds!.x).toBeCloseTo(collapsedDirectoryNameBounds!.x, 1);
+  expectSameRail(
+    collapsedDirectoryNameBounds!.x - collapsedDirectoryIcon.right,
+    fileNameBounds!.x - fileIcon.right,
+  );
+  expectSameRail(
+    expandedDirectoryNameBounds!.x - expandedDirectoryIcon.right,
+    fileNameBounds!.x - fileIcon.right,
+  );
+  expectSameRail(diffTreeIconNameGap, fileNameBounds!.x - fileIcon.right);
+
+  const readmeRow = page.getByTestId(/^file-explorer-row-\d+$/).filter({ hasText: "README.md" });
+  const [sortLabel, fileRowIcon, treeBounds, rowBounds] = await Promise.all([
     readTextInkBounds(page.getByTestId("files-sort-label")),
-    readSvgInkBounds(page.getByTestId("file-explorer-row-0").locator("svg").first()),
+    readSvgInkBounds(readmeRow.locator("svg").first()),
     page.getByTestId("file-explorer-tree-scroll").boundingBox(),
     page.getByTestId("file-explorer-row-0").boundingBox(),
   ]);
   expect(treeBounds).not.toBeNull();
   expect(rowBounds).not.toBeNull();
-  expectSameRail(firstRowIcon.left, sortLabel.left);
+  expectSameRail(fileRowIcon.left, sortLabel.left);
   expect(rowBounds!.x).toBeCloseTo(treeBounds!.x, 0);
   expect(rowBounds!.x + rowBounds!.width).toBeCloseTo(treeBounds!.x + treeBounds!.width, 0);
 });

@@ -50,6 +50,8 @@ import {
   treeRowPaddingLeft,
   WORKSPACE_FILE_ROW_TRAILING_PADDING,
   WORKSPACE_FILE_ROW_VERTICAL_PADDING,
+  WORKSPACE_TREE_ICON_LABEL_GAP,
+  WORKSPACE_TREE_ICON_SIZE,
 } from "@/components/tree-primitives";
 import { MaterialFileIcon } from "@/components/material-file-icon";
 import { FileChangeIcon } from "@/components/file-change-icon";
@@ -1021,7 +1023,10 @@ const DiffFileHeader = memo(function DiffFileHeader({
   const fileName = file.path.split("/").pop() ?? file.path;
   const headerContent = (
     <>
-      <View ref={dragSourceRef} style={styles.fileHeaderLeft}>
+      <View
+        ref={dragSourceRef}
+        style={showDir ? styles.fileHeaderLeft : [styles.fileHeaderLeft, styles.fileHeaderLeftTree]}
+      >
         {showDir ? null : (
           <View style={styles.fileIcon}>
             <MaterialFileIcon fileName={fileName} size={16} />
@@ -3156,6 +3161,9 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
   },
+  fileHeaderLeftTree: {
+    gap: WORKSPACE_TREE_ICON_LABEL_GAP,
+  },
   fileHeaderRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -3163,6 +3171,8 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   fileIcon: {
+    width: WORKSPACE_TREE_ICON_SIZE,
+    height: WORKSPACE_TREE_ICON_SIZE,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",

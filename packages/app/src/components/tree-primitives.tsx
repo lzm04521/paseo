@@ -12,6 +12,9 @@ import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 // drift apart.
 export const TREE_INDENT_PER_LEVEL = 16;
 export const WORKSPACE_FILE_ROW_VERTICAL_PADDING = SPACING[1.5];
+export const WORKSPACE_TREE_ICON_SIZE = 16;
+export const WORKSPACE_TREE_LOADING_ICON_SIZE = 14;
+export const WORKSPACE_TREE_ICON_LABEL_GAP = SPACING[2];
 /**
  * Trailing glyph rail shared with the explorer X and Changes options chevron.
  * The extra 2px is optical: text ink ends inside its layout box, while the
@@ -25,7 +28,9 @@ export function treeRowPaddingLeft(depth: number): number {
   return SPACING[3] + depth * TREE_INDENT_PER_LEVEL;
 }
 
-const foregroundMutedIconColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const foregroundExtraMutedIconColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundExtraMuted,
+});
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
 
@@ -65,7 +70,10 @@ export function TreeChevron({ expanded }: { expanded: boolean }) {
           : [styles.chevron, styles.chevronCollapsed]
       }
     >
-      <ThemedChevronRight size={16} uniProps={foregroundMutedIconColorMapping} />
+      <ThemedChevronRight
+        size={WORKSPACE_TREE_ICON_SIZE}
+        uniProps={foregroundExtraMutedIconColorMapping}
+      />
     </View>
   );
 }
@@ -79,19 +87,19 @@ const styles = StyleSheet.create((theme: Theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   chevron: {
-    width: 16,
-    height: 16,
+    width: WORKSPACE_TREE_ICON_SIZE,
+    height: WORKSPACE_TREE_ICON_SIZE,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  // Lucide's right-pointing path occupies the middle of its square view box.
-  // Move the painted edge—not the 16px layout slot—onto the tree's glyph rail.
+  // Lucide leaves space around the chevron path. Align its painted right edge inside the fixed
+  // slot; the rotated glyph is wider, so it needs half the optical offset.
   chevronCollapsed: {
-    left: -4,
+    left: 4,
   },
   chevronExpanded: {
-    left: -2,
+    left: 2,
     transform: [{ rotate: "90deg" }],
   },
 }));
