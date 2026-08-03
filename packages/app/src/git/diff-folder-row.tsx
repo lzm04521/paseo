@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
-import { FILE_ACTIONS_MENU_WIDTH } from "@/components/file-actions-menu";
 import {
   TreeChevron,
   TreeIndentGuides,
@@ -91,7 +90,6 @@ export function DiffFolderRow({
             deletions={deletions}
             testID={testID ? `${testID}-stat` : undefined}
           />
-          <View style={styles.actionSlot} />
         </View>
       </Pressable>
     </View>
@@ -125,9 +123,6 @@ const styles = StyleSheet.create((theme: Theme) => ({
     alignItems: "center",
     flexShrink: 0,
     gap: theme.spacing[1],
-  },
-  actionSlot: {
-    width: FILE_ACTIONS_MENU_WIDTH,
   },
   folderName: {
     fontSize: theme.fontSize.sm,

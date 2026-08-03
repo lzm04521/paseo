@@ -300,8 +300,7 @@ function ProjectPickerTrigger({
                 iconDataUri={iconDataUri}
                 initial={placeholderInitial}
                 projectViewKey={projectViewKey}
-                imageStyle={styles.projectIcon}
-                fallbackStyle={styles.projectIconFallback}
+                size={ICON_SIZE.md}
                 textStyle={styles.projectIconFallbackText}
               />
             ) : (
@@ -454,8 +453,7 @@ function ProjectOptionItem({
           iconDataUri={iconDataUri}
           initial={placeholderInitial}
           projectViewKey={projectViewKey}
-          imageStyle={styles.projectIcon}
-          fallbackStyle={styles.projectIconFallback}
+          size={ICON_SIZE.md}
           textStyle={styles.projectIconFallbackText}
         />
       </View>
@@ -2305,18 +2303,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  projectIcon: {
-    width: theme.iconSize.md,
-    height: theme.iconSize.md,
-    borderRadius: theme.borderRadius.sm,
-  },
-  projectIconFallback: {
-    width: theme.iconSize.md,
-    height: theme.iconSize.md,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
   },
   projectIconFallbackText: {
     // Single uppercase initial inside an iconSize.md (16px) square — below the

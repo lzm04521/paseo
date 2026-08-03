@@ -30,7 +30,8 @@ import type {
   ExplorerEntry,
 } from "@/stores/session-store";
 import { useSessionStore } from "@/stores/session-store";
-import { FileActionsMenu } from "@/components/file-actions-menu";
+import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-actions";
@@ -172,34 +173,40 @@ function TreeRowItem({
   );
 
   return (
-    <Pressable onPress={handlePress} style={pressableStyle} testID={testID}>
-      <TreeIndentGuides depth={depth} />
-      <View ref={dragSourceRef} style={styles.entryInfo}>
-        <View style={styles.entryIcon}>
-          {(() => {
-            if (!isDirectory) {
-              return <MaterialFileIcon fileName={entry.name} size={16} />;
-            }
-            if (loading) {
-              return <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />;
-            }
-            return <TreeChevron expanded={isExpanded} />;
-          })()}
+    <ContextMenu>
+      <ContextMenuTrigger
+        enabledOnMobile={false}
+        onPress={handlePress}
+        style={pressableStyle}
+        testID={testID}
+      >
+        <TreeIndentGuides depth={depth} />
+        <View ref={dragSourceRef} style={styles.entryInfo}>
+          <View style={styles.entryIcon}>
+            {(() => {
+              if (!isDirectory) {
+                return <MaterialFileIcon fileName={entry.name} size={16} />;
+              }
+              if (loading) {
+                return <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />;
+              }
+              return <TreeChevron expanded={isExpanded} />;
+            })()}
+          </View>
+          <Text style={styles.entryName} numberOfLines={1}>
+            {entry.name}
+          </Text>
         </View>
-        <Text style={styles.entryName} numberOfLines={1}>
-          {entry.name}
-        </Text>
-      </View>
-      <FileActionsMenu
+      </ContextMenuTrigger>
+      <FileActionsContextMenuContent
         fileKind={entry.kind}
         onCopyPath={handleCopy}
         onDownload={handleDownload}
         onAddToChat={onAddToChat ? handleAddToChat : undefined}
         header={metaHeader}
-        accessibilityLabel={t("workspace.fileActions.moreActions")}
         testIDPrefix={testID}
       />
-    </Pressable>
+    </ContextMenu>
   );
 }
 

@@ -24,6 +24,7 @@ import {
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
+import type { WorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
@@ -248,7 +249,7 @@ export function SidebarWorkspaceContextMenu({
   workspace,
   leadingProjectName,
   hostBadgeLabel,
-  scriptIconKind,
+  scriptSummary,
   workspaceKey,
   onCopyPath,
   onCopyBranchName,
@@ -272,7 +273,7 @@ export function SidebarWorkspaceContextMenu({
       workspace: SidebarWorkspaceEntry;
       leadingProjectName?: string | null;
       hostBadgeLabel?: string | null;
-      scriptIconKind?: "service" | "command" | null;
+      scriptSummary?: WorkspaceScriptSummary | null;
     }
 >) {
   const {
@@ -291,7 +292,7 @@ export function SidebarWorkspaceContextMenu({
     leadingProjectName,
     hostBadgeLabel,
     pullRequestLabel,
-    scriptLabel: scriptIconKind ? t("workspace.status.scriptsAvailable") : null,
+    scriptLabel: scriptSummary ? t("workspace.status.scriptsAvailable") : null,
   });
 
   return (

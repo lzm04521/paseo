@@ -258,3 +258,6 @@ Before you write a new one, ask:
    bounded**. Verify before you commit.
 
 Then copy the closest canonical file and trim.
+
+Building a **menu** rather than a bare panel? Don't. Use the menu engine — it already solves
+everything above, plus submenus, sheets, and hover intent. See [menus.md](menus.md).

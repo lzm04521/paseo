@@ -223,19 +223,29 @@ test("changes diff keeps code rows aligned with the gutter", async ({ page }) =>
   });
 });
 
-test("changes file actions open from the kebab and right-click", async ({ page }) => {
+test("changes file actions open below the right-click without a reserved kebab", async ({
+  page,
+}) => {
   const workspace = await createWorkspaceWithMountedTabDiff({ includeDeletedFile: true });
   await useUnwrappedDiffLines(page);
   await openWorkspaceChanges(page, workspace);
 
   await expect(page.getByTestId("diff-file-1")).toContainText("zz-deleted.ts");
-  await page.getByTestId("diff-file-1-actions").click();
+  await expect(page.getByTestId(/diff-file-\d+-actions/)).toHaveCount(0);
+  await page.getByTestId("diff-file-1-toggle").click({ button: "right" });
   await expect(page.getByText("Copy path")).toBeVisible();
   await expect(page.getByTestId("diff-file-1-open-file")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  await page.getByTestId("diff-file-0-toggle").click({ button: "right" });
+  const fileRow = page.getByTestId("diff-file-0-toggle");
+  const fileRowBounds = await fileRow.boundingBox();
+  expect(fileRowBounds).not.toBeNull();
+  await fileRow.click({ button: "right", position: { x: 80, y: 10 } });
   await expect(page.getByTestId("diff-file-0-open-file")).toBeVisible();
+  const menuBounds = await page.getByTestId("diff-file-0-context-menu").boundingBox();
+  expect(menuBounds).not.toBeNull();
+  expect(menuBounds!.x).toBeCloseTo(fileRowBounds!.x + 80, 0);
+  expect(menuBounds!.y).toBeGreaterThan(fileRowBounds!.y + 10);
   await page.getByTestId("diff-file-0-open-file").click();
 
   await expect(page.getByTestId("workspace-file-pane")).toBeVisible();
@@ -303,7 +313,7 @@ test("Changes switches between inline and full-tab navigation", async ({ page })
   await page.getByTestId("explorer-content-area").getByTestId("diff-file-1-toggle").click();
   await expect(page.getByTestId(/^workspace-working-diff-close-/)).toHaveCount(1);
   await expect(visiblePanel.getByText("zz-deleted.ts", { exact: true })).toBeVisible();
-  await expect(visiblePanel).toContainText("Deleted");
+  await expect(visiblePanel.getByRole("img", { name: "Deleted" })).toBeVisible();
 
   await changesTabToggle.click();
   await expect(page.getByTestId(/^workspace-working-diff-close-/)).toHaveCount(0);
@@ -340,6 +350,9 @@ test("changes diff switches between flat and tree file lists", async ({ page }) 
   await page.getByTestId("changes-toggle-view-mode").click();
   await expect(page.getByTestId("diff-folder-src")).toBeVisible();
   await expect(page.getByTestId("diff-file-0")).toBeVisible();
+  await page.getByTestId("diff-file-0-toggle").click({ button: "right" });
+  await expect(page.getByTestId("diff-file-0-context-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Collapse all" }).click();
   await expect(page.getByTestId("diff-file-0")).toHaveCount(0);
@@ -360,12 +373,7 @@ test("workspace file panes keep their controls on shared alignment rails", async
   await page.getByTestId("changes-toggle-view-mode").click();
   await expect(page.getByTestId("diff-folder-src")).toBeVisible();
 
-  const changesRightRail = await Promise.all([
-    readSvgRight(page, "explorer-close"),
-    readSvgRight(page, "changes-options-menu"),
-    readSvgRight(page, "diff-file-0-actions"),
-  ]);
-  expectAligned(changesRightRail);
+  await expect(page.getByTestId("diff-file-0-actions")).toHaveCount(0);
 
   const [folderStat, fileStat] = await Promise.all([
     page.getByTestId("diff-folder-src-stat").boundingBox(),
@@ -378,12 +386,17 @@ test("workspace file panes keep their controls on shared alignment rails", async
   await page.getByTestId("explorer-tab-files").click();
   await expect(page.getByTestId("file-explorer-row-0")).toBeVisible();
 
-  const filesRightRail = await Promise.all([
-    readSvgRight(page, "explorer-close"),
-    readSvgRight(page, "files-refresh"),
-    readSvgRight(page, "file-explorer-row-0-actions"),
-  ]);
-  expectAligned(filesRightRail);
+  await expect(page.getByTestId("file-explorer-row-0-actions")).toHaveCount(0);
+  const fileExplorerRow = page.getByTestId("file-explorer-row-0");
+  const fileExplorerRowBounds = await fileExplorerRow.boundingBox();
+  expect(fileExplorerRowBounds).not.toBeNull();
+  await fileExplorerRow.click({ button: "right", position: { x: 80, y: 10 } });
+  await expect(page.getByTestId("file-explorer-row-0-context-menu")).toBeVisible();
+  const fileMenuBounds = await page.getByTestId("file-explorer-row-0-context-menu").boundingBox();
+  expect(fileMenuBounds).not.toBeNull();
+  expect(fileMenuBounds!.x).toBeCloseTo(fileExplorerRowBounds!.x + 80, 0);
+  expect(fileMenuBounds!.y).toBeGreaterThan(fileExplorerRowBounds!.y + 10);
+  await page.keyboard.press("Escape");
 
   const [sortLabel, firstRowIcon, treeBounds, rowBounds] = await Promise.all([
     page.getByTestId("files-sort-label").boundingBox(),
@@ -591,21 +604,6 @@ async function openWorkspaceChanges(page: Page, workspace: DirtyWorkspace): Prom
 async function openChangesInVisibleExplorer(page: Page): Promise<void> {
   await expect(page.getByTestId("explorer-tab-changes")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("use-mounted-tab-set.ts")).toBeVisible({ timeout: 30_000 });
-}
-
-async function readSvgRight(page: Page, testID: string): Promise<number> {
-  const box = await page.getByTestId(testID).locator("svg").first().boundingBox();
-  if (!box) {
-    throw new Error(`Could not measure ${testID}`);
-  }
-  return box.x + box.width;
-}
-
-function expectAligned(values: number[]): void {
-  const [first, ...rest] = values;
-  for (const value of rest) {
-    expect(value).toBeCloseTo(first, 0);
-  }
 }
 
 async function expectExpandedMountedTabDiff(page: Page): Promise<void> {
