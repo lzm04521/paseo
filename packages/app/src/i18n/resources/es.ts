@@ -485,6 +485,7 @@ export const es: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Hostno está conectado",
+      updateHost: "Actualiza el host para usar el renderizador de terminal nativo.",
       unableToSubscribe: "No se puede suscribir al terminal",
     },
     tabs: {
@@ -1763,6 +1764,11 @@ export const es: TranslationResources = {
     },
     diagnostics: {
       title: "Diagnóstico",
+      legacyTerminalRenderer: {
+        label: "Usar el renderizador de terminal anterior",
+        description: "Usa el terminal WebView anterior al volver a abrir un terminal",
+        accessibilityLabel: "Usar el renderizador de terminal anterior",
+      },
       testAudio: "audio de prueba",
       playTest: "Prueba de juego",
       playing: "Jugando...",

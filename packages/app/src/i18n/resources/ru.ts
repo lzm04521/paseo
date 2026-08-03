@@ -485,6 +485,7 @@ export const ru: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Host не подключен",
+      updateHost: "Обновите хост, чтобы использовать нативный терминал.",
       unableToSubscribe: "Невозможно подписаться на терминал",
     },
     tabs: {
@@ -1751,6 +1752,11 @@ export const ru: TranslationResources = {
     },
     diagnostics: {
       title: "Диагностика",
+      legacyTerminalRenderer: {
+        label: "Использовать прежний рендерер терминала",
+        description: "Использовать прежний WebView-терминал после повторного открытия",
+        accessibilityLabel: "Использовать прежний рендерер терминала",
+      },
       testAudio: "Тестирование звука",
       playTest: "Игровой тест",
       playing: "Игра...",

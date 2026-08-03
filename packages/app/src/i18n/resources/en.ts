@@ -480,6 +480,7 @@ export const en = {
     },
     terminal: {
       hostDisconnected: "Host is not connected",
+      updateHost: "Update the host to use the native terminal renderer.",
       unableToSubscribe: "Unable to subscribe to terminal",
     },
     tabs: {
@@ -1726,6 +1727,11 @@ export const en = {
     },
     diagnostics: {
       title: "Diagnostics",
+      legacyTerminalRenderer: {
+        label: "Use legacy terminal renderer",
+        description: "Use the previous WebView terminal after reopening a terminal",
+        accessibilityLabel: "Use legacy terminal renderer",
+      },
       testAudio: "Test audio",
       playTest: "Play test",
       playing: "Playing...",

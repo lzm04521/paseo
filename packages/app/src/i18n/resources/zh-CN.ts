@@ -481,6 +481,7 @@ export const zhCN: TranslationResources = {
     },
     terminal: {
       hostDisconnected: "Host 未连接",
+      updateHost: "请更新主机以使用原生终端渲染器。",
       unableToSubscribe: "无法订阅 Terminal",
     },
     tabs: {
@@ -1695,6 +1696,11 @@ export const zhCN: TranslationResources = {
     },
     diagnostics: {
       title: "诊断",
+      legacyTerminalRenderer: {
+        label: "使用旧版终端渲染器",
+        description: "重新打开终端后使用之前的 WebView 终端",
+        accessibilityLabel: "使用旧版终端渲染器",
+      },
       testAudio: "测试音频",
       playTest: "播放测试",
       playing: "正在播放...",
