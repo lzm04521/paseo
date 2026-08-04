@@ -2,6 +2,7 @@ import type { TextStyle } from "react-native";
 import type { TerminalCell } from "@getpaseo/protocol/messages";
 
 import type { TerminalCellStyleResolver } from "./colors";
+import type { TerminalSelectionRange } from "./terminal-selection";
 
 const WIDE_CHAR_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0x1100, 0x115f],
@@ -31,6 +32,13 @@ export interface TerminalRowModel {
 }
 
 type TerminalRenderableCell = TerminalCell & { width?: number };
+
+interface TerminalRowSelectionStyle {
+  range: TerminalSelectionRange;
+  firstRow: number;
+  backgroundColor: string;
+  foregroundColor: string;
+}
 
 function hashStringPart(hash: number, value: string): number {
   let nextHash = hash;
@@ -93,10 +101,45 @@ function appendRun(input: {
   });
 }
 
+function cellIntersectsSelection(input: {
+  selection: TerminalRowSelectionStyle;
+  row: number;
+  col: number;
+  cellCount: number;
+}): boolean {
+  const absoluteRow = input.selection.firstRow + input.row;
+  const { start, end } = input.selection.range;
+  if (absoluteRow < start.row || absoluteRow > end.row) {
+    return false;
+  }
+
+  const selectedStartCol = absoluteRow === start.row ? start.col : 0;
+  const selectedEndCol = absoluteRow === end.row ? end.col : Number.POSITIVE_INFINITY;
+  const cellEndCol = input.col + input.cellCount - 1;
+  return cellEndCol >= selectedStartCol && input.col <= selectedEndCol;
+}
+
+function selectedCellStyle(input: {
+  style: TextStyle;
+  foregroundColor: string;
+  backgroundColor: string;
+}): TextStyle {
+  return {
+    ...input.style,
+    backgroundColor: input.backgroundColor,
+    color: input.foregroundColor,
+    opacity: 1,
+    ...(input.style.textDecorationLine
+      ? { textDecorationColor: input.foregroundColor }
+      : undefined),
+  };
+}
+
 function buildRowModel(input: {
   cells: TerminalRenderableCell[];
   index: number;
   resolver: TerminalCellStyleResolver;
+  selection?: TerminalRowSelectionStyle;
 }): TerminalRowModel {
   const runs: TerminalRun[] = [];
   let hash = 2166136261;
@@ -106,17 +149,36 @@ function buildRowModel(input: {
     const text = cell.char || " ";
     const resolvedStyle = input.resolver.resolve(cell);
     const cellCount = terminalCellCount(input.cells, col, text);
+    const selection = input.selection;
+    let styleKey = resolvedStyle.key;
+    let style = resolvedStyle.style;
+    if (
+      selection &&
+      cellIntersectsSelection({
+        selection,
+        row: input.index,
+        col,
+        cellCount,
+      })
+    ) {
+      styleKey = `${resolvedStyle.key}|selection:${selection.foregroundColor}:${selection.backgroundColor}`;
+      style = selectedCellStyle({
+        style: resolvedStyle.style,
+        foregroundColor: selection.foregroundColor,
+        backgroundColor: selection.backgroundColor,
+      });
+    }
     appendRun({
       runs,
       text,
       cellCount,
-      styleKey: resolvedStyle.key,
-      style: resolvedStyle.style,
+      styleKey,
+      style,
       col,
     });
     hash = hashStringPart(hash, text);
     hash = hashStringPart(hash, String(cellCount));
-    hash = hashStringPart(hash, resolvedStyle.key);
+    hash = hashStringPart(hash, styleKey);
 
     if (cellCount > 1) {
       col += 1;
@@ -133,8 +195,9 @@ function buildRowModel(input: {
 export function buildRows(input: {
   grid: TerminalRenderableCell[][];
   resolver: TerminalCellStyleResolver;
+  selection?: TerminalRowSelectionStyle;
 }): TerminalRowModel[] {
   return input.grid.map((cells, index) =>
-    buildRowModel({ cells, index, resolver: input.resolver }),
+    buildRowModel({ cells, index, resolver: input.resolver, selection: input.selection }),
   );
 }

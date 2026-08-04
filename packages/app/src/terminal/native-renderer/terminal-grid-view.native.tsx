@@ -11,7 +11,11 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import type { ITheme } from "@xterm/xterm";
 
-import { createTerminalCellStyleResolver, DEFAULT_TERMINAL_THEME } from "./colors";
+import {
+  createTerminalCellStyleResolver,
+  DEFAULT_TERMINAL_THEME,
+  NATIVE_TERMINAL_SELECTION_COLORS,
+} from "./colors";
 import { resolveNativeTerminalFontFamily } from "./font.native";
 import type { TerminalViewportState } from "./headless-terminal-state";
 import {
@@ -21,11 +25,7 @@ import {
   type TerminalGridCellMetrics,
 } from "./terminal-grid-metrics";
 import { buildRows, type TerminalRowModel, type TerminalRun } from "./terminal-row-model";
-import {
-  resolveTerminalSelectionRects,
-  type TerminalSelectionRange,
-  type TerminalSelectionRect,
-} from "./terminal-selection";
+import type { TerminalSelectionRange } from "./terminal-selection";
 
 const MEASURE_TEXT = "mmmmmmmmmm";
 const DEFAULT_FONT_SIZE = 12;
@@ -56,11 +56,6 @@ interface TerminalGridRunProps {
   cellWidth: number;
   cellHeight: number;
   textStyle: StyleProp<TextStyle>;
-}
-
-interface TerminalGridSelectionRectProps {
-  rect: TerminalSelectionRect;
-  color: string;
 }
 
 export interface TerminalGridViewProps {
@@ -128,27 +123,6 @@ const MemoTerminalGridRun = memo(TerminalGridRun, (previous, next) => {
     previous.cellHeight === next.cellHeight &&
     previous.textStyle === next.textStyle
   );
-});
-
-function TerminalGridSelectionRect({ rect, color }: TerminalGridSelectionRectProps) {
-  const rectStyle = useMemo<StyleProp<ViewStyle>>(
-    () => [
-      styles.selectionRect,
-      {
-        backgroundColor: color,
-        height: rect.height,
-        transform: [{ translateX: rect.x }, { translateY: rect.y }],
-        width: rect.width,
-      },
-    ],
-    [color, rect.height, rect.width, rect.x, rect.y],
-  );
-
-  return <View pointerEvents="none" style={rectStyle} />;
-}
-
-const MemoTerminalGridSelectionRect = memo(TerminalGridSelectionRect, (previous, next) => {
-  return previous.rect === next.rect && previous.color === next.color;
 });
 
 function TerminalGridRow({
@@ -244,23 +218,21 @@ export function TerminalGridView({
     [state.grid, visibleCols],
   );
   const rows = useMemo(
-    () => buildRows({ grid: projectedGrid, resolver }),
-    [projectedGrid, resolver],
-  );
-  const selectionRects = useMemo(
     () =>
-      resolveTerminalSelectionRects({
-        selection,
-        viewport: {
-          firstRow: state.firstRow,
-          rows: state.grid.length,
-          cols: visibleCols,
-        },
-        metrics,
+      buildRows({
+        grid: projectedGrid,
+        resolver,
+        selection: selection
+          ? {
+              range: selection,
+              firstRow: state.firstRow,
+              backgroundColor: NATIVE_TERMINAL_SELECTION_COLORS.background,
+              foregroundColor: NATIVE_TERMINAL_SELECTION_COLORS.foreground,
+            }
+          : undefined,
       }),
-    [metrics, selection, state.firstRow, state.grid.length, visibleCols],
+    [projectedGrid, resolver, selection, state.firstRow],
   );
-  const selectionColor = xtermTheme.selectionBackground ?? "rgba(90, 160, 255, 0.35)";
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(
     () => [styles.root, { backgroundColor: resolver.backgroundColor }, style],
@@ -346,9 +318,6 @@ export function TerminalGridView({
             styleEpoch={resolver.themeKey}
           />
         ))}
-        {selectionRects.map((rect) => (
-          <MemoTerminalGridSelectionRect key={rect.key} rect={rect} color={selectionColor} />
-        ))}
         {!state.cursor.hidden && <View pointerEvents="none" style={cursorStyle} />}
       </View>
     </View>
@@ -381,12 +350,6 @@ const styles = StyleSheet.create({
   cursor: {
     left: 0,
     opacity: 0.45,
-    position: "absolute",
-    top: 0,
-  },
-  selectionRect: {
-    left: 0,
-    opacity: 0.8,
     position: "absolute",
     top: 0,
   },
