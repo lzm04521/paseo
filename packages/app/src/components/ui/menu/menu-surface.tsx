@@ -14,16 +14,18 @@ import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { BottomSheetBackdrop, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { ChevronLeft } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
   type ContextBridge,
 } from "@/components/ui/isolated-bottom-sheet-modal";
-import type { Theme } from "@/styles/theme";
+import { SPACING, type Theme } from "@/styles/theme";
 import { useMenuContext, MenuContextProvider } from "./menu-context";
 import { MenuPage } from "./menu-item";
 import { currentPageId, isSubPageOpen } from "./menu-navigation";
 import { AnchoredSurface, MenuOverlay } from "./menu-overlay";
+import { getMenuSheetBottomPadding } from "./menu-sheet-layout";
 import type { Alignment, Placement } from "./menu-anchor";
 
 const ThemedChevronLeft = withUnistyles(ChevronLeft);
@@ -305,6 +307,17 @@ function MenuSheetSurface({
 }: MenuSurfaceProps): ReactElement | null {
   const menu = useMenuContext("MenuSurface");
   const { value: surfaceValue } = useSubAnchors();
+  const safeAreaInsets = useSafeAreaInsets();
+
+  const sheetScrollContentStyle = useMemo(
+    () => ({
+      paddingBottom: getMenuSheetBottomPadding({
+        safeAreaBottom: safeAreaInsets.bottom,
+        breathingRoom: SPACING[1],
+      }),
+    }),
+    [safeAreaInsets.bottom],
+  );
 
   const handleClose = useCallback(() => menu.setOpen(false), [menu]);
   const { sheetRef, handleSheetChange, handleSheetDismiss } = useIsolatedBottomSheetVisibility({
@@ -356,7 +369,7 @@ function MenuSheetSurface({
       keyboardBlurBehavior="restore"
     >
       <BottomSheetScrollView
-        contentContainerStyle={styles.sheetScrollContent}
+        contentContainerStyle={sheetScrollContentStyle}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         testID={testID ? `${testID}-content` : undefined}
@@ -407,9 +420,6 @@ function MenuSheetHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  sheetScrollContent: {
-    paddingBottom: theme.spacing[6],
-  },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",

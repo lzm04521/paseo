@@ -4,6 +4,7 @@ import {
   connectNewWorkspaceDaemonClient,
   expectNewWorkspaceControlsEnabled,
   expectNewWorkspaceProjectSelected,
+  expectNewWorkspaceTriggerLabelsAligned,
   openGlobalNewWorkspaceComposer,
   openMissingProjectNewWorkspaceComposer,
   openNewWorkspaceComposer,
@@ -77,6 +78,10 @@ test.describe("New workspace entry points", () => {
         timeout: 30_000,
       });
       await expect(page.getByTestId("host-picker-trigger")).toBeVisible({ timeout: 30_000 });
+      await expectNewWorkspaceTriggerLabelsAligned(page, {
+        projectLabel: seeded.projectDisplayName,
+        hostLabel: "localhost",
+      });
     } finally {
       await seeded.cleanup();
     }

@@ -235,6 +235,27 @@ export async function expectNewWorkspaceProjectSelected(
   await expect(projectPicker).toContainText(projectDisplayName);
 }
 
+export async function expectNewWorkspaceTriggerLabelsAligned(
+  page: Page,
+  input: { projectLabel: string; hostLabel: string },
+): Promise<void> {
+  const projectTrigger = page.getByRole("button", { name: "Workspace project" });
+  const hostTrigger = page.getByRole("button", { name: "Host", exact: true });
+  const [projectTriggerBox, projectLabelBox, hostTriggerBox, hostLabelBox] = await Promise.all([
+    projectTrigger.boundingBox(),
+    projectTrigger.getByText(input.projectLabel, { exact: true }).boundingBox(),
+    hostTrigger.boundingBox(),
+    hostTrigger.getByText(input.hostLabel, { exact: true }).boundingBox(),
+  ]);
+  if (!projectTriggerBox || !projectLabelBox || !hostTriggerBox || !hostLabelBox) {
+    throw new Error("New Workspace trigger geometry could not be measured");
+  }
+
+  const projectLabelInset = projectLabelBox.x - projectTriggerBox.x;
+  const hostLabelInset = hostLabelBox.x - hostTriggerBox.x;
+  expect(hostLabelInset).toBeCloseTo(projectLabelInset, 0);
+}
+
 export async function fillNewWorkspaceDraft(page: Page, draft: string): Promise<void> {
   const composer = page.getByRole("textbox", { name: "Message agent..." });
   await expect(composer).toBeVisible({ timeout: 30_000 });
