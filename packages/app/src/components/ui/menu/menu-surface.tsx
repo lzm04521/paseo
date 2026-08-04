@@ -20,7 +20,8 @@ import {
   type ContextBridge,
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import type { Theme } from "@/styles/theme";
-import { useMenuContext, MenuContextProvider, MenuDepthProvider } from "./menu-context";
+import { useMenuContext, MenuContextProvider } from "./menu-context";
+import { MenuPage } from "./menu-item";
 import { currentPageId, isSubPageOpen } from "./menu-navigation";
 import { AnchoredSurface, MenuOverlay } from "./menu-overlay";
 import type { Alignment, Placement } from "./menu-anchor";
@@ -224,7 +225,7 @@ function MenuPopoverSurface({
             scrollable={scrollable}
             testID={testID}
           >
-            <MenuDepthProvider value={0}>{children}</MenuDepthProvider>
+            <MenuPage depth={0}>{children}</MenuPage>
           </AnchoredSurface>
           {openPages.map(({ page, depth }) => (
             <MenuFlyout
@@ -291,7 +292,7 @@ function MenuFlyout({
       onPointerLeave={handleHoverOut}
       testID={testID}
     >
-      <MenuDepthProvider value={depth + 1}>{page.content}</MenuDepthProvider>
+      <MenuPage depth={depth + 1}>{page.content}</MenuPage>
     </AnchoredSurface>
   );
 }
@@ -363,12 +364,12 @@ function MenuSheetSurface({
         {openPage ? (
           <>
             <MenuSheetHeader title={openPage.title} onBack={menu.goBack} />
-            <MenuDepthProvider value={depth}>{openPage.content}</MenuDepthProvider>
+            <MenuPage depth={depth}>{openPage.content}</MenuPage>
           </>
         ) : (
           <>
             {sheetTitle ? <MenuSheetHeader title={sheetTitle} onBack={null} /> : null}
-            <MenuDepthProvider value={0}>{children}</MenuDepthProvider>
+            <MenuPage depth={0}>{children}</MenuPage>
           </>
         )}
       </BottomSheetScrollView>
