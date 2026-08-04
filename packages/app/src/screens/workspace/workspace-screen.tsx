@@ -26,7 +26,6 @@ import {
   ChevronDown,
   Copy,
   Ellipsis,
-  EllipsisVertical,
   Globe,
   Import as ImportIcon,
   PanelRight,
@@ -246,7 +245,6 @@ function buildWorkspaceFileLocation(
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedEllipsis = withUnistyles(Ellipsis);
-const ThemedEllipsisVertical = withUnistyles(EllipsisVertical);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedRotateCw = withUnistyles(RotateCw);
@@ -1045,18 +1043,16 @@ function HeaderMenuProfileItem({
   );
 }
 
-function WorkspaceHeaderMenuTriggerIcon({
-  hovered,
-  open,
-  isMobile,
-}: {
-  hovered: boolean;
-  open: boolean;
-  isMobile: boolean;
-}) {
-  const Icon = isMobile ? ThemedEllipsisVertical : ThemedEllipsis;
+/**
+ * The compact header buttons draw at 32pt, under the 44pt touch minimum, and sit flush against
+ * each other — so the slop can only grow vertically. Widening it would put two buttons' slop over
+ * the same pixels, which is a worse miss than a small target.
+ */
+const COMPACT_HEADER_BUTTON_HIT_SLOP = { top: 8, bottom: 8 } as const;
+
+function WorkspaceHeaderMenuTriggerIcon({ hovered, open }: { hovered: boolean; open: boolean }) {
   const colorMapping = hovered || open ? foregroundColorMapping : mutedColorMapping;
-  return <Icon size={16} uniProps={colorMapping} />;
+  return <ThemedEllipsis size={16} uniProps={colorMapping} />;
 }
 
 function WorkspaceHeaderMenu({
@@ -1097,22 +1093,28 @@ function WorkspaceHeaderMenu({
 
   const renderTriggerIcon = useCallback(
     ({ hovered, open }: { hovered: boolean; open: boolean }) => (
-      <WorkspaceHeaderMenuTriggerIcon hovered={hovered} open={open} isMobile={isMobile} />
+      <WorkspaceHeaderMenuTriggerIcon hovered={hovered} open={open} />
     ),
-    [isMobile],
+    [],
   );
 
   return (
-    <DropdownMenu>
+    <DropdownMenu compactMode="sheet">
       <DropdownMenuTrigger
         testID="workspace-header-menu-trigger"
         style={isMobile ? styles.compactHeaderActionButton : styles.headerActionButton}
+        hitSlop={isMobile ? COMPACT_HEADER_BUTTON_HIT_SLOP : undefined}
         accessibilityRole="button"
         accessibilityLabel={t("workspace.header.actions.workspaceActions")}
       >
         {renderTriggerIcon}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" width={220} testID="workspace-header-menu">
+      <DropdownMenuContent
+        align="start"
+        width={220}
+        testID="workspace-header-menu"
+        sheetTitle={t("workspace.header.actions.workspaceActions")}
+      >
         <DropdownMenuItem
           testID="workspace-header-new-agent"
           leading={menuNewAgentIcon}
