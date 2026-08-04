@@ -108,7 +108,7 @@ test.describe("Host appearance", () => {
     await leaveHostAppearanceSettings(page);
 
     const row = page.getByTestId(`sidebar-workspace-row-${workspaceKey}`);
-    const badge = row.getByTestId(`sidebar-host-badge-${twoHostSidebar.secondaryServerId}`);
+    const badge = row.getByTestId(`host-badge-${twoHostSidebar.secondaryServerId}`);
     await expect(badge).toHaveText(hostName);
     const [badgeBox, rowBox] = await Promise.all([badge.boundingBox(), row.boundingBox()]);
 
