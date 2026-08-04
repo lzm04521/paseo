@@ -241,11 +241,17 @@ export async function expectNewWorkspaceTriggerLabelsAligned(
 ): Promise<void> {
   const projectTrigger = page.getByRole("button", { name: "Workspace project" });
   const hostTrigger = page.getByRole("button", { name: "Host", exact: true });
+  const projectLabel = projectTrigger.getByText(input.projectLabel, { exact: true });
+  const hostLabel = hostTrigger.getByText(input.hostLabel, { exact: true });
+  await Promise.all([
+    expect(projectLabel).toBeVisible({ timeout: 30_000 }),
+    expect(hostLabel).toBeVisible({ timeout: 30_000 }),
+  ]);
   const [projectTriggerBox, projectLabelBox, hostTriggerBox, hostLabelBox] = await Promise.all([
     projectTrigger.boundingBox(),
-    projectTrigger.getByText(input.projectLabel, { exact: true }).boundingBox(),
+    projectLabel.boundingBox(),
     hostTrigger.boundingBox(),
-    hostTrigger.getByText(input.hostLabel, { exact: true }).boundingBox(),
+    hostLabel.boundingBox(),
   ]);
   if (!projectTriggerBox || !projectLabelBox || !hostTriggerBox || !hostLabelBox) {
     throw new Error("New Workspace trigger geometry could not be measured");

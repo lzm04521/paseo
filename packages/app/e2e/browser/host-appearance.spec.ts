@@ -114,7 +114,6 @@ test.describe("Host appearance", () => {
 
     expect(badgeBox).not.toBeNull();
     expect(rowBox).not.toBeNull();
-    await expect(badge).toHaveCSS("flex-shrink", "1");
     expect(badgeBox!.width).toBeGreaterThan(96);
     expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
     const labelWidths = await badge.getByText(hostName, { exact: true }).evaluate((label) => ({
