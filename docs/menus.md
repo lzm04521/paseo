@@ -26,6 +26,17 @@ when you have actually looked at it on a phone.
 `ContextMenu` is the exception: it defaults to `compactMode="sheet"` and enables native long press.
 Disable mobile triggering explicitly on draggable rows, where long press belongs to drag instead.
 
+## Selecting an item on iOS
+
+An item that closes the menu runs its action after a fixed grace period on iOS, not immediately:
+a native presenter launched while UIKit is still tearing down the surface can hang. Both surfaces
+unmount the moment the menu closes, so the wait is a timer rather than the surface's own dismissal
+callback — a callback fired from inside a subtree that is being removed is racing its own removal,
+and it loses. Selections used to be dropped entirely for exactly that reason.
+
+The consequence for callers: an `onSelect` on iOS runs a beat after the press. Don't add a second
+delay on top of it, and don't read state that the same press mutated.
+
 ## Pages
 
 A submenu is a page, declared as data on the surface and reached by a `MenuSubTrigger` whose `id`

@@ -206,7 +206,7 @@ function MenuPopoverSurface({
 
   return (
     <MenuSurfaceContext.Provider value={surfaceValue}>
-      <MenuOverlay visible={menu.open} onClose={handleClose} onDismiss={menu.flushPendingSelect}>
+      <MenuOverlay visible={menu.open} onClose={handleClose}>
         <>
           <AnchoredSurface
             open={menu.open}
