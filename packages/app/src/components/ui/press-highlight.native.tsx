@@ -2,6 +2,7 @@ import { forwardRef, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { resolveHighlightCorners } from "./press-highlight.shape";
 import type { PressHighlightProps } from "./press-highlight.types";
 
 export const PressHighlight = forwardRef<View, PressHighlightProps>(function PressHighlight(
@@ -9,6 +10,7 @@ export const PressHighlight = forwardRef<View, PressHighlightProps>(function Pre
   ref,
 ) {
   const highlighted = useSharedValue(0);
+  const corners = useMemo(() => resolveHighlightCorners(props.style), [props.style]);
   const animatedHighlightStyle = useAnimatedStyle(() => ({ opacity: highlighted.value }));
   // This gesture owns visual acknowledgement only. Pressable remains the sole owner of
   // activation, cancellation, accessibility, and the caller's drag/long-press callbacks.
@@ -29,8 +31,9 @@ export const PressHighlight = forwardRef<View, PressHighlightProps>(function Pre
 
   const highlight = highlightStyle ? (
     <Animated.View pointerEvents="none" style={[styles.highlight, animatedHighlightStyle]}>
-      {/* Keep the themed Unistyles node separate from the node Reanimated patches. */}
-      <View style={[styles.highlightFill, highlightStyle]} />
+      {/* Keep the themed Unistyles node separate from the node Reanimated patches. The
+          pressable's corners come first so `highlightStyle` can still override them. */}
+      <View style={[styles.highlightFill, corners, highlightStyle]} />
     </Animated.View>
   ) : null;
   const renderedChildren =
