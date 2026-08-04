@@ -79,4 +79,42 @@ describe("terminal row model", () => {
     ]);
     expect(rows[0].hash).not.toBe(buildRows({ grid, resolver })[0].hash);
   });
+
+  test("splits Claude box drawing from font text at exact terminal columns", () => {
+    const resolver = createTerminalCellStyleResolver(DEFAULT_TERMINAL_THEME);
+    const frame = "╭─ Claude Code ───╮";
+
+    const [row] = buildRows({
+      grid: [frame.split("").map((char) => cell(char, { fg: 1, fgMode: 1 }))],
+      resolver,
+    });
+
+    expect(
+      row.runs.map((run) => ({
+        text: run.text,
+        cellCount: run.cellCount,
+        renderKind: run.renderKind,
+      })),
+    ).toEqual([
+      { text: "╭─", cellCount: 2, renderKind: "custom-glyph" },
+      { text: " Claude Code ", cellCount: 13, renderKind: "text" },
+      { text: "───╮", cellCount: 4, renderKind: "custom-glyph" },
+    ]);
+  });
+
+  test("keeps Claude mascot glyphs custom while preserving copied row text", () => {
+    const resolver = createTerminalCellStyleResolver(DEFAULT_TERMINAL_THEME);
+    const mascot = "▐▛███▜▌   Claude Code";
+
+    const [row] = buildRows({
+      grid: [mascot.split("").map((char) => cell(char, { fg: 1, fgMode: 1 }))],
+      resolver,
+    });
+
+    expect(row.runs.map((run) => [run.text, run.renderKind])).toEqual([
+      ["▐▛███▜▌", "custom-glyph"],
+      ["   Claude Code", "text"],
+    ]);
+    expect(row.runs.map((run) => run.text).join("")).toBe(mascot);
+  });
 });
