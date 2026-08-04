@@ -117,6 +117,7 @@ import {
   useSidebarWorkspaceTrailing,
 } from "@/components/sidebar/workspace-trailing";
 import { Button } from "@/components/ui/button";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import type { ShortcutKey } from "@/utils/format-shortcut";
@@ -973,9 +974,10 @@ function ProjectHeaderRow({
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
       >
-        <Pressable
+        <PressHighlight
           accessibilityRole="button"
           style={projectRowStyle}
+          highlightStyle={styles.projectRowHovered}
           onPressIn={interaction.handlePressIn}
           onTouchMove={interaction.handleTouchMove}
           onPressOut={interaction.handlePressOut}
@@ -983,7 +985,7 @@ function ProjectHeaderRow({
           testID={`sidebar-project-row-${project.viewKey}`}
         >
           {rowChildren}
-        </Pressable>
+        </PressHighlight>
       </View>
     );
   }
@@ -1001,6 +1003,7 @@ function ProjectHeaderRow({
           enabledOnMobile={false}
           accessibilityRole="button"
           style={projectRowStyle}
+          highlightStyle={styles.projectRowHovered}
           onPressIn={interaction.handlePressIn}
           onTouchMove={interaction.handleTouchMove}
           onPressOut={interaction.handlePressOut}
@@ -1119,6 +1122,7 @@ function WorkspaceRowInner({
               accessibilityRole="button"
               accessibilityState={accessibilityState}
               style={workspaceRowStyle}
+              highlightStyle={styles.workspaceRowHovered}
               onPressIn={interaction.handlePressIn}
               onTouchMove={interaction.handleTouchMove}
               onPressOut={interaction.handlePressOut}
