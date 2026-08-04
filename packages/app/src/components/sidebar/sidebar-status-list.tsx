@@ -41,6 +41,7 @@ import {
   SidebarWorkspaceTrailingActionSlot,
   sidebarWorkspaceRowStyles,
 } from "@/components/sidebar/sidebar-workspace-row-content";
+import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { selectWorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
 import {
@@ -812,14 +813,16 @@ function StatusWorkspaceActionSlot({
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
 }) {
+  const kebab = useOpenKebabMenuVisibility(showKebab);
   return (
     <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
       <SidebarWorkspaceTrailingActionBase visible={showBase}>
         <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
       </SidebarWorkspaceTrailingActionBase>
-      <SidebarWorkspaceTrailingActionOverlay visible={showKebab} scrim={showScrim}>
-        {showKebab && onArchive ? (
+      <SidebarWorkspaceTrailingActionOverlay visible={kebab.showKebab} scrim={showScrim}>
+        {kebab.showKebab && onArchive ? (
           <SidebarWorkspaceMenu
+            {...kebab.menuProps}
             workspaceKey={workspace.workspaceKey}
             onCopyPath={onCopyPath}
             onCopyBranchName={onCopyBranchName}
