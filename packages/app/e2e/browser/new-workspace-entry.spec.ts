@@ -19,7 +19,10 @@ import {
   clickArchiveWorkspaceMenuItem,
   expectWorkspaceAbsentFromSidebar,
 } from "../support/helpers/sidebar";
-import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import {
+  switchWorkspaceViaSidebar,
+  waitForSidebarHydration,
+} from "../support/helpers/workspace-ui";
 
 // Model B entry points into the New Workspace screen. The surviving entries are
 // the global button (universal) and each project's per-row New workspace icon
@@ -67,6 +70,11 @@ test.describe("New workspace entry points", () => {
       await expect(
         page.getByTestId(`sidebar-workspace-row-${getServerId()}:${seeded.workspaceId}`),
       ).toBeVisible({ timeout: 30_000 });
+      await switchWorkspaceViaSidebar({
+        page,
+        serverId: getServerId(),
+        workspaceId: seeded.workspaceId,
+      });
 
       const globalButton = page.getByTestId("sidebar-global-new-workspace");
       await expect(globalButton).toBeVisible({ timeout: 30_000 });
