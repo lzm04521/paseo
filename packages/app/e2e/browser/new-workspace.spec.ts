@@ -51,6 +51,7 @@ import {
   type LocalGhPrFixture,
 } from "../support/helpers/github-fixtures";
 import { getServerId } from "../support/helpers/server-id";
+import { selectSidebarStatusGrouping } from "../support/helpers/sidebar";
 import { getE2EDaemonPort } from "../support/helpers/daemon-port";
 import { chooseAddProjectMethod, expectAddProjectPage } from "../support/helpers/add-project-flow";
 import { seedSavedSettingsHosts } from "../support/helpers/settings";
@@ -78,8 +79,7 @@ interface WorkspaceStatusGroupEvent {
 }
 
 async function switchSidebarToStatusGrouping(page: import("@playwright/test").Page) {
-  await page.getByTestId("sidebar-display-preferences-menu").click();
-  await page.getByTestId("sidebar-grouping-status").click();
+  await selectSidebarStatusGrouping(page);
   await expect(page.getByTestId("sidebar-status-group-done")).toBeVisible({ timeout: 30_000 });
 }
 

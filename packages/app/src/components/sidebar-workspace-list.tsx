@@ -111,6 +111,7 @@ import {
   SidebarWorkspaceTrailingActionOverlay,
   SidebarWorkspaceTrailingActionSlot,
 } from "@/components/sidebar/sidebar-workspace-row-content";
+import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { selectWorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
@@ -665,6 +666,7 @@ function WorkspaceRowRightGroup({
     isTouchPlatform,
     showShortcut,
   });
+  const kebab = useOpenKebabMenuVisibility(showKebabInSlot);
 
   return (
     <>
@@ -676,9 +678,10 @@ function WorkspaceRowRightGroup({
           <SidebarWorkspaceTrailingActionBase visible={showTrailing}>
             <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
           </SidebarWorkspaceTrailingActionBase>
-          <SidebarWorkspaceTrailingActionOverlay visible={showKebabInSlot} scrim={showScrim}>
+          <SidebarWorkspaceTrailingActionOverlay visible={kebab.showKebab} scrim={showScrim}>
             {onArchive ? (
               <SidebarWorkspaceMenu
+                {...kebab.menuProps}
                 workspaceKey={workspace.workspaceKey}
                 onCopyPath={onCopyPath}
                 onCopyBranchName={onCopyBranchName}

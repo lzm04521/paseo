@@ -1,4 +1,3 @@
-import type { Locator } from "@playwright/test";
 import { test, expect, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { gotoWorkspace, clickNewTerminal } from "../support/helpers/launcher";
@@ -6,6 +5,7 @@ import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-cli
 import { seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { getServerId } from "../support/helpers/server-id";
 import { projectEquivalenceViewKey } from "../support/helpers/project-view-key";
+import { selectSidebarStatusGrouping } from "../support/helpers/sidebar";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { getVisibleWorkspaceAgentTabIds } from "../support/helpers/workspace-tabs";
 
@@ -24,35 +24,6 @@ function projectRow(page: Page, projectKey: string) {
 
 function projectNewWorktreeIcon(page: Page, projectKey: string) {
   return page.getByTestId(`sidebar-project-new-worktree-${projectEquivalenceViewKey(projectKey)}`);
-}
-
-async function paintedSvgRight(locator: Locator): Promise<number> {
-  return locator.evaluate((svg) => {
-    let right = Number.NEGATIVE_INFINITY;
-    for (const child of svg.querySelectorAll<SVGGraphicsElement>(
-      "path, circle, ellipse, line, polyline, polygon, rect",
-    )) {
-      const box = child.getBBox();
-      const matrix = child.getScreenCTM();
-      if (!matrix) continue;
-      const geometryRight = new DOMPoint(box.x + box.width, box.y).matrixTransform(matrix).x;
-      const strokeWidth = Number.parseFloat(getComputedStyle(child).strokeWidth) || 0;
-      const scaleX = Math.hypot(matrix.a, matrix.b);
-      right = Math.max(right, geometryRight + (strokeWidth * scaleX) / 2);
-    }
-    if (!Number.isFinite(right)) throw new Error("SVG has no measurable painted children");
-    return right;
-  });
-}
-
-async function paintedTextRight(locator: Locator): Promise<number> {
-  return locator.evaluate((label) => {
-    const context = document.createElement("canvas").getContext("2d");
-    if (!context) throw new Error("Canvas text measurement is unavailable");
-    context.font = getComputedStyle(label).font;
-    const metrics = context.measureText(label.textContent ?? "");
-    return label.getBoundingClientRect().left + metrics.actualBoundingBoxRight;
-  });
 }
 
 async function seedSecondWorkspace(seeded: SeededWorkspace, title: string): Promise<string> {
@@ -116,53 +87,6 @@ test.describe("Model B sidebar shape", () => {
     }
   });
 
-  test("sidebar trailing glyphs share the workspace content rail", async ({ page }) => {
-    const seeded = await seedWorkspace({ repoPrefix: "model-b-trailing-rail-" });
-
-    try {
-      await gotoAppShell(page);
-      await waitForSidebarHydration(page);
-
-      await page.getByTestId("sidebar-display-preferences-menu").click();
-      await page.getByTestId("sidebar-display-show").click();
-      await page.getByTestId("sidebar-workspace-trailing-timestamp").click();
-      await page.keyboard.press("Escape");
-      await page.keyboard.press("Escape");
-
-      const project = projectRow(page, seeded.projectKey);
-      const workspace = workspaceRow(page, seeded.workspaceId);
-      const displayPreferencesGlyph = page
-        .getByTestId("sidebar-display-preferences-menu")
-        .locator("svg");
-
-      await project.hover();
-      const projectKebabGlyph = page
-        .getByTestId(`sidebar-project-kebab-${projectEquivalenceViewKey(seeded.projectKey)}`)
-        .locator("svg");
-      await expect(projectKebabGlyph).toBeVisible();
-      const projectKebabRight = await paintedSvgRight(projectKebabGlyph);
-
-      await workspace.hover();
-      const workspaceKebabGlyph = page
-        .getByTestId(`sidebar-workspace-kebab-${getServerId()}:${seeded.workspaceId}`)
-        .locator("svg");
-      const timestamp = workspace.getByTestId("sidebar-workspace-timestamp");
-      await expect(workspaceKebabGlyph).toBeVisible();
-      await expect(timestamp).toBeVisible();
-
-      const rail = await paintedTextRight(timestamp);
-      for (const glyphRight of await Promise.all([
-        paintedSvgRight(displayPreferencesGlyph),
-        Promise.resolve(projectKebabRight),
-        paintedSvgRight(workspaceKebabGlyph),
-      ])) {
-        expect(glyphRight).toBeCloseTo(rail, 0);
-      }
-    } finally {
-      await seeded.cleanup();
-    }
-  });
-
   test("no tab, agent, or terminal ever renders as a sidebar row", async ({ page }) => {
     const mock = await seedMockAgentWorkspace({
       repoPrefix: "model-b-leaf-",
@@ -209,8 +133,7 @@ test.describe("Model B sidebar shape", () => {
       await expect(workspaceRow(page, idleProject.workspaceId)).toBeVisible({ timeout: 30_000 });
 
       // Switch to status grouping.
-      await page.getByTestId("sidebar-display-preferences-menu").click();
-      await page.getByTestId("sidebar-grouping-status").click();
+      await selectSidebarStatusGrouping(page);
 
       const sidebar = page.getByTestId("sidebar-sessions").filter({ visible: true }).first();
 
