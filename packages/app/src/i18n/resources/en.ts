@@ -1760,6 +1760,7 @@ export const en = {
           es: "Spanish",
           fr: "French",
           ja: "Japanese",
+          ko: "Korean",
           ptBR: "Brazilian Portuguese",
           ru: "Russian",
           zhCN: "Simplified Chinese",
