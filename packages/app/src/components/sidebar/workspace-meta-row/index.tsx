@@ -39,8 +39,8 @@ const ThemedGlobe = withUnistyles(Globe);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 
 const foregroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
-const mergedMapping = (theme: Theme) => ({ color: theme.colors.statusMutedMerged });
-const dangerMapping = (theme: Theme) => ({ color: theme.colors.statusMutedDanger });
+const mergedMapping = (theme: Theme) => ({ color: theme.colors.statusMerged });
+const dangerMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 
 /**
  * The subtitle under a workspace title: which host it lives on, its change request, that
@@ -212,7 +212,7 @@ function ScriptItem({ summary }: { summary: WorkspaceScriptSummary }) {
   );
 }
 
-const successMapping = (theme: Theme) => ({ color: theme.colors.statusMutedSuccess });
+const successMapping = (theme: Theme) => ({ color: theme.colors.statusSuccess });
 
 const PR_ICONS = {
   open: ThemedGitPullRequest,
@@ -261,7 +261,7 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   scriptPort: {
-    color: theme.colors.statusMutedSuccess,
+    color: theme.colors.statusSuccess,
     fontSize: theme.fontSize.xs,
     lineHeight: 16,
     flexShrink: 0,
@@ -280,19 +280,19 @@ const styles = StyleSheet.create((theme) => ({
   },
   // Matches the indicator — see COLOR_MAPPINGS in check-indicator.tsx.
   checksTextPassed: {
-    color: theme.colors.statusMutedSuccess,
+    color: theme.colors.statusSuccess,
     fontSize: theme.fontSize.xs,
     lineHeight: 16,
     flexShrink: 0,
   },
   checksTextFailed: {
-    color: theme.colors.statusMutedDanger,
+    color: theme.colors.statusDanger,
     fontSize: theme.fontSize.xs,
     lineHeight: 16,
     flexShrink: 0,
   },
   checksTextRunning: {
-    color: theme.colors.statusMutedWarning,
+    color: theme.colors.statusWarning,
     fontSize: theme.fontSize.xs,
     lineHeight: 16,
     flexShrink: 0,

@@ -43,6 +43,7 @@ import {
 } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
+import { getStatusDotColor } from "@/utils/status-dot-color";
 import { selectWorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
@@ -63,9 +64,20 @@ import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pi
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
 });
-const amberColorMapping = (theme: Theme) => ({ color: theme.colors.palette.amber[500] });
-const redColorMapping = (theme: Theme) => ({ color: theme.colors.palette.red[500] });
-const greenColorMapping = (theme: Theme) => ({ color: theme.colors.palette.green[500] });
+// One mapping per bucket, resolved through the status-dot producer so a group header and
+// the rows under it cannot disagree about what "failed" looks like.
+const needsInputColorMapping = (theme: Theme) => ({
+  color: getStatusDotColor({ theme, bucket: "needs_input" }) ?? undefined,
+});
+const failedColorMapping = (theme: Theme) => ({
+  color: getStatusDotColor({ theme, bucket: "failed" }) ?? undefined,
+});
+const attentionColorMapping = (theme: Theme) => ({
+  color: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
+});
+const runningColorMapping = (theme: Theme) => ({
+  color: getStatusDotColor({ theme, bucket: "running" }) ?? undefined,
+});
 
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronRight = withUnistyles(ChevronRight);
@@ -386,13 +398,13 @@ function StatusGroupLeadingVisual({
 function StatusGroupIcon({ bucket }: { bucket: StatusGroup["bucket"] }) {
   switch (bucket) {
     case "needs_input":
-      return <ThemedCircleAlert size={14} uniProps={amberColorMapping} />;
+      return <ThemedCircleAlert size={14} uniProps={needsInputColorMapping} />;
     case "failed":
-      return <ThemedCircleX size={14} uniProps={redColorMapping} />;
+      return <ThemedCircleX size={14} uniProps={failedColorMapping} />;
     case "attention":
-      return <ThemedCircleCheck size={14} uniProps={greenColorMapping} />;
+      return <ThemedCircleCheck size={14} uniProps={attentionColorMapping} />;
     case "running":
-      return <ThemedCircleDot size={14} uniProps={amberColorMapping} />;
+      return <ThemedCircleDot size={14} uniProps={runningColorMapping} />;
     case "done":
       return <ThemedCircleCheck size={14} uniProps={foregroundMutedColorMapping} />;
   }
@@ -921,7 +933,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   statusGroupTitle: {
-    color: theme.colors.foreground,
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontWeight: "400",
     minWidth: 0,

@@ -105,6 +105,7 @@ import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar
 import {
   SidebarWorkspaceRowFrame,
   SidebarWorkspaceRowContent,
+  sidebarWorkspaceRowStyles,
   SidebarWorkspaceShortcutBadge,
   resolveTrailingActionVisibility,
   SidebarWorkspaceTrailingActionBase,
@@ -172,13 +173,13 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
 });
 const redColorMapping = (theme: Theme) => ({
-  color: theme.colors.statusMutedDanger,
+  color: theme.colors.statusDanger,
 });
 const greenColorMapping = (theme: Theme) => ({
-  color: theme.colors.statusMutedSuccess,
+  color: theme.colors.statusSuccess,
 });
 const purpleColorMapping = (theme: Theme) => ({
-  color: theme.colors.statusMutedMerged,
+  color: theme.colors.statusMerged,
 });
 
 function getPrIconUniMapping(state: PrHint["state"]) {
@@ -303,6 +304,9 @@ interface WorkspaceRowInnerProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   reserveIdleStatusIndicatorSpace?: boolean;
+  /** Row sits under a group header (a project row). Pinned rows are not grouped.
+   * Drives the indent that lands the row on the header label's rail. */
+  inGroup?: boolean;
 }
 
 export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewStyle> }) {
@@ -378,13 +382,16 @@ function getProjectWorkspaceRowStyle({
   isDragging,
   selected,
   isHovered,
+  inGroup,
 }: {
   isDragging: boolean;
   selected: boolean;
   isHovered: boolean;
+  inGroup: boolean;
 }) {
   return [
     styles.workspaceRow,
+    inGroup && sidebarWorkspaceRowStyles.rowIndented,
     isDragging && styles.workspaceRowDragging,
     selected && styles.sidebarRowSelected,
     isHovered && styles.workspaceRowHovered,
@@ -1061,6 +1068,7 @@ function WorkspaceRowInner({
   isPinned,
   onTogglePin,
   reserveIdleStatusIndicatorSpace = true,
+  inGroup = false,
 }: WorkspaceRowInnerProps) {
   const _isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative;
@@ -1094,6 +1102,7 @@ function WorkspaceRowInner({
           isDragging,
           selected,
           isHovered,
+          inGroup,
         });
         return (
           <View
@@ -1190,6 +1199,7 @@ function WorkspaceRowWithMenu({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
+  inGroup = false,
   isCreating = false,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -1207,6 +1217,9 @@ function WorkspaceRowWithMenu({
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
+  /** Row sits under a group header (a project row). Pinned rows are not grouped.
+   * Drives the indent that lands the row on the header label's rail. */
+  inGroup?: boolean;
   isCreating?: boolean;
 }) {
   const { t } = useTranslation();
@@ -1348,6 +1361,7 @@ function WorkspaceRowWithMenu({
         isPinned={isPinned}
         onTogglePin={onTogglePin}
         reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+        inGroup={inGroup}
       />
       <AdaptiveRenameModal
         visible={isRenameOpen}
@@ -1375,6 +1389,9 @@ interface WorkspaceRowItemProps {
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
+  /** Row sits under a group header (a project row). Pinned rows are not grouped.
+   * Drives the indent that lands the row on the header label's rail. */
+  inGroup?: boolean;
   isCreating?: boolean;
   selectionEnabled: boolean;
   activeWorkspaceSelection: ActiveWorkspaceSelection | null;
@@ -1396,6 +1413,7 @@ function WorkspaceRowItem({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
+  inGroup = false,
   isCreating = false,
   selectionEnabled,
   activeWorkspaceSelection,
@@ -1424,6 +1442,7 @@ function WorkspaceRowItem({
       canPin={canPin}
       onToggleWorkspacePin={onToggleWorkspacePin}
       reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+      inGroup={inGroup}
       isCreating={isCreating}
       selected={isWorkspaceSelected({
         selection: activeWorkspaceSelection,
@@ -1467,6 +1486,7 @@ function areWorkspaceRowItemPropsEqual(
     previous.canPin === next.canPin &&
     previous.onToggleWorkspacePin === next.onToggleWorkspacePin &&
     previous.reserveIdleStatusIndicatorSpace === next.reserveIdleStatusIndicatorSpace &&
+    previous.inGroup === next.inGroup &&
     previous.isCreating === next.isCreating &&
     previous.onWorkspacePress === next.onWorkspacePress &&
     previous.drag === next.drag &&
@@ -1493,6 +1513,7 @@ function WorkspaceRow({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
+  inGroup = false,
   isCreating = false,
   selected,
 }: {
@@ -1510,6 +1531,9 @@ function WorkspaceRow({
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
+  /** Row sits under a group header (a project row). Pinned rows are not grouped.
+   * Drives the indent that lands the row on the header label's rail. */
+  inGroup?: boolean;
   isCreating?: boolean;
   selected: boolean;
 }) {
@@ -1534,6 +1558,7 @@ function WorkspaceRow({
       canPin={canPin}
       onToggleWorkspacePin={onToggleWorkspacePin}
       reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+      inGroup={inGroup}
       isCreating={isCreating}
     />
   );
@@ -1633,6 +1658,7 @@ function ProjectBlock({
           workspace={item}
           workspaceEntry={workspaceEntriesByKey.get(item.workspaceKey) ?? null}
           hostBadge={hostBadgeByServerId.get(item.serverId) ?? null}
+          inGroup
           shortcutNumber={shortcutIndexByWorkspaceKey.get(item.workspaceKey) ?? null}
           showShortcutBadge={showShortcutBadges}
           canCopyBranchName={project.projectKind === "git"}
@@ -2499,7 +2525,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   projectTitle: {
-    color: theme.colors.foreground,
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontWeight: "400",
     minWidth: 0,
