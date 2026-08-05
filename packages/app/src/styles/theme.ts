@@ -489,6 +489,7 @@ const ghosttyDarkColors = buildDarkSemanticColors({
 
 export const SPACING = {
   0: 0,
+  0.5: 2,
   1: 4,
   1.5: 6,
   2: 8,

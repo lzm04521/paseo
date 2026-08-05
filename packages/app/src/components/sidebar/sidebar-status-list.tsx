@@ -44,7 +44,7 @@ import {
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { getStatusDotColor } from "@/utils/status-dot-color";
-import { selectWorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
+import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
@@ -270,7 +270,7 @@ function StatusGroupRows({
   } = useLimitedSidebarGroup(group.rows);
 
   return (
-    <View style={styles.statusGroupBlock}>
+    <View style={collapsed ? undefined : styles.statusGroupBlockExpanded}>
       <StatusGroupHeader group={group} collapsed={collapsed} />
       {!collapsed ? (
         <View
@@ -297,6 +297,7 @@ function StatusGroupRows({
             <SidebarGroupToggleRow
               expanded={workspacesExpanded}
               onPress={toggleWorkspacesExpanded}
+              indented
               testID={`sidebar-status-show-more-${group.bucket}`}
             />
           ) : null}
@@ -689,7 +690,7 @@ function StatusWorkspaceRowInner({
   const trailing = useSidebarWorkspaceTrailing();
 
   const isDesktop = !isTouchPlatform;
-  const scriptSummary = isDesktop ? selectWorkspaceScriptSummary(workspace.scripts) : null;
+  const serviceSummary = isDesktop ? selectWorkspaceServiceSummary(workspace.scripts) : null;
 
   const accessibilityState = useMemo(() => ({ selected }), [selected]);
 
@@ -724,7 +725,7 @@ function StatusWorkspaceRowInner({
               workspace={workspace}
               leadingProjectName={projectName}
               hostBadgeLabel={hostBadge?.label}
-              scriptSummary={scriptSummary}
+              serviceSummary={serviceSummary}
               workspaceKey={workspace.workspaceKey}
               onCopyPath={onCopyPath}
               onCopyBranchName={onCopyBranchName}
@@ -751,7 +752,7 @@ function StatusWorkspaceRowInner({
                 hostBadge={hostBadge}
                 leadingProjectName={projectName}
                 leadingProjectIconDataUri={projectIconDataUri}
-                scriptSummary={scriptSummary}
+                serviceSummary={serviceSummary}
                 backdrop={getSidebarRowBackdrop({ selected, isHovered })}
                 isHovered={isHovered}
                 isLoading={isArchiving}
@@ -888,8 +889,9 @@ const styles = StyleSheet.create((theme) => ({
   pinnedSection: {
     marginBottom: theme.spacing[1],
   },
-  statusGroupBlock: {
-    marginBottom: theme.spacing[1],
+  // Matches `projectBlockExpanded` in sidebar-workspace-list.tsx. See the note there.
+  statusGroupBlockExpanded: {
+    paddingBottom: theme.spacing[3],
   },
   statusWorkspaceListContainer: {},
   statusGroupRow: {
@@ -944,7 +946,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspaceRow: {
     minHeight: 36,
-    marginBottom: theme.spacing[1],
+    marginBottom: theme.spacing[0.5],
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],

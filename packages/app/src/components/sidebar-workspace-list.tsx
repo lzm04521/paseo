@@ -105,7 +105,6 @@ import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar
 import {
   SidebarWorkspaceRowFrame,
   SidebarWorkspaceRowContent,
-  sidebarWorkspaceRowStyles,
   SidebarWorkspaceShortcutBadge,
   resolveTrailingActionVisibility,
   SidebarWorkspaceTrailingActionBase,
@@ -113,7 +112,7 @@ import {
   SidebarWorkspaceTrailingActionSlot,
 } from "@/components/sidebar/sidebar-workspace-row-content";
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
-import { selectWorkspaceScriptSummary } from "@/components/sidebar/workspace-meta-row";
+import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
 import {
   SidebarWorkspaceTrailingContent,
   useSidebarWorkspaceTrailing,
@@ -304,9 +303,6 @@ interface WorkspaceRowInnerProps {
   isPinned?: boolean;
   onTogglePin?: () => void;
   reserveIdleStatusIndicatorSpace?: boolean;
-  /** Row sits under a group header (a project row). Pinned rows are not grouped.
-   * Drives the indent that lands the row on the header label's rail. */
-  inGroup?: boolean;
 }
 
 export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewStyle> }) {
@@ -382,16 +378,13 @@ function getProjectWorkspaceRowStyle({
   isDragging,
   selected,
   isHovered,
-  inGroup,
 }: {
   isDragging: boolean;
   selected: boolean;
   isHovered: boolean;
-  inGroup: boolean;
 }) {
   return [
     styles.workspaceRow,
-    inGroup && sidebarWorkspaceRowStyles.rowIndented,
     isDragging && styles.workspaceRowDragging,
     selected && styles.sidebarRowSelected,
     isHovered && styles.workspaceRowHovered,
@@ -815,7 +808,8 @@ function NewWorkspaceGhostRow({
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.newWorkspaceGhostRow,
-      (Boolean(hovered) || pressed) && styles.newWorkspaceGhostRowHovered,
+      hovered && !pressed && styles.newWorkspaceGhostRowHovered,
+      pressed && styles.newWorkspaceGhostRowPressed,
     ],
     [],
   );
@@ -1068,7 +1062,6 @@ function WorkspaceRowInner({
   isPinned,
   onTogglePin,
   reserveIdleStatusIndicatorSpace = true,
-  inGroup = false,
 }: WorkspaceRowInnerProps) {
   const _isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative;
@@ -1097,12 +1090,11 @@ function WorkspaceRowInner({
     <SidebarWorkspaceRowFrame workspace={workspace} isDragging={isDragging}>
       {({ isHovered, contextMenuOpen, onContextMenuOpenChange, hoverHandlers }) => {
         const isDesktop = !isTouchPlatform;
-        const scriptSummary = isDesktop ? selectWorkspaceScriptSummary(workspace.scripts) : null;
+        const serviceSummary = isDesktop ? selectWorkspaceServiceSummary(workspace.scripts) : null;
         const workspaceRowStyle = getProjectWorkspaceRowStyle({
           isDragging,
           selected,
           isHovered,
-          inGroup,
         });
         return (
           <View
@@ -1147,7 +1139,7 @@ function WorkspaceRowInner({
                 hostBadge={hostBadge}
                 leadingProjectName={leadingProjectName}
                 leadingProjectIconDataUri={leadingProjectIconDataUri}
-                scriptSummary={scriptSummary}
+                serviceSummary={serviceSummary}
                 backdrop={getSidebarRowBackdrop({ isDragging, selected, isHovered })}
                 isHovered={isHovered}
                 isLoading={isArchiving || isCreating}
@@ -1199,7 +1191,6 @@ function WorkspaceRowWithMenu({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
-  inGroup = false,
   isCreating = false,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -1217,9 +1208,6 @@ function WorkspaceRowWithMenu({
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
-  /** Row sits under a group header (a project row). Pinned rows are not grouped.
-   * Drives the indent that lands the row on the header label's rail. */
-  inGroup?: boolean;
   isCreating?: boolean;
 }) {
   const { t } = useTranslation();
@@ -1361,7 +1349,6 @@ function WorkspaceRowWithMenu({
         isPinned={isPinned}
         onTogglePin={onTogglePin}
         reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-        inGroup={inGroup}
       />
       <AdaptiveRenameModal
         visible={isRenameOpen}
@@ -1389,9 +1376,6 @@ interface WorkspaceRowItemProps {
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
-  /** Row sits under a group header (a project row). Pinned rows are not grouped.
-   * Drives the indent that lands the row on the header label's rail. */
-  inGroup?: boolean;
   isCreating?: boolean;
   selectionEnabled: boolean;
   activeWorkspaceSelection: ActiveWorkspaceSelection | null;
@@ -1413,7 +1397,6 @@ function WorkspaceRowItem({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
-  inGroup = false,
   isCreating = false,
   selectionEnabled,
   activeWorkspaceSelection,
@@ -1442,7 +1425,6 @@ function WorkspaceRowItem({
       canPin={canPin}
       onToggleWorkspacePin={onToggleWorkspacePin}
       reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      inGroup={inGroup}
       isCreating={isCreating}
       selected={isWorkspaceSelected({
         selection: activeWorkspaceSelection,
@@ -1486,7 +1468,6 @@ function areWorkspaceRowItemPropsEqual(
     previous.canPin === next.canPin &&
     previous.onToggleWorkspacePin === next.onToggleWorkspacePin &&
     previous.reserveIdleStatusIndicatorSpace === next.reserveIdleStatusIndicatorSpace &&
-    previous.inGroup === next.inGroup &&
     previous.isCreating === next.isCreating &&
     previous.onWorkspacePress === next.onWorkspacePress &&
     previous.drag === next.drag &&
@@ -1513,7 +1494,6 @@ function WorkspaceRow({
   canPin,
   onToggleWorkspacePin,
   reserveIdleStatusIndicatorSpace = true,
-  inGroup = false,
   isCreating = false,
   selected,
 }: {
@@ -1531,9 +1511,6 @@ function WorkspaceRow({
   canPin: boolean;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   reserveIdleStatusIndicatorSpace?: boolean;
-  /** Row sits under a group header (a project row). Pinned rows are not grouped.
-   * Drives the indent that lands the row on the header label's rail. */
-  inGroup?: boolean;
   isCreating?: boolean;
   selected: boolean;
 }) {
@@ -1558,7 +1535,6 @@ function WorkspaceRow({
       canPin={canPin}
       onToggleWorkspacePin={onToggleWorkspacePin}
       reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      inGroup={inGroup}
       isCreating={isCreating}
     />
   );
@@ -1658,7 +1634,6 @@ function ProjectBlock({
           workspace={item}
           workspaceEntry={workspaceEntriesByKey.get(item.workspaceKey) ?? null}
           hostBadge={hostBadgeByServerId.get(item.serverId) ?? null}
-          inGroup
           shortcutNumber={shortcutIndexByWorkspaceKey.get(item.workspaceKey) ?? null}
           showShortcutBadge={showShortcutBadges}
           canCopyBranchName={project.projectKind === "git"}
@@ -1813,7 +1788,11 @@ function ProjectBlock({
   }
 
   return (
-    <View role="group" accessibilityLabel={displayName} style={styles.projectBlock}>
+    <View
+      role="group"
+      accessibilityLabel={displayName}
+      style={projectChildren ? styles.projectBlockExpanded : undefined}
+    >
       <ProjectHeaderRow
         project={project}
         displayName={displayName}
@@ -2423,17 +2402,26 @@ const styles = StyleSheet.create((theme) => ({
   pinnedSection: {
     marginBottom: theme.spacing[1],
   },
-  projectBlock: {
-    marginBottom: theme.spacing[1],
+  // Three times the gap a row keeps from its neighbour, so the break between two groups reads as
+  // a break rather than as one more row of pitch. Kept equal to `statusGroupBlockExpanded` — the
+  // two groupings are the same list under a different heading and must not breathe differently.
+  //
+  // Padding on the block rather than margin, and only while it has children: the gap belongs to
+  // the rows underneath the header, so a collapsed project gives it back and a column of collapsed
+  // headers closes up to the pitch of a list instead of staying spaced for content that is gone.
+  projectBlockExpanded: {
+    paddingBottom: theme.spacing[3],
   },
   workspaceListContainer: {},
+  // Kept in step with `workspaceRow` above. It stands in a project's list where a workspace row
+  // would be, so it takes that row's geometry and both of its fills.
   newWorkspaceGhostRow: {
-    minHeight: 32,
-    marginLeft: theme.spacing[6],
-    marginRight: theme.spacing[1],
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    minHeight: 36,
+    marginBottom: theme.spacing[0.5],
+    paddingVertical: theme.spacing[2],
+    paddingLeft: theme.spacing[2],
+    paddingRight: theme.spacing[3],
+    borderRadius: theme.borderRadius.lg,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
@@ -2442,9 +2430,14 @@ const styles = StyleSheet.create((theme) => ({
   newWorkspaceGhostRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
   },
+  newWorkspaceGhostRowPressed: {
+    backgroundColor: theme.colors.surface2,
+  },
+  // The width of a workspace row's status slot, so the label lands on the same rail as the
+  // titles above it.
   newWorkspaceGhostIconSlot: {
-    width: theme.iconSize.sm,
-    height: theme.iconSize.sm,
+    width: theme.iconSize.md,
+    height: theme.iconSize.md,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -2608,7 +2601,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspaceRow: {
     minHeight: 36,
-    marginBottom: theme.spacing[1],
+    marginBottom: theme.spacing[0.5],
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],

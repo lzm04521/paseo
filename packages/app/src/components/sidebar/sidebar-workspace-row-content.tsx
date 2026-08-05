@@ -8,7 +8,7 @@ import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import { PulsingStatusDot } from "@/components/sidebar/pulsing-status-dot";
 import {
   WorkspaceMetaRow,
-  type WorkspaceScriptSummary,
+  type WorkspaceServiceSummary,
 } from "@/components/sidebar/workspace-meta-row";
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
 import type { HostBadgeModel } from "@/hosts/appearance";
@@ -122,7 +122,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   hostBadge,
   leadingProjectName = null,
   leadingProjectIconDataUri = null,
-  scriptSummary = null,
+  serviceSummary = null,
   backdrop,
   isHovered,
   isLoading,
@@ -137,7 +137,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   /** Hoisted rows use their project icon as the leading visual because no project row contains them. */
   leadingProjectName?: string | null;
   leadingProjectIconDataUri?: string | null;
-  scriptSummary?: WorkspaceScriptSummary | null;
+  serviceSummary?: WorkspaceServiceSummary | null;
   /** The row's current background, so the project status badge can knock out of it. */
   backdrop: SurfaceBackdrop;
   isHovered: boolean;
@@ -193,7 +193,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
           <WorkspaceMetaRow
             hostBadge={hostBadge ?? null}
             prHint={workspace.prHint}
-            scriptSummary={scriptSummary}
+            serviceSummary={serviceSummary}
           />
         </View>
       </View>
