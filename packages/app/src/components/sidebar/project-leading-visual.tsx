@@ -12,6 +12,7 @@ import {
 } from "@/utils/project-status-badge-content";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import { getStatusDotColor } from "@/utils/status-dot-color";
+import { STATUS_INDICATOR_ALERT_SIZE } from "@/utils/status-indicator-geometry";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 
 // Every surfaced status shares one badge shell, so the badge never changes size or position
@@ -29,7 +30,6 @@ const STATUS_BADGE_OFFSET = -4;
 // The filled alert occupies the full badge shell so needs-input remains more prominent than
 // the passive status dots.
 const STATUS_BADGE_DOT_SIZE = 6;
-const STATUS_BADGE_ALERT_SIZE = 12;
 // Matches the workspace title's lineHeight (sidebar-workspace-row-content's
 // workspaceBranchText) so the icon centers on the title rather than floating above it.
 const LEADING_SLOT_HEIGHT = 20;
@@ -174,7 +174,7 @@ function ProjectStatusBadge({
       testID="project-status-badge"
     >
       {content.kind === "alert" ? (
-        <ThemedCircleAlert size={STATUS_BADGE_ALERT_SIZE} uniProps={needsInputColorMapping} />
+        <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
       ) : (
         <ProjectStatusDot bucket={content.bucket} />
       )}
