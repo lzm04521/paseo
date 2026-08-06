@@ -374,6 +374,7 @@ export const es: TranslationResources = {
       openFile: "Abrir archivo",
       copyPath: "Copiar ruta",
       copyRelativePath: "Copiar ruta relativa",
+      openInFileManager: "Mostrar en el administrador de archivos",
       download: "Descargar",
       addToChat: "Añadir al chat…",
       moreActions: "Más acciones",

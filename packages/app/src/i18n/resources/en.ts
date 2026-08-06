@@ -369,6 +369,7 @@ export const en = {
       openFile: "Open file",
       copyPath: "Copy path",
       copyRelativePath: "Copy relative path",
+      openInFileManager: "Reveal in file manager",
       download: "Download",
       addToChat: "Add to chat…",
       moreActions: "More actions",

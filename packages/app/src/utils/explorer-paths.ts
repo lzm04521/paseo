@@ -82,3 +82,14 @@ function pathSeparator(workspaceRoot: string): string {
 function splitPathSegments(value: string): string[] {
   return value.split(/[\\/]+/).filter(Boolean);
 }
+
+/**
+ * Workspace-relative path of the directory that contains the given explorer entry.
+ * Returns `"."` for root-level entries (i.e. the workspace root itself).
+ */
+export function parentExplorerPath(entryPath: string): string {
+  const trimmed = entryPath.trim().replace(/[\\/]+$/, "");
+  const lastSeparator = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (lastSeparator <= 0) return ".";
+  return trimmed.slice(0, lastSeparator);
+}

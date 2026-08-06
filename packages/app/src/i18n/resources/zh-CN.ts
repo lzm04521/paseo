@@ -370,6 +370,7 @@ export const zhCN: TranslationResources = {
       openFile: "打开文件",
       copyPath: "复制路径",
       copyRelativePath: "复制相对路径",
+      openInFileManager: "在文件管理器中打开",
       download: "下载",
       addToChat: "添加到聊天…",
       moreActions: "更多操作",

@@ -83,8 +83,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import * as Clipboard from "expo-clipboard";
 import { FILE_ACTIONS_MENU_WIDTH, FileActionsMenu } from "@/components/file-actions-menu";
+import { useRevealInFileManager } from "@/workspace/open-in-file-manager/use-reveal-in-file-manager";
 import { useFileDownload } from "@/hooks/use-file-download";
-import { buildAbsoluteExplorerPath, buildRelativeExplorerPath } from "@/utils/explorer-paths";
+import {
+  buildAbsoluteExplorerPath,
+  buildRelativeExplorerPath,
+  parentExplorerPath,
+} from "@/utils/explorer-paths";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { lineNumberGutterWidth } from "@/components/code-insets";
 import { GitActionsSplitButton } from "@/git/actions-split-button";
@@ -216,6 +221,7 @@ interface DiffFileSectionProps {
   onAddToChat?: (path: string) => void;
   onCopyPath?: (path: string) => void;
   onCopyRelativePath?: (path: string) => void;
+  onRevealInFileManager?: (path: string) => void;
   onDownload?: (path: string) => void;
   onHeaderHeightChange?: (path: string, height: number) => void;
   testID?: string;
@@ -923,6 +929,7 @@ const DiffFileHeader = memo(function DiffFileHeader({
   onAddToChat,
   onCopyPath,
   onCopyRelativePath,
+  onRevealInFileManager,
   onDownload,
   onHeaderHeightChange,
   testID,
@@ -963,6 +970,10 @@ const DiffFileHeader = memo(function DiffFileHeader({
   const handleCopyRelativePath = useCallback(() => {
     onCopyRelativePath?.(file.path);
   }, [file.path, onCopyRelativePath]);
+
+  const handleRevealInFileManager = useCallback(() => {
+    onRevealInFileManager?.(file.path);
+  }, [file.path, onRevealInFileManager]);
 
   const handleDownload = useCallback(() => {
     onDownload?.(file.path);
@@ -1076,6 +1087,7 @@ const DiffFileHeader = memo(function DiffFileHeader({
             onOpenFile={onOpenFile ? handleOpenFile : undefined}
             onCopyPath={onCopyPath ? handleCopyPath : undefined}
             onCopyRelativePath={onCopyRelativePath ? handleCopyRelativePath : undefined}
+            onOpenInFileManager={onRevealInFileManager ? handleRevealInFileManager : undefined}
             onDownload={onDownload ? handleDownload : undefined}
             onAddToChat={onAddToChat ? handleAddToChat : undefined}
             open={isActionsOpen}
@@ -1854,6 +1866,7 @@ interface SharedDiffViewProps {
         onAddToChat?: (path: string) => void;
         onCopyPath?: (path: string) => void;
         onCopyRelativePath?: (path: string) => void;
+        onRevealInFileManager?: (path: string) => void;
         onDownload?: (path: string) => void;
         onExpandedPathsChange: (paths: string[]) => void;
         onCollapsedFoldersChange: (paths: string[]) => void;
@@ -1909,6 +1922,8 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
     mode.kind === "working_tree" ? mode.workspaceFileDragScope : undefined;
   const onCopyPath = mode.kind === "working_tree" ? mode.onCopyPath : undefined;
   const onCopyRelativePath = mode.kind === "working_tree" ? mode.onCopyRelativePath : undefined;
+  const onRevealInFileManager =
+    mode.kind === "working_tree" ? mode.onRevealInFileManager : undefined;
   const onDownload = mode.kind === "working_tree" ? mode.onDownload : undefined;
   const compressedTree = useMemo(() => compressSingleChildChains(buildDiffTree(files)), [files]);
   const allFolderPaths = useMemo(() => collectDirPaths(compressedTree), [compressedTree]);
@@ -2229,6 +2244,7 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
             onAddToChat={onAddToChat}
             onCopyPath={onCopyPath}
             onCopyRelativePath={onCopyRelativePath}
+            onRevealInFileManager={onRevealInFileManager}
             onDownload={onDownload}
             onHeaderHeightChange={handleHeaderHeightChange}
             testID={`diff-file-${item.fileIndex}`}
@@ -2267,6 +2283,7 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
       onAddToChat,
       onCopyPath,
       onCopyRelativePath,
+      onRevealInFileManager,
       onDownload,
     ],
   );
@@ -2796,6 +2813,16 @@ export function GitDiffPane({
     },
     [cwd],
   );
+  const { isAvailable: revealInFileManagerAvailable, reveal: revealInFileManager } =
+    useRevealInFileManager();
+  const handleRevealInFileManager = useCallback(
+    (path: string) => {
+      revealInFileManager(
+        buildAbsoluteExplorerPath({ workspaceRoot: cwd, entryPath: parentExplorerPath(path) }),
+      );
+    },
+    [cwd, revealInFileManager],
+  );
   const handleDownloadPath = useCallback(
     (path: string) => {
       downloadFile({ fileName: path.split("/").pop() ?? path, path });
@@ -2815,6 +2842,7 @@ export function GitDiffPane({
       onAddToChat,
       onCopyPath: handleCopyPath,
       onCopyRelativePath: handleCopyRelativePath,
+      onRevealInFileManager: revealInFileManagerAvailable ? handleRevealInFileManager : undefined,
       onDownload: handleDownloadPath,
       onExpandedPathsChange: changesTree.updateExpandedPaths,
       onCollapsedFoldersChange: changesTree.updateCollapsedFolders,
@@ -2831,6 +2859,8 @@ export function GitDiffPane({
       onAddToChat,
       handleCopyPath,
       handleCopyRelativePath,
+      handleRevealInFileManager,
+      revealInFileManagerAvailable,
       handleDownloadPath,
       changesTree.updateExpandedPaths,
       changesTree.updateCollapsedFolders,

@@ -370,6 +370,7 @@ export const ar: TranslationResources = {
       openFile: "افتح الملف",
       copyPath: "نسخ المسار",
       copyRelativePath: "نسخ المسار النسبي",
+      openInFileManager: "إظهار في مدير الملفات",
       download: "تحميل",
       addToChat: "إضافة إلى الدردشة…",
       moreActions: "المزيد من الإجراءات",

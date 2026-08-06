@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAbsoluteExplorerPath, buildRelativeExplorerPath } from "./explorer-paths";
+import {
+  buildAbsoluteExplorerPath,
+  buildRelativeExplorerPath,
+  parentExplorerPath,
+} from "./explorer-paths";
 
 describe("buildAbsoluteExplorerPath", () => {
   it("builds a POSIX absolute path from a relative explorer path", () => {
@@ -110,5 +114,27 @@ describe("buildRelativeExplorerPath", () => {
     expect(
       buildRelativeExplorerPath({ workspaceRoot: "  ", entryPath: "/tmp/loose/file.txt" }),
     ).toBe("/tmp/loose/file.txt");
+  });
+});
+
+describe("parentExplorerPath", () => {
+  it("returns the directory of a nested file", () => {
+    expect(parentExplorerPath("packages/app/src/index.ts")).toBe("packages/app/src");
+  });
+
+  it("returns a dot for a root-level file", () => {
+    expect(parentExplorerPath("README.md")).toBe(".");
+  });
+
+  it("returns a dot for the workspace root itself", () => {
+    expect(parentExplorerPath(".")).toBe(".");
+  });
+
+  it("handles backslash separators", () => {
+    expect(parentExplorerPath("packages\\app\\src\\index.ts")).toBe("packages\\app\\src");
+  });
+
+  it("trims trailing separators before resolving the parent", () => {
+    expect(parentExplorerPath("packages/app/src/")).toBe("packages/app");
   });
 });

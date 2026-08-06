@@ -373,6 +373,7 @@ export const ru: TranslationResources = {
       openFile: "Открыть файл",
       copyPath: "Копировать путь",
       copyRelativePath: "Копировать относительный путь",
+      openInFileManager: "Показать в файловом менеджере",
       download: "Скачать",
       addToChat: "Добавить в чат…",
       moreActions: "Дополнительные действия",

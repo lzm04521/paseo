@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   FileText,
+  FolderOpen,
   MessageSquarePlus,
   MoreVertical,
   type LucideIcon,
@@ -39,6 +40,7 @@ interface FileActionsMenuProps {
   onOpenFile?: () => void;
   onCopyPath?: () => void;
   onCopyRelativePath?: () => void;
+  onOpenInFileManager?: () => void;
   onDownload?: () => void;
   onAddToChat?: () => void;
   /** Optional metadata block rendered above the actions (e.g. size/modified). */
@@ -74,6 +76,7 @@ export function FileActionsMenu({
   onOpenFile,
   onCopyPath,
   onCopyRelativePath,
+  onOpenInFileManager,
   onDownload,
   onAddToChat,
   header,
@@ -112,6 +115,14 @@ export function FileActionsMenu({
         onSelect: onCopyRelativePath,
       });
     }
+    if (fileExists && onOpenInFileManager) {
+      next.push({
+        key: "open-in-file-manager",
+        label: t("workspace.fileActions.openInFileManager"),
+        icon: FolderOpen,
+        onSelect: onOpenInFileManager,
+      });
+    }
     if (availableFile && onDownload) {
       next.push({
         key: "download",
@@ -138,6 +149,7 @@ export function FileActionsMenu({
     onCopyRelativePath,
     onDownload,
     onOpenFile,
+    onOpenInFileManager,
     t,
     testIDPrefix,
   ]);

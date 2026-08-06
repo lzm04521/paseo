@@ -374,6 +374,7 @@ export const ja: TranslationResources = {
       openFile: "ファイルを開く",
       copyPath: "パスをコピー",
       copyRelativePath: "相対パスをコピー",
+      openInFileManager: "ファイルマネージャーで表示",
       download: "ダウンロード",
       addToChat: "チャットに追加…",
       moreActions: "その他のアクション",
