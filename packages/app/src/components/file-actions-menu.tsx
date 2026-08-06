@@ -38,6 +38,7 @@ interface FileActionsMenuProps {
   fileExists?: boolean;
   onOpenFile?: () => void;
   onCopyPath?: () => void;
+  onCopyRelativePath?: () => void;
   onDownload?: () => void;
   onAddToChat?: () => void;
   /** Optional metadata block rendered above the actions (e.g. size/modified). */
@@ -72,6 +73,7 @@ export function FileActionsMenu({
   fileExists = true,
   onOpenFile,
   onCopyPath,
+  onCopyRelativePath,
   onDownload,
   onAddToChat,
   header,
@@ -102,6 +104,14 @@ export function FileActionsMenu({
         onSelect: onCopyPath,
       });
     }
+    if (onCopyRelativePath) {
+      next.push({
+        key: "copy-relative-path",
+        label: t("workspace.fileActions.copyRelativePath"),
+        icon: Copy,
+        onSelect: onCopyRelativePath,
+      });
+    }
     if (availableFile && onDownload) {
       next.push({
         key: "download",
@@ -120,7 +130,17 @@ export function FileActionsMenu({
       });
     }
     return next;
-  }, [fileExists, fileKind, onAddToChat, onCopyPath, onDownload, onOpenFile, t, testIDPrefix]);
+  }, [
+    fileExists,
+    fileKind,
+    onAddToChat,
+    onCopyPath,
+    onCopyRelativePath,
+    onDownload,
+    onOpenFile,
+    t,
+    testIDPrefix,
+  ]);
 
   if (actions.length === 0) {
     return null;

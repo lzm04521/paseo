@@ -170,10 +170,11 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
 });
 
 function WorkspaceScriptIcon({ kind }: { kind: SidebarWorkspaceScriptIconKind }) {
+  const { t } = useTranslation();
   return (
     <View
       style={styles.workspaceTitleAccessory}
-      accessibilityLabel="Scripts available"
+      accessibilityLabel={t("sidebar.workspace.status.scriptsAvailable")}
       testID={kind === "service" ? "workspace-globe-icon" : "workspace-terminal-icon"}
     >
       {kind === "service" ? (

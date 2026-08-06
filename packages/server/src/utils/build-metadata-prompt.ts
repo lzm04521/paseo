@@ -47,15 +47,30 @@ function renderStyleSection(section: MetadataStyleSection, override: string | un
 async function readProjectMetadataOverrides(
   options: Pick<BuildMetadataPromptOptions, "cwd" | "workspaceGitService">,
 ): Promise<PaseoMetadataGeneration | undefined> {
-  if (!options.workspaceGitService) {
-    return undefined;
-  }
   try {
-    const repoRoot = await options.workspaceGitService.resolveRepoRoot(options.cwd);
+    const repoRoot = await resolveMetadataConfigRoot(options);
     const json = readPaseoConfigJson(repoRoot);
     return PaseoConfigSchema.parse(json).metadataGeneration;
   } catch {
     return undefined;
+  }
+}
+
+// paseo.json lives at the project root. For git projects resolveRepoRoot finds
+// the repository root (the main repo root under a worktree). Non-git projects
+// (directory workspaces) have no repository root — resolveRepoRoot rejects on a
+// non-git cwd — so fall back to cwd there, keeping metadataGeneration overrides
+// effective for non-git projects too.
+async function resolveMetadataConfigRoot(
+  options: Pick<BuildMetadataPromptOptions, "cwd" | "workspaceGitService">,
+): Promise<string> {
+  if (!options.workspaceGitService) {
+    return options.cwd;
+  }
+  try {
+    return await options.workspaceGitService.resolveRepoRoot(options.cwd);
+  } catch {
+    return options.cwd;
   }
 }
 

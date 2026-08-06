@@ -373,6 +373,7 @@ export const es: TranslationResources = {
     fileActions: {
       openFile: "Abrir archivo",
       copyPath: "Copiar ruta",
+      copyRelativePath: "Copiar ruta relativa",
       download: "Descargar",
       addToChat: "Añadir al chat…",
       moreActions: "Más acciones",
@@ -913,6 +914,7 @@ export const es: TranslationResources = {
       home: "Hogar",
       settings: "Ajustes",
       closeSidebar: "Cerrar barra lateral",
+      openCommandCenter: "Abrir el centro de comandos",
     },
     help: {
       trigger: "Ayuda y soporte",
@@ -928,6 +930,18 @@ export const es: TranslationResources = {
     sections: {
       sessions: "Historial",
       schedules: "Horarios",
+      workspaces: "Espacios de trabajo",
+    },
+    displayPreferences: {
+      accessibilityLabel: "Preferencias de visualización",
+      groupBy: "Agrupar por",
+      groupByProject: "Proyecto",
+      groupByStatus: "Estado",
+      filter: "Filtrar",
+      allHosts: "Todos los hosts",
+      workspaceTitle: "Título del espacio de trabajo",
+      title: "Título",
+      branchName: "Nombre de la rama",
     },
     worktreeSetup: {
       title: "Configurar secuencias de comandos del árbol de trabajo",
@@ -939,10 +953,10 @@ export const es: TranslationResources = {
       actions: {
         menu: "Acciones del proyecto",
         openSettings: "Abrir la configuración del proyecto",
-        openNewWindow: "Open in new window",
-        openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openNewWindow: "Abrir en una ventana nueva",
+        openNewWindowFailed: "No se pudo abrir una ventana nueva",
+        openFolder: "Abrir en el administrador de archivos",
+        openFolderFailed: "No se pudo abrir la carpeta",
         remove: "Eliminar proyecto",
         removing: "Eliminando...",
       },
@@ -980,6 +994,7 @@ export const es: TranslationResources = {
         pin: "Anclar arriba",
         unpin: "Desanclar",
         archive: "Archivo",
+        markAsRead: "Marcar como leído",
         archiveWorkspace: "Archivar espacio de trabajo",
         hideFromSidebar: "Ocultar de la barra lateral",
         archiving: "Archivando...",
@@ -1001,6 +1016,7 @@ export const es: TranslationResources = {
         workspacePathUnavailable: "RutaWorkspaceno disponible",
         pathCopied: "Ruta copiada",
         branchNameCopied: "Nombre de la sucursal copiado",
+        markAsReadFailed: "No se pudo marcar el espacio de trabajo como leído",
         hostDisconnected: "Hostno está conectado",
         hideFailed: "No se pudo ocultar el espacio de trabajo",
         archiveFailed: "No se pudo archivar el espacio de trabajo",
@@ -2211,6 +2227,9 @@ export const es: TranslationResources = {
       metadata: {
         title: "Generación de metadatos",
         info: "Instrucciones específicas del proyecto inyectadas en los mensajes de IA quePaseoutiliza para generar metadatos; úselas para hacer cumplir las convenciones de su equipo, como la denominación de ramas, el estilo de confirmación o el formatoPR.",
+        titleGeneration: "Generación de títulos",
+        titleGenerationPlaceholder:
+          "Genere títulos de tareas concisos y claros siguiendo la terminología y las convenciones lingüísticas del proyecto",
         branchName: "Nombres de sucursales",
         branchNamePlaceholder: "Prefijo ramas con feat/ o fix/, mb/ para ramas personales",
         commitMessage: "Confirmar mensajes",

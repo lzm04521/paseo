@@ -906,6 +906,7 @@ function DesktopSidebar({
 }
 
 function WorkspacesSectionHeader() {
+  const { t } = useTranslation();
   const { theme } = useUnistyles();
   const setCommandCenterOpen = useKeyboardShortcutsStore((state) => state.setCommandCenterOpen);
   const commandCenterKeys = useShortcutKeys("toggle-command-center");
@@ -920,13 +921,13 @@ function WorkspacesSectionHeader() {
 
   return (
     <View style={styles.workspacesSectionHeader}>
-      <Text style={styles.workspacesSectionTitle}>Workspaces</Text>
+      <Text style={styles.workspacesSectionTitle}>{t("sidebar.sections.workspaces")}</Text>
       <View style={styles.workspacesSectionActions}>
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open command center"
+              accessibilityLabel={t("sidebar.actions.openCommandCenter")}
               testID="sidebar-command-center-search"
               style={searchButtonStyle}
               onPress={handleSearchPress}
@@ -942,7 +943,10 @@ function WorkspacesSectionHeader() {
             </Pressable>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="center" offset={8}>
-            <IconTooltipContent label="Search" shortcutKeys={commandCenterKeys} />
+            <IconTooltipContent
+              label={t("common.actions.search")}
+              shortcutKeys={commandCenterKeys}
+            />
           </TooltipContent>
         </Tooltip>
         <Tooltip delayDuration={300}>
@@ -952,7 +956,7 @@ function WorkspacesSectionHeader() {
             </View>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="center" offset={8}>
-            <IconTooltipContent label="Display preferences" />
+            <IconTooltipContent label={t("sidebar.displayPreferences.accessibilityLabel")} />
           </TooltipContent>
         </Tooltip>
       </View>

@@ -279,6 +279,33 @@ describe("generateBranchNameFromFirstAgentContext", () => {
     expect(prompt).toContain("Aim for about 4 words");
   });
 
+  test("reads title instructions from paseo.json for a non-git project", async () => {
+    const cwd = createTempDir("paseo-non-git-config-");
+    writeConfig(cwd, {
+      metadataGeneration: { title: { instructions: "Title in Chinese." } },
+    });
+    const structured = createStructuredGenerator({
+      title: "修复登录流程",
+      branch: "fix-login-flow",
+    });
+
+    await generateBranchNameFromFirstAgentContext({
+      agentManager: {} as AgentManager,
+      cwd,
+      workspaceGitService: createNoopWorkspaceGitService({
+        resolveRepoRoot: async () => {
+          throw new Error("Not a git repository");
+        },
+      }),
+      firstAgentContext: { prompt: "Fix the login flow" },
+      logger: createLogger(),
+      deps: { generateStructuredAgentResponseWithFallback: structured.generateStructured },
+    });
+
+    expect(structured.calls[0]?.prompt).toContain("Title style:\nTitle in Chinese.");
+    expect(structured.calls[0]?.prompt).not.toContain("Aim for about 4 words");
+  });
+
   test("the contract is never overridable by user instructions", async () => {
     const { prompt } = await generateBranchPromptWithConfig({
       metadataGeneration: {

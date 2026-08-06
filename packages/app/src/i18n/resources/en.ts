@@ -368,6 +368,7 @@ export const en = {
     fileActions: {
       openFile: "Open file",
       copyPath: "Copy path",
+      copyRelativePath: "Copy relative path",
       download: "Download",
       addToChat: "Add to chat…",
       moreActions: "More actions",
@@ -892,6 +893,7 @@ export const en = {
       home: "Home",
       settings: "Settings",
       closeSidebar: "Close sidebar",
+      openCommandCenter: "Open command center",
     },
     help: {
       trigger: "Help and support",
@@ -907,6 +909,18 @@ export const en = {
     sections: {
       sessions: "History",
       schedules: "Schedules",
+      workspaces: "Workspaces",
+    },
+    displayPreferences: {
+      accessibilityLabel: "Display preferences",
+      groupBy: "Group by",
+      groupByProject: "Project",
+      groupByStatus: "Status",
+      filter: "Filter",
+      allHosts: "All hosts",
+      workspaceTitle: "Workspace title",
+      title: "Title",
+      branchName: "Branch name",
     },
     worktreeSetup: {
       title: "Set up worktree scripts",
@@ -959,6 +973,7 @@ export const en = {
         pin: "Pin to top",
         unpin: "Unpin",
         archive: "Archive",
+        markAsRead: "Mark as read",
         archiveWorkspace: "Archive workspace",
         hideFromSidebar: "Hide from sidebar",
         archiving: "Archiving...",
@@ -980,6 +995,7 @@ export const en = {
         workspacePathUnavailable: "Workspace path not available",
         pathCopied: "Path copied",
         branchNameCopied: "Branch name copied",
+        markAsReadFailed: "Failed to mark workspace as read",
         hostDisconnected: "Host is not connected",
         hideFailed: "Failed to hide workspace",
         archiveFailed: "Failed to archive workspace",
@@ -2172,6 +2188,9 @@ export const en = {
       metadata: {
         title: "Metadata generation",
         info: "Project-specific instructions injected into the AI prompts Paseo uses to generate metadata - use them to enforce your team's conventions like branch naming, commit style, or PR format",
+        titleGeneration: "Title generation",
+        titleGenerationPlaceholder:
+          "Generate concise, clear task titles and follow the project's terminology and language conventions",
         branchName: "Branch names",
         branchNamePlaceholder: "Prefix branches with feat/ or fix/, mb/ for personal branches",
         commitMessage: "Commit messages",

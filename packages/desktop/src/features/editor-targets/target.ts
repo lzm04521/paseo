@@ -25,7 +25,16 @@ export interface EditorTargetRuntime {
   pathExists(path: string): boolean;
   isAbsolutePath(path: string): boolean;
   resolveCommand(commands: readonly string[]): string | null;
-  spawnDetached(input: { command: string; args: readonly string[] }): Promise<void>;
+  spawnDetached(input: {
+    command: string;
+    args: readonly string[];
+    /**
+     * Windows only: path exposed to the child through an environment variable so
+     * a `cmd /c start` command line can reference it without `%`-expansion
+     * damage. Set by `openPath`; editor targets should not need it.
+     */
+    shellOpenPath?: string;
+  }): Promise<void>;
   openPath(path: string): Promise<void>;
   revealPath(path: string): void;
   loadIcon(fileName: string): Promise<EditorTargetIcon>;

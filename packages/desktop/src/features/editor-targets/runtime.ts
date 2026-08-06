@@ -111,6 +111,16 @@ function spawnProcess(command: string, args: string[], options: SpawnOptions): S
   return nodeSpawn(command, args, options) as ChildProcess as SpawnedProcess;
 }
 
+/**
+ * Environment variable used to hand the target path to `cmd /c start`.
+ *
+ * The path cannot be inlined into the command string: `cmd` expands `%NAME%`
+ * before `start` sees it, so a folder like `C:\pct-100%PATH%-x` would be
+ * rewritten into garbage. Reading it back through a single `%VAR%` reference is
+ * expansion-safe because `cmd` performs exactly one substitution pass.
+ */
+const WINDOWS_OPEN_PATH_ENV_KEY = "PASEO_SHELL_OPEN_PATH";
+
 function iconPath(fileName: string): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "editor-target-icons", fileName);
@@ -141,18 +151,27 @@ export function createEditorTargetRuntime(
     pathExists,
     isAbsolutePath: (targetPath) => isAbsolutePath(targetPath, platform),
     resolveCommand: (commands) => resolveExecutable(commands, { env, pathExists, platform }),
-    async spawnDetached({ command, args }) {
+    async spawnDetached({ command, args, shellOpenPath }) {
       const commandScript = isWindowsCommandScript(command, platform);
       const launchCommand = commandScript ? escapeWindowsCmdValue(command) : command;
       const launchArgs = commandScript ? args.map(escapeWindowsCmdValue) : [...args];
+      const launchEnv = createExternalProcessEnv(env);
+      if (shellOpenPath !== undefined) {
+        launchEnv[WINDOWS_OPEN_PATH_ENV_KEY] = shellOpenPath;
+      }
       await new Promise<void>((resolve, reject) => {
         let child: SpawnedProcess;
         try {
           child = spawn(launchCommand, launchArgs, {
             detached: true,
-            env: createExternalProcessEnv(env),
+            env: launchEnv,
             shell: commandScript,
             stdio: "ignore",
+            // The `start ""` command line is already quoted for `cmd`; Node's
+            // default re-quoting would break it.
+            ...(shellOpenPath === undefined
+              ? {}
+              : { windowsHide: true, windowsVerbatimArguments: true }),
           });
         } catch (error) {
           reject(error);
@@ -166,6 +185,22 @@ export function createEditorTargetRuntime(
       });
     },
     async openPath(targetPath) {
+      // On Windows, honour the user's Explorer replacement (Directory Opus,
+      // Total Commander, ...). `shell.openPath` reaches ShellExecute with an
+      // explicit verb, and both `HKCR\Folder\shell\open\command` and
+      // `...\explore\command` still point at Explorer.exe even when the shell's
+      // *default* verb was repointed — Opus, for instance, sets the default
+      // under `HKCR\Folder\shell` to `openindopus`. `start ""` passes no verb,
+      // so the shell resolves the default one and the replacement file manager
+      // wins. Explorer stays the fallback when nothing is registered.
+      if (platform === "win32") {
+        await this.spawnDetached({
+          command: env.ComSpec ?? "cmd.exe",
+          args: ["/d", "/s", "/c", `start "" "%${WINDOWS_OPEN_PATH_ENV_KEY}%"`],
+          shellOpenPath: targetPath,
+        });
+        return;
+      }
       const errorMessage = await openPath(targetPath);
       if (errorMessage) throw new Error(errorMessage);
     },

@@ -373,6 +373,7 @@ export const ptBR: TranslationResources = {
     fileActions: {
       openFile: "Abrir arquivo",
       copyPath: "Copiar caminho",
+      copyRelativePath: "Copiar caminho relativo",
       download: "Baixar",
       addToChat: "Adicionar ao chat…",
       moreActions: "Mais ações",
@@ -904,6 +905,7 @@ export const ptBR: TranslationResources = {
       home: "Início",
       settings: "Configurações",
       closeSidebar: "Fechar barra lateral",
+      openCommandCenter: "Abrir a central de comandos",
     },
     help: {
       trigger: "Ajuda e suporte",
@@ -919,6 +921,18 @@ export const ptBR: TranslationResources = {
     sections: {
       sessions: "Histórico",
       schedules: "Agendamentos",
+      workspaces: "Workspaces",
+    },
+    displayPreferences: {
+      accessibilityLabel: "Preferências de exibição",
+      groupBy: "Agrupar por",
+      groupByProject: "Projeto",
+      groupByStatus: "Status",
+      filter: "Filtrar",
+      allHosts: "Todos os hosts",
+      workspaceTitle: "Título do workspace",
+      title: "Título",
+      branchName: "Nome da branch",
     },
     worktreeSetup: {
       title: "Configurar scripts de worktree",
@@ -932,8 +946,8 @@ export const ptBR: TranslationResources = {
         openSettings: "Abrir configurações do projeto",
         openNewWindow: "Abrir em nova janela",
         openNewWindowFailed: "Não foi possível abrir uma nova janela",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openFolder: "Abrir no gerenciador de arquivos",
+        openFolderFailed: "Não foi possível abrir a pasta",
         remove: "Remover projeto",
         removing: "Removendo...",
       },
@@ -971,6 +985,7 @@ export const ptBR: TranslationResources = {
         pin: "Fixar no topo",
         unpin: "Desafixar",
         archive: "Arquivar",
+        markAsRead: "Marcar como lido",
         archiveWorkspace: "Arquivar workspace",
         hideFromSidebar: "Ocultar da barra lateral",
         archiving: "Arquivando...",
@@ -992,6 +1007,7 @@ export const ptBR: TranslationResources = {
         workspacePathUnavailable: "Caminho do workspace indisponível",
         pathCopied: "Caminho copiado",
         branchNameCopied: "Nome da branch copiado",
+        markAsReadFailed: "Não foi possível marcar o workspace como lido",
         hostDisconnected: "Host não está conectado",
         hideFailed: "Falha ao ocultar workspace",
         archiveFailed: "Falha ao arquivar workspace",
@@ -2196,6 +2212,9 @@ export const ptBR: TranslationResources = {
       metadata: {
         title: "Geração de metadados",
         info: "Instruções específicas do projeto injetadas nos prompts de IA que o Paseo usa para gerar metadados. Use-as para aplicar convenções da sua equipe, como nomes de branch, estilo de commit ou formato de PR",
+        titleGeneration: "Geração de títulos",
+        titleGenerationPlaceholder:
+          "Gere títulos de tarefas concisos e claros, seguindo a terminologia e as convenções de idioma do projeto",
         branchName: "Nomes de branch",
         branchNamePlaceholder: "Prefixe branches com feat/ ou fix/, mb/ para branches pessoais",
         commitMessage: "Mensagens de commit",

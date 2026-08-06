@@ -373,6 +373,7 @@ export const fr: TranslationResources = {
     fileActions: {
       openFile: "Ouvrir le fichier",
       copyPath: "Copier le chemin",
+      copyRelativePath: "Copier le chemin relatif",
       download: "Télécharger",
       addToChat: "Ajouter au chat…",
       moreActions: "Plus de propositions",
@@ -912,6 +913,7 @@ export const fr: TranslationResources = {
       home: "Maison",
       settings: "Paramètres",
       closeSidebar: "Fermer la barre latérale",
+      openCommandCenter: "Ouvrir le centre de commandes",
     },
     help: {
       trigger: "Aide et assistance",
@@ -927,6 +929,18 @@ export const fr: TranslationResources = {
     sections: {
       sessions: "Historique",
       schedules: "Planifications",
+      workspaces: "Espaces de travail",
+    },
+    displayPreferences: {
+      accessibilityLabel: "Préférences d’affichage",
+      groupBy: "Regrouper par",
+      groupByProject: "Projet",
+      groupByStatus: "État",
+      filter: "Filtrer",
+      allHosts: "Tous les hôtes",
+      workspaceTitle: "Titre de l’espace de travail",
+      title: "Titre",
+      branchName: "Nom de la branche",
     },
     worktreeSetup: {
       title: "Configurer les scripts d'arbre de travail",
@@ -938,10 +952,10 @@ export const fr: TranslationResources = {
       actions: {
         menu: "Actions du projet",
         openSettings: "Ouvrir les paramètres du projet",
-        openNewWindow: "Open in new window",
-        openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openNewWindow: "Ouvrir dans une nouvelle fenêtre",
+        openNewWindowFailed: "Impossible d’ouvrir une nouvelle fenêtre",
+        openFolder: "Ouvrir dans le gestionnaire de fichiers",
+        openFolderFailed: "Impossible d’ouvrir le dossier",
         remove: "Supprimer le projet",
         removing: "Suppression...",
       },
@@ -979,6 +993,7 @@ export const fr: TranslationResources = {
         pin: "Épingler en haut",
         unpin: "Désépingler",
         archive: "Archive",
+        markAsRead: "Marquer comme lu",
         archiveWorkspace: "Archiver l’espace de travail",
         hideFromSidebar: "Masquer de la barre latérale",
         archiving: "Archivage...",
@@ -1000,6 +1015,7 @@ export const fr: TranslationResources = {
         workspacePathUnavailable: "CheminWorkspacenon disponible",
         pathCopied: "Chemin copié",
         branchNameCopied: "Nom de la succursale copié",
+        markAsReadFailed: "Impossible de marquer l’espace de travail comme lu",
         hostDisconnected: "Hostn'est pas connecté",
         hideFailed: "Échec du masquage de l'espace de travail",
         archiveFailed: "Échec de l'archivage de l'espace de travail",
@@ -2215,6 +2231,9 @@ export const fr: TranslationResources = {
       metadata: {
         title: "Génération de métadonnées",
         info: "Instructions spécifiques au projet injectées dans les invites de l'IA quePaseoutilise pour générer des métadonnées: utilisez-les pour appliquer les conventions de votre équipe telles que la dénomination des branches, le style de validation ou le formatPR.",
+        titleGeneration: "Génération des titres",
+        titleGenerationPlaceholder:
+          "Générez des titres de tâches concis et clairs en respectant la terminologie et les conventions linguistiques du projet",
         branchName: "Noms des succursales",
         branchNamePlaceholder:
           "Préfixez les branches avec feat/ ou fix/, mb/ pour les branches personnelles",

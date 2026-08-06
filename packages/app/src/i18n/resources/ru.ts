@@ -372,6 +372,7 @@ export const ru: TranslationResources = {
     fileActions: {
       openFile: "Открыть файл",
       copyPath: "Копировать путь",
+      copyRelativePath: "Копировать относительный путь",
       download: "Скачать",
       addToChat: "Добавить в чат…",
       moreActions: "Дополнительные действия",
@@ -904,6 +905,7 @@ export const ru: TranslationResources = {
       home: "Дом",
       settings: "Настройки",
       closeSidebar: "Закрыть боковую панель",
+      openCommandCenter: "Открыть центр команд",
     },
     help: {
       trigger: "Помощь и поддержка",
@@ -919,6 +921,18 @@ export const ru: TranslationResources = {
     sections: {
       sessions: "История",
       schedules: "Расписания",
+      workspaces: "Рабочие пространства",
+    },
+    displayPreferences: {
+      accessibilityLabel: "Настройки отображения",
+      groupBy: "Группировать по",
+      groupByProject: "Проекту",
+      groupByStatus: "Статусу",
+      filter: "Фильтр",
+      allHosts: "Все хосты",
+      workspaceTitle: "Название рабочего пространства",
+      title: "Название",
+      branchName: "Название ветки",
     },
     worktreeSetup: {
       title: "Настройка сценариев рабочего дерева",
@@ -930,10 +944,10 @@ export const ru: TranslationResources = {
       actions: {
         menu: "Действия проекта",
         openSettings: "Открыть настройки проекта",
-        openNewWindow: "Open in new window",
-        openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openNewWindow: "Открыть в новом окне",
+        openNewWindowFailed: "Не удалось открыть новое окно",
+        openFolder: "Открыть в файловом менеджере",
+        openFolderFailed: "Не удалось открыть папку",
         remove: "Удалить проект",
         removing: "Удаление...",
       },
@@ -971,6 +985,7 @@ export const ru: TranslationResources = {
         pin: "Закрепить вверху",
         unpin: "Открепить",
         archive: "Архив",
+        markAsRead: "Отметить как прочитанное",
         archiveWorkspace: "Архивировать рабочее пространство",
         hideFromSidebar: "Скрыть с боковой панели",
         archiving: "Архивирование...",
@@ -992,6 +1007,7 @@ export const ru: TranslationResources = {
         workspacePathUnavailable: "Путь Workspace недоступен",
         pathCopied: "Путь скопирован",
         branchNameCopied: "Название филиала скопировано.",
+        markAsReadFailed: "Не удалось отметить рабочее пространство как прочитанное",
         hostDisconnected: "Host не подключен",
         hideFailed: "Не удалось скрыть рабочую область.",
         archiveFailed: "Не удалось заархивировать рабочее пространство.",
@@ -2201,6 +2217,9 @@ export const ru: TranslationResources = {
       metadata: {
         title: "Генерация метаданных",
         info: "Инструкции для конкретного проекта, внедренные в подсказки ИИ, которые Paseo использует для генерации метаданных. Используйте их для обеспечения соблюдения соглашений вашей команды, таких как наименование ветвей, стиль фиксации или формат PR.",
+        titleGeneration: "Генерация названий",
+        titleGenerationPlaceholder:
+          "Создавайте краткие и понятные названия задач, соблюдая терминологию и языковые соглашения проекта",
         branchName: "Названия ветвей",
         branchNamePlaceholder: "Префиксные ветки с feat/ или fix/, mb/ для личных веток",
         commitMessage: "Фиксировать сообщения",

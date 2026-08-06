@@ -369,6 +369,7 @@ export const ar: TranslationResources = {
     fileActions: {
       openFile: "افتح الملف",
       copyPath: "نسخ المسار",
+      copyRelativePath: "نسخ المسار النسبي",
       download: "تحميل",
       addToChat: "إضافة إلى الدردشة…",
       moreActions: "المزيد من الإجراءات",
@@ -882,6 +883,7 @@ export const ar: TranslationResources = {
       home: "بيت",
       settings: "إعدادات",
       closeSidebar: "إغلاق الشريط الجانبي",
+      openCommandCenter: "فتح مركز الأوامر",
     },
     help: {
       trigger: "المساعدة والدعم",
@@ -897,6 +899,18 @@ export const ar: TranslationResources = {
     sections: {
       sessions: "السجل",
       schedules: "الجداول",
+      workspaces: "مساحات العمل",
+    },
+    displayPreferences: {
+      accessibilityLabel: "تفضيلات العرض",
+      groupBy: "تجميع حسب",
+      groupByProject: "المشروع",
+      groupByStatus: "الحالة",
+      filter: "تصفية",
+      allHosts: "كل المضيفين",
+      workspaceTitle: "عنوان مساحة العمل",
+      title: "العنوان",
+      branchName: "اسم الفرع",
     },
     worktreeSetup: {
       title: "إعداد البرامج النصية لشجرة العمل",
@@ -910,8 +924,8 @@ export const ar: TranslationResources = {
         openSettings: "افتح إعدادات المشروع",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openFolder: "فتح في مدير الملفات",
+        openFolderFailed: "تعذر فتح المجلد",
         remove: "إزالة المشروع",
         removing: "جارٍ الإزالة...",
       },
@@ -948,7 +962,8 @@ export const ar: TranslationResources = {
         rename: "إعادة تسمية مساحة العمل",
         pin: "تثبيت في الأعلى",
         unpin: "إلغاء التثبيت",
-        archive: "أرشيف",
+        archive: "أرشفة",
+        markAsRead: "وضع علامة كمقروء",
         archiveWorkspace: "أرشفة مساحة العمل",
         hideFromSidebar: "إخفاء من الشريط الجانبي",
         archiving: "أرشفة...",
@@ -970,6 +985,7 @@ export const ar: TranslationResources = {
         workspacePathUnavailable: "مسار Workspace غير متوفر",
         pathCopied: "تم نسخ المسار",
         branchNameCopied: "تم نسخ اسم الفرع",
+        markAsReadFailed: "تعذر وضع علامة على مساحة العمل كمقروءة",
         hostDisconnected: "Host غير متصل",
         hideFailed: "فشل في إخفاء مساحة العمل",
         archiveFailed: "فشل في أرشفة مساحة العمل",
@@ -2159,6 +2175,9 @@ export const ar: TranslationResources = {
       metadata: {
         title: "توليد البيانات الوصفية",
         info: "تعليمات خاصة بالمشروع يتم إدخالها في الذكاء الاصطناعي الذي يستخدمه Paseo لإنشاء بيانات التعريف - استخدمها لفرض اصطلاحات فريقك مثل تسمية الفرع أو نمط الالتزام أو تنسيق PR",
+        titleGeneration: "توليد العناوين",
+        titleGenerationPlaceholder:
+          "أنشئ عناوين مهام موجزة وواضحة، مع الالتزام بمصطلحات المشروع واتفاقيات اللغة فيه",
         branchName: "اسماء الفروع",
         branchNamePlaceholder: "بادئة الفروع بـ fet/ أو Fix/, mb/ للفروع الشخصية",
         commitMessage: "ارتكاب الرسائل",

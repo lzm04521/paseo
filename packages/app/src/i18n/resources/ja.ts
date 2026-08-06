@@ -373,6 +373,7 @@ export const ja: TranslationResources = {
     fileActions: {
       openFile: "ファイルを開く",
       copyPath: "パスをコピー",
+      copyRelativePath: "相対パスをコピー",
       download: "ダウンロード",
       addToChat: "チャットに追加…",
       moreActions: "その他のアクション",
@@ -893,6 +894,7 @@ export const ja: TranslationResources = {
       home: "ホーム",
       settings: "設定",
       closeSidebar: "サイドバーを閉じる",
+      openCommandCenter: "コマンドセンターを開く",
     },
     help: {
       trigger: "ヘルプとサポート",
@@ -908,6 +910,18 @@ export const ja: TranslationResources = {
     sections: {
       sessions: "履歴",
       schedules: "スケジュール",
+      workspaces: "ワークスペース",
+    },
+    displayPreferences: {
+      accessibilityLabel: "表示設定",
+      groupBy: "グループ化",
+      groupByProject: "プロジェクト",
+      groupByStatus: "ステータス",
+      filter: "フィルター",
+      allHosts: "すべてのホスト",
+      workspaceTitle: "ワークスペースのタイトル",
+      title: "タイトル",
+      branchName: "ブランチ名",
     },
     worktreeSetup: {
       title: "ワークツリースクリプトを設定",
@@ -921,8 +935,8 @@ export const ja: TranslationResources = {
         openSettings: "プロジェクト設定を開く",
         openNewWindow: "新しいウィンドウで開く",
         openNewWindowFailed: "新しいウィンドウを開けませんでした",
-        openFolder: "Open in file manager",
-        openFolderFailed: "Couldn't open folder",
+        openFolder: "ファイルマネージャーで開く",
+        openFolderFailed: "フォルダーを開けませんでした",
         remove: "プロジェクトを削除",
         removing: "削除中...",
       },
@@ -960,6 +974,7 @@ export const ja: TranslationResources = {
         pin: "上部に固定",
         unpin: "固定解除",
         archive: "アーカイブ",
+        markAsRead: "既読にする",
         archiveWorkspace: "ワークスペースをアーカイブ",
         hideFromSidebar: "サイドバーから非表示",
         archiving: "アーカイブ中...",
@@ -981,6 +996,7 @@ export const ja: TranslationResources = {
         workspacePathUnavailable: "ワークスペースパスが利用できません",
         pathCopied: "パスをコピーしました",
         branchNameCopied: "ブランチ名をコピーしました",
+        markAsReadFailed: "ワークスペースを既読にできませんでした",
         hostDisconnected: "ホストが接続されていません",
         hideFailed: "ワークスペースの非表示に失敗しました",
         archiveFailed: "ワークスペースのアーカイブに失敗しました",
@@ -2182,6 +2198,9 @@ export const ja: TranslationResources = {
       metadata: {
         title: "メタデータ生成",
         info: "Paseoがメタデータ生成に使うAIプロンプトへ追加する、プロジェクト固有の指示です。ブランチ名、コミット形式、PR形式など、チームの規約を反映するために使います。",
+        titleGeneration: "タイトル生成",
+        titleGenerationPlaceholder:
+          "プロジェクトの用語と表記規則に従い、簡潔で分かりやすいタスクタイトルを生成する",
         branchName: "ブランチ名",
         branchNamePlaceholder: "ブランチ名は feat/ または fix/ で始め、個人ブランチは mb/ にする",
         commitMessage: "コミットメッセージ",
