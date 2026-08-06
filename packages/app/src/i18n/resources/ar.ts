@@ -1215,6 +1215,71 @@ export const ar: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "اختيار مضيف",
+      method: "إضافة مشروع",
+      directorySearch: "البحث عن مجلد",
+      githubSearch: "استنساخ من GitHub",
+      githubLocation: "اختيار الموقع",
+      newDirectoryParent: "اختيار المجلد الأصل",
+      newDirectoryName: "تسمية المجلد",
+    },
+    placeholders: {
+      host: "البحث عن مضيفين...",
+      method: "البحث عن الطرق...",
+      directorySearch: "ابحث عن مجلدات أو أدخل مسارًا...",
+      githubSearch: "ابحث أو أدخل مستودع GitHub...",
+      parentDirectory: "ابحث عن مجلدات أصل أو أدخل مسارًا...",
+      newDirectoryName: "اسم المجلد",
+    },
+    methods: {
+      directorySearch: {
+        label: "البحث عن مجلد",
+        description: "إيجاد مجلد على {{host}}",
+      },
+      browse: {
+        label: "استعراض",
+        description: "اختر أو أنشئ مجلدًا في مستعرض الملفات",
+      },
+      github: {
+        label: "استنساخ من GitHub",
+        description: "البحث عن المشاريع المتاحة في حساب GitHub الخاص بك",
+        manualDescription: "أدخل عنوان GitHub أو owner/repo",
+        unsupported: "قم بتحديث هذا المضيف لاستنساخ مستودعات GitHub",
+      },
+      newDirectory: {
+        label: "مجلد جديد",
+        description: "إنشاء مجلد فارغ على {{host}}",
+        unsupported: "قم بتحديث هذا المضيف لإنشاء المجلدات",
+      },
+    },
+    progress: {
+      cloning: "جارٍ استنساخ المشروع...",
+      creatingDirectory: "جارٍ إنشاء المجلد...",
+      addingProject: "جارٍ إضافة المشروع...",
+    },
+    empty: {
+      noHosts: "لا توجد مضيفات متصلة",
+      githubManual: "أدخل عنوان GitHub أو owner/repo",
+      noMatchingOptions: "لا توجد خيارات مطابقة",
+      hostUnsupported: "قم بتحديث المضيف لاستخدام إضافة مشروع.",
+    },
+    errors: {
+      directorySearchFailed: "تعذر البحث في المجلدات",
+      githubSearchFailed: "تعذر البحث في مستودعات GitHub",
+      githubUnavailable: "البحث في GitHub غير متاح",
+    },
+    addHost: {
+      title: "إضافة مضيف",
+      subtitle: "لا توجد مضيفات متصلة",
+    },
+    openPath: "فتح هذا المسار",
+    cloneUrl: "استنساخ عنوان المستودع هذا",
+    cloneVia: "استنساخ owner/repo عبر {{protocol}}",
+    alreadyExists: "موجود بالفعل",
+    parentDirectory: "المجلد الأصل: {{parent}}",
+  },
   projectPicker: {
     placeholder: "اكتب للبحث...",
     browse: "استعراض…",

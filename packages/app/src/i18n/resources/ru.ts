@@ -1244,6 +1244,71 @@ export const ru: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "Выбрать хост",
+      method: "Добавить проект",
+      directorySearch: "Поиск каталога",
+      githubSearch: "Клонировать с GitHub",
+      githubLocation: "Выбрать назначение",
+      newDirectoryParent: "Выбрать родительский каталог",
+      newDirectoryName: "Назвать каталог",
+    },
+    placeholders: {
+      host: "Поиск хостов...",
+      method: "Поиск способов...",
+      directorySearch: "Найдите каталог или введите путь...",
+      githubSearch: "Найдите или введите репозиторий GitHub...",
+      parentDirectory: "Найдите родительский каталог или введите путь...",
+      newDirectoryName: "Имя каталога",
+    },
+    methods: {
+      directorySearch: {
+        label: "Поиск каталога",
+        description: "Найти каталог на {{host}}",
+      },
+      browse: {
+        label: "Обзор",
+        description: "Выбрать или создать каталог в проводнике",
+      },
+      github: {
+        label: "Клонировать с GitHub",
+        description: "Поиск проектов, доступных в вашем аккаунте GitHub",
+        manualDescription: "Введите URL GitHub или owner/repo",
+        unsupported: "Обновите этот хост, чтобы клонировать репозитории GitHub",
+      },
+      newDirectory: {
+        label: "Новый каталог",
+        description: "Создать пустой каталог на {{host}}",
+        unsupported: "Обновите этот хост, чтобы создавать каталоги",
+      },
+    },
+    progress: {
+      cloning: "Клонирование проекта...",
+      creatingDirectory: "Создание каталога...",
+      addingProject: "Добавление проекта...",
+    },
+    empty: {
+      noHosts: "Нет подключённых хостов",
+      githubManual: "Введите URL GitHub или owner/repo",
+      noMatchingOptions: "Нет подходящих вариантов",
+      hostUnsupported: "Обновите хост, чтобы использовать добавление проекта.",
+    },
+    errors: {
+      directorySearchFailed: "Не удалось найти каталоги",
+      githubSearchFailed: "Не удалось найти репозитории GitHub",
+      githubUnavailable: "Поиск в GitHub недоступен",
+    },
+    addHost: {
+      title: "Добавить хост",
+      subtitle: "Нет подключённых хостов",
+    },
+    openPath: "Открыть этот путь",
+    cloneUrl: "Клонировать этот URL репозитория",
+    cloneVia: "Клонировать owner/repo через {{protocol}}",
+    alreadyExists: "Уже существует",
+    parentDirectory: "Родительский каталог: {{parent}}",
+  },
   projectPicker: {
     placeholder: "Введите текст для поиска...",
     browse: "Обзор…",

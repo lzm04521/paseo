@@ -1241,6 +1241,71 @@ export const ptBR: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "Escolher host",
+      method: "Adicionar projeto",
+      directorySearch: "Pesquisar diretório",
+      githubSearch: "Clonar do GitHub",
+      githubLocation: "Escolher destino",
+      newDirectoryParent: "Escolher diretório pai",
+      newDirectoryName: "Nomear diretório",
+    },
+    placeholders: {
+      host: "Pesquisar hosts...",
+      method: "Pesquisar métodos...",
+      directorySearch: "Pesquisar diretórios ou digitar um caminho...",
+      githubSearch: "Pesquisar ou digitar um repositório do GitHub...",
+      parentDirectory: "Pesquisar diretórios pai ou digitar um caminho...",
+      newDirectoryName: "Nome do diretório",
+    },
+    methods: {
+      directorySearch: {
+        label: "Pesquisar diretório",
+        description: "Encontrar um diretório em {{host}}",
+      },
+      browse: {
+        label: "Procurar",
+        description: "Escolher ou criar um diretório no explorador",
+      },
+      github: {
+        label: "Clonar do GitHub",
+        description: "Pesquisar projetos disponíveis na sua conta do GitHub",
+        manualDescription: "Digite uma URL do GitHub ou owner/repo",
+        unsupported: "Atualize este host para clonar repositórios do GitHub",
+      },
+      newDirectory: {
+        label: "Novo diretório",
+        description: "Criar um diretório vazio em {{host}}",
+        unsupported: "Atualize este host para criar diretórios",
+      },
+    },
+    progress: {
+      cloning: "Clonando projeto...",
+      creatingDirectory: "Criando diretório...",
+      addingProject: "Adicionando projeto...",
+    },
+    empty: {
+      noHosts: "Nenhum host conectado",
+      githubManual: "Digite uma URL do GitHub ou owner/repo",
+      noMatchingOptions: "Nenhuma opção correspondente",
+      hostUnsupported: "Atualize o host para usar Adicionar projeto.",
+    },
+    errors: {
+      directorySearchFailed: "Não foi possível pesquisar diretórios",
+      githubSearchFailed: "Não foi possível pesquisar repositórios do GitHub",
+      githubUnavailable: "A pesquisa no GitHub está indisponível",
+    },
+    addHost: {
+      title: "Adicionar host",
+      subtitle: "Nenhum host conectado",
+    },
+    openPath: "Abrir este caminho",
+    cloneUrl: "Clonar esta URL de repositório",
+    cloneVia: "Clonar owner/repo via {{protocol}}",
+    alreadyExists: "Já existe",
+    parentDirectory: "Diretório pai: {{parent}}",
+  },
   projectPicker: {
     placeholder: "Digite para pesquisar...",
     browse: "Procurar…",

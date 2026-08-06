@@ -1225,6 +1225,71 @@ export const en = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      method: "Search methods...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      newDirectoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        description: "Search projects available to your GitHub account",
+        manualDescription: "Enter a GitHub URL or owner/repo",
+        unsupported: "Update this host to clone GitHub repositories",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        unsupported: "Update this host to create directories",
+      },
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      addingProject: "Adding project...",
+    },
+    empty: {
+      noHosts: "No connected hosts",
+      githubManual: "Enter a GitHub URL or owner/repo",
+      noMatchingOptions: "No matching options",
+      hostUnsupported: "Update the host to use Add Project.",
+    },
+    errors: {
+      directorySearchFailed: "Unable to search directories",
+      githubSearchFailed: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+    },
+    addHost: {
+      title: "Add host",
+      subtitle: "No connected hosts",
+    },
+    openPath: "Open this path",
+    cloneUrl: "Clone this repository URL",
+    cloneVia: "Clone owner/repo via {{protocol}}",
+    alreadyExists: "Already exists",
+    parentDirectory: "Parent directory: {{parent}}",
+  },
   projectPicker: {
     placeholder: "Type to search...",
     browse: "Browse…",

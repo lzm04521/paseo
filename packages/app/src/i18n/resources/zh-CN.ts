@@ -1198,6 +1198,71 @@ export const zhCN: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "选择 host",
+      method: "添加 project",
+      directorySearch: "搜索目录",
+      githubSearch: "从 GitHub 克隆",
+      githubLocation: "选择目标位置",
+      newDirectoryParent: "选择上级目录",
+      newDirectoryName: "命名目录",
+    },
+    placeholders: {
+      host: "搜索 host...",
+      method: "搜索方式...",
+      directorySearch: "搜索目录或输入路径...",
+      githubSearch: "搜索或输入 GitHub 仓库...",
+      parentDirectory: "搜索上级目录或输入路径...",
+      newDirectoryName: "目录名称",
+    },
+    methods: {
+      directorySearch: {
+        label: "搜索目录",
+        description: "在 {{host}} 上查找目录",
+      },
+      browse: {
+        label: "浏览",
+        description: "在文件管理器中选择或新建目录",
+      },
+      github: {
+        label: "从 GitHub 克隆",
+        description: "搜索你的 GitHub 账户中可用的项目",
+        manualDescription: "输入 GitHub URL 或 owner/repo",
+        unsupported: "升级此 host 后才能克隆 GitHub 仓库",
+      },
+      newDirectory: {
+        label: "新建目录",
+        description: "在 {{host}} 上创建一个空目录",
+        unsupported: "升级此 host 后才能创建目录",
+      },
+    },
+    progress: {
+      cloning: "正在克隆 project...",
+      creatingDirectory: "正在创建目录...",
+      addingProject: "正在添加 project...",
+    },
+    empty: {
+      noHosts: "没有已连接的 host",
+      githubManual: "输入 GitHub URL 或 owner/repo",
+      noMatchingOptions: "没有匹配的选项",
+      hostUnsupported: "升级此 host 后才能使用添加 project 功能。",
+    },
+    errors: {
+      directorySearchFailed: "无法搜索目录",
+      githubSearchFailed: "无法搜索 GitHub 仓库",
+      githubUnavailable: "GitHub 搜索不可用",
+    },
+    addHost: {
+      title: "添加 host",
+      subtitle: "没有已连接的 host",
+    },
+    openPath: "打开此路径",
+    cloneUrl: "克隆此仓库 URL",
+    cloneVia: "通过 {{protocol}} 克隆 owner/repo",
+    alreadyExists: "已存在",
+    parentDirectory: "上级目录：{{parent}}",
+  },
   projectPicker: {
     placeholder: "输入以搜索...",
     browse: "浏览…",

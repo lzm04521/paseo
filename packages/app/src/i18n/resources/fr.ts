@@ -1257,6 +1257,71 @@ export const fr: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "Choisir un hôte",
+      method: "Ajouter un projet",
+      directorySearch: "Rechercher un répertoire",
+      githubSearch: "Cloner depuis GitHub",
+      githubLocation: "Choisir la destination",
+      newDirectoryParent: "Choisir le répertoire parent",
+      newDirectoryName: "Nommer le répertoire",
+    },
+    placeholders: {
+      host: "Rechercher des hôtes...",
+      method: "Rechercher des méthodes...",
+      directorySearch: "Rechercher des répertoires ou saisir un chemin...",
+      githubSearch: "Rechercher ou saisir un dépôt GitHub...",
+      parentDirectory: "Rechercher des répertoires parents ou saisir un chemin...",
+      newDirectoryName: "Nom du répertoire",
+    },
+    methods: {
+      directorySearch: {
+        label: "Rechercher un répertoire",
+        description: "Trouver un répertoire sur {{host}}",
+      },
+      browse: {
+        label: "Parcourir",
+        description: "Choisir ou créer un répertoire dans l'explorateur",
+      },
+      github: {
+        label: "Cloner depuis GitHub",
+        description: "Rechercher les projets disponibles sur votre compte GitHub",
+        manualDescription: "Saisissez une URL GitHub ou owner/repo",
+        unsupported: "Mettez à jour cet hôte pour cloner des dépôts GitHub",
+      },
+      newDirectory: {
+        label: "Nouveau répertoire",
+        description: "Créer un répertoire vide sur {{host}}",
+        unsupported: "Mettez à jour cet hôte pour créer des répertoires",
+      },
+    },
+    progress: {
+      cloning: "Clonage du projet...",
+      creatingDirectory: "Création du répertoire...",
+      addingProject: "Ajout du projet...",
+    },
+    empty: {
+      noHosts: "Aucun hôte connecté",
+      githubManual: "Saisissez une URL GitHub ou owner/repo",
+      noMatchingOptions: "Aucune option correspondante",
+      hostUnsupported: "Mettez à jour l'hôte pour utiliser Ajouter un projet.",
+    },
+    errors: {
+      directorySearchFailed: "Impossible de rechercher des répertoires",
+      githubSearchFailed: "Impossible de rechercher des dépôts GitHub",
+      githubUnavailable: "La recherche GitHub est indisponible",
+    },
+    addHost: {
+      title: "Ajouter un hôte",
+      subtitle: "Aucun hôte connecté",
+    },
+    openPath: "Ouvrir ce chemin",
+    cloneUrl: "Cloner cette URL de dépôt",
+    cloneVia: "Cloner owner/repo via {{protocol}}",
+    alreadyExists: "Existe déjà",
+    parentDirectory: "Répertoire parent : {{parent}}",
+  },
   projectPicker: {
     placeholder: "Tapez pour rechercher...",
     browse: "Parcourir…",

@@ -1255,6 +1255,71 @@ export const es: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "Elegir host",
+      method: "Añadir proyecto",
+      directorySearch: "Buscar directorio",
+      githubSearch: "Clonar desde GitHub",
+      githubLocation: "Elegir destino",
+      newDirectoryParent: "Elegir directorio principal",
+      newDirectoryName: "Nombrar directorio",
+    },
+    placeholders: {
+      host: "Buscar hosts...",
+      method: "Buscar métodos...",
+      directorySearch: "Buscar directorios o introducir una ruta...",
+      githubSearch: "Buscar o introducir un repositorio de GitHub...",
+      parentDirectory: "Buscar directorios principales o introducir una ruta...",
+      newDirectoryName: "Nombre del directorio",
+    },
+    methods: {
+      directorySearch: {
+        label: "Buscar directorio",
+        description: "Encontrar un directorio en {{host}}",
+      },
+      browse: {
+        label: "Explorar",
+        description: "Elegir o crear un directorio en el explorador",
+      },
+      github: {
+        label: "Clonar desde GitHub",
+        description: "Buscar proyectos disponibles en tu cuenta de GitHub",
+        manualDescription: "Introduce una URL de GitHub o owner/repo",
+        unsupported: "Actualiza este host para clonar repositorios de GitHub",
+      },
+      newDirectory: {
+        label: "Nuevo directorio",
+        description: "Crear un directorio vacío en {{host}}",
+        unsupported: "Actualiza este host para crear directorios",
+      },
+    },
+    progress: {
+      cloning: "Clonando proyecto...",
+      creatingDirectory: "Creando directorio...",
+      addingProject: "Añadiendo proyecto...",
+    },
+    empty: {
+      noHosts: "No hay hosts conectados",
+      githubManual: "Introduce una URL de GitHub o owner/repo",
+      noMatchingOptions: "No hay opciones coincidentes",
+      hostUnsupported: "Actualiza el host para usar Añadir proyecto.",
+    },
+    errors: {
+      directorySearchFailed: "No se pudo buscar directorios",
+      githubSearchFailed: "No se pudo buscar repositorios de GitHub",
+      githubUnavailable: "La búsqueda en GitHub no está disponible",
+    },
+    addHost: {
+      title: "Añadir host",
+      subtitle: "No hay hosts conectados",
+    },
+    openPath: "Abrir esta ruta",
+    cloneUrl: "Clonar esta URL de repositorio",
+    cloneVia: "Clonar owner/repo vía {{protocol}}",
+    alreadyExists: "Ya existe",
+    parentDirectory: "Directorio principal: {{parent}}",
+  },
   projectPicker: {
     placeholder: "Escriba para buscar...",
     browse: "Explorar…",

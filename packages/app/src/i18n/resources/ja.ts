@@ -1228,6 +1228,71 @@ export const ja: TranslationResources = {
       },
     },
   },
+  addProjectFlow: {
+    titles: {
+      host: "ホストを選択",
+      method: "プロジェクトを追加",
+      directorySearch: "ディレクトリを検索",
+      githubSearch: "GitHub からクローン",
+      githubLocation: "保存先を選択",
+      newDirectoryParent: "親ディレクトリを選択",
+      newDirectoryName: "ディレクトリ名を入力",
+    },
+    placeholders: {
+      host: "ホストを検索...",
+      method: "方法を検索...",
+      directorySearch: "ディレクトリを検索またはパスを入力...",
+      githubSearch: "GitHub リポジトリを検索または入力...",
+      parentDirectory: "親ディレクトリを検索またはパスを入力...",
+      newDirectoryName: "ディレクトリ名",
+    },
+    methods: {
+      directorySearch: {
+        label: "ディレクトリを検索",
+        description: "{{host}} 上のディレクトリを探す",
+      },
+      browse: {
+        label: "参照",
+        description: "ファイラーでディレクトリを選択または作成",
+      },
+      github: {
+        label: "GitHub からクローン",
+        description: "GitHub アカウントで利用できるプロジェクトを検索",
+        manualDescription: "GitHub URL または owner/repo を入力",
+        unsupported: "GitHub リポジトリをクローンするにはこのホストを更新してください",
+      },
+      newDirectory: {
+        label: "新しいディレクトリ",
+        description: "{{host}} 上に空のディレクトリを作成",
+        unsupported: "ディレクトリを作成するにはこのホストを更新してください",
+      },
+    },
+    progress: {
+      cloning: "プロジェクトをクローン中...",
+      creatingDirectory: "ディレクトリを作成中...",
+      addingProject: "プロジェクトを追加中...",
+    },
+    empty: {
+      noHosts: "接続中のホストがありません",
+      githubManual: "GitHub URL または owner/repo を入力",
+      noMatchingOptions: "一致する選択肢がありません",
+      hostUnsupported: "プロジェクトの追加を使うにはホストを更新してください。",
+    },
+    errors: {
+      directorySearchFailed: "ディレクトリを検索できません",
+      githubSearchFailed: "GitHub リポジトリを検索できません",
+      githubUnavailable: "GitHub 検索は利用できません",
+    },
+    addHost: {
+      title: "ホストを追加",
+      subtitle: "接続中のホストがありません",
+    },
+    openPath: "このパスを開く",
+    cloneUrl: "このリポジトリ URL をクローン",
+    cloneVia: "{{protocol}} で owner/repo をクローン",
+    alreadyExists: "既に存在します",
+    parentDirectory: "親ディレクトリ: {{parent}}",
+  },
   projectPicker: {
     placeholder: "入力して検索...",
     browse: "参照…",
