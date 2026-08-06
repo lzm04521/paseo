@@ -8,6 +8,11 @@
       "npm run build --workspace=@getpaseo/expo-two-way-audio"
     ]
   },
+  "metadataGeneration": {
+    "title": {
+      "instructions": "始终使用简体中文生成简短任务标题。只输出标题，不使用英文、拼音、引号或句末标点。"
+    }
+  },
   "scripts": {
     "daemon": {
       "type": "service",
