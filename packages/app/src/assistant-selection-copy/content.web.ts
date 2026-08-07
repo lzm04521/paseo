@@ -278,11 +278,27 @@ function shouldPreserveSemanticElement(range: Range, element: Element): boolean 
   if (tag === "p" || isTableStructure(tag)) {
     return true;
   }
+  const isSelectableSemantic = tag !== null && tag !== "ol" && tag !== "ul";
+  if (
+    (isSelectableSemantic || element.tagName === "A") &&
+    selectionStaysInsideElement(range, element)
+  ) {
+    return false;
+  }
   if (tag === "ol" || tag === "ul") {
     const selectedItems = selectedListItems(element, range);
     return selectedItems.some((item) => hasSelectedAllContents(range, item, true));
   }
   return hasSelectedAllContents(range, element, tag === "li");
+}
+
+function selectionStaysInsideElement(range: Range, element: Element): boolean {
+  return (
+    range.startContainer !== element &&
+    range.endContainer !== element &&
+    element.contains(range.startContainer) &&
+    element.contains(range.endContainer)
+  );
 }
 
 function selectedListItems(list: Element, range: Range): Element[] {
