@@ -2,7 +2,22 @@ import type { BrowserContext } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 
+const CROSS_STRUCTURE_MARKDOWN = [
+  "# P1 — High-value UI behavior",
+  "",
+  "5. Claude model and thinking preferences",
+  "",
+  "   - Switch Claude models and confirm each model retains its own thinking choice.",
+  "   - Cover new-workspace drafts, queued launches, schedules, and editing existing schedules.",
+  "   - Confirm Opus 5 exposes the Fast toggle.",
+  "   - Smoke with an older saved Fabel/model alias and with daemon/client version drift.",
+  "",
+  "6. Chat, composer, and timeline stability",
+].join("\n");
+
 const ASSISTANT_MARKDOWN = [
+  CROSS_STRUCTURE_MARKDOWN,
+  "",
   "Direct matches:",
   "",
   "Formatted **strong prose**, _emphasized prose_, and ~~struck prose~~.",
@@ -58,9 +73,13 @@ const ASSISTANT_MARKDOWN = [
 ].join("\n");
 
 const EXPECTED_WHOLE_SELECTION_MARKDOWN = ASSISTANT_MARKDOWN.replace(
-  "<https://autolink.example.com>",
-  "[https://autolink.example.com](https://autolink.example.com)",
+  `${CROSS_STRUCTURE_MARKDOWN}\n\n`,
+  "",
 )
+  .replace(
+    "<https://autolink.example.com>",
+    "[https://autolink.example.com](https://autolink.example.com)",
+  )
   .replace(
     "3. Outer three\n\n   7. Inner seven\n   8. Inner eight\n   9. Inner nine",
     "3. Outer three\n    7. Inner seven\n    8. Inner eight\n    9. Inner nine",
@@ -78,18 +97,8 @@ async function allowRichClipboard(context: BrowserContext): Promise<void> {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 }
 
-async function selectAssistantMessage(page: Page): Promise<void> {
-  const assistantMessage = page.getByTestId("assistant-message").filter({
-    hasText: "Direct matches:",
-  });
-  await expect(assistantMessage).toBeVisible();
-  await assistantMessage.evaluate((element) => {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  });
+async function selectStructuredClipboardFixture(page: Page): Promise<void> {
+  await selectAssistantTextRange(page, "Direct matches:", "ready");
 }
 
 async function selectAssistantElement(page: Page, selector: string): Promise<void> {
@@ -107,6 +116,13 @@ async function selectAssistantElement(page: Page, selector: string): Promise<voi
 
 async function selectAssistantText(page: Page, text: string): Promise<void> {
   await selectAssistantTextRange(page, text, text);
+}
+
+async function doubleClickAssistantText(page: Page, text: string): Promise<void> {
+  const assistantMessage = page.getByTestId("assistant-message").filter({
+    hasText: "Direct matches:",
+  });
+  await assistantMessage.getByText(text, { exact: true }).dblclick();
 }
 
 async function selectAssistantTextRange(
@@ -275,7 +291,7 @@ test("copying an assistant selection preserves Markdown structure and links", as
       .filter({ hasText: "apply_patch" });
     await expect(inlineCode).toHaveAttribute("data-pmono", "");
 
-    await selectAssistantMessage(page);
+    await selectStructuredClipboardFixture(page);
     await copySelection(page);
 
     const clipboard = await readRichClipboard(page);
@@ -316,6 +332,37 @@ test("copying an assistant selection preserves Markdown structure and links", as
     expect(clipboard.html).toContain('<th style="text-align:left">Left</th>');
     expect(clipboard.html).toContain('<th style="text-align:right">Right</th>');
     expect(clipboard.html).toContain('<th style="text-align:center">Center</th>');
+
+    await doubleClickAssistantText(page, "apply_patch");
+    await copySelection(page);
+
+    const doubleClickedCodeClipboard = await readRichClipboard(page);
+    expect(doubleClickedCodeClipboard.plainText).toBe("apply_patch");
+    expect(doubleClickedCodeClipboard.html).not.toContain("<code>");
+
+    await selectAssistantTextRange(
+      page,
+      "P1 — High-value UI behavior",
+      "Smoke with an older saved Fabel/model alias and with daemon/client version drift.",
+    );
+    await copySelection(page);
+
+    const headingAndListClipboard = await readRichClipboard(page);
+    expect(headingAndListClipboard.plainText).toBe(
+      [
+        "P1 — High-value UI behavior",
+        "===========================",
+        "",
+        "5. Claude model and thinking preferences",
+        "    - Switch Claude models and confirm each model retains its own thinking choice.",
+        "    - Cover new-workspace drafts, queued launches, schedules, and editing existing schedules.",
+        "    - Confirm Opus 5 exposes the Fast toggle.",
+        "    - Smoke with an older saved Fabel/model alias and with daemon/client version drift.",
+      ].join("\n"),
+    );
+    expect(headingAndListClipboard.html).toMatch(
+      /<h1>P1 — High-value UI behavior<\/h1>\s*<div>5\. Claude model and thinking preferences\s*<\/div><div>- Switch Claude models/,
+    );
 
     await selectAssistantText(page, "First");
     await copySelection(page);

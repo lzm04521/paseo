@@ -162,9 +162,12 @@ function flattenClipboardListMarkup(html: string): string {
     items.forEach((item, index) => {
       const line = document.createElement("div");
       line.append(start === null ? "- " : `${start + index}. `);
+      const nestedLines: HTMLDivElement[] = [];
       let hasParagraph = false;
       for (const child of Array.from(item.childNodes)) {
-        if (child instanceof HTMLParagraphElement) {
+        if (child instanceof HTMLDivElement) {
+          nestedLines.push(child);
+        } else if (child instanceof HTMLParagraphElement) {
           if (hasParagraph) {
             line.append(document.createElement("br"), document.createElement("br"));
           }
@@ -174,7 +177,7 @@ function flattenClipboardListMarkup(html: string): string {
           line.append(child);
         }
       }
-      replacement.append(line);
+      replacement.append(line, ...nestedLines);
     });
     list.replaceWith(replacement);
   }
