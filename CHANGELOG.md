@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0-beta.4 - 2026-08-07
+
+### Fixed
+
+- Pi responses keep streaming when cumulative messages are unavailable ([#2978](https://github.com/getpaseo/paseo/pull/2978) by [@dundunHa](https://github.com/dundunHa))
+- Desktop browser tabs remain interactive through focus and layout changes
+
 ## 0.3.0-beta.3 - 2026-08-07
 
 ### Added
