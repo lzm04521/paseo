@@ -1,6 +1,14 @@
 import { useMemo, type ReactElement, type ReactNode } from "react";
 import { withUnistyles } from "react-native-unistyles";
-import { Copy, Download, FileText, MessageSquarePlus, type LucideIcon } from "lucide-react-native";
+import {
+  Code,
+  Copy,
+  Download,
+  FileText,
+  FolderOpen,
+  MessageSquarePlus,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -23,6 +31,9 @@ interface FileActionsContextMenuContentProps {
   fileExists?: boolean;
   onOpenFile?: () => void;
   onCopyPath?: () => void;
+  onCopyRelativePath?: () => void;
+  onOpenInVSCode?: () => void;
+  onOpenInFileManager?: () => void;
   onDownload?: () => void;
   onAddToChat?: () => void;
   /** Optional metadata block rendered above the actions (e.g. size/modified). */
@@ -39,6 +50,9 @@ export function FileActionsContextMenuContent({
   fileExists = true,
   onOpenFile,
   onCopyPath,
+  onCopyRelativePath,
+  onOpenInVSCode,
+  onOpenInFileManager,
   onDownload,
   onAddToChat,
   header,
@@ -65,6 +79,32 @@ export function FileActionsContextMenuContent({
         onSelect: onCopyPath,
       });
     }
+    if (onCopyRelativePath) {
+      next.push({
+        key: "copy-relative-path",
+        label: t("workspace.fileActions.copyRelativePath"),
+        icon: Copy,
+        onSelect: onCopyRelativePath,
+      });
+    }
+    if (onOpenInVSCode) {
+      next.push({
+        key: "open-in-vscode",
+        label: t("workspace.fileActions.openInVSCode"),
+        icon: Code,
+        onSelect: onOpenInVSCode,
+        testID: testIDPrefix ? `${testIDPrefix}-open-in-vscode` : undefined,
+      });
+    }
+    if (onOpenInFileManager) {
+      next.push({
+        key: "open-in-file-manager",
+        label: t("workspace.fileActions.openInFileManager"),
+        icon: FolderOpen,
+        onSelect: onOpenInFileManager,
+        testID: testIDPrefix ? `${testIDPrefix}-open-in-file-manager` : undefined,
+      });
+    }
     if (availableFile && onDownload) {
       next.push({
         key: "download",
@@ -83,7 +123,19 @@ export function FileActionsContextMenuContent({
       });
     }
     return next;
-  }, [fileExists, fileKind, onAddToChat, onCopyPath, onDownload, onOpenFile, t, testIDPrefix]);
+  }, [
+    fileExists,
+    fileKind,
+    onAddToChat,
+    onCopyPath,
+    onCopyRelativePath,
+    onDownload,
+    onOpenFile,
+    onOpenInFileManager,
+    onOpenInVSCode,
+    t,
+    testIDPrefix,
+  ]);
 
   if (actions.length === 0) {
     return null;

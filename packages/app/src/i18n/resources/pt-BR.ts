@@ -516,6 +516,7 @@ export const ptBR: TranslationResources = {
       copyPath: "Copiar caminho",
       copyRelativePath: "Copiar caminho relativo",
       openInFileManager: "Revelar no gerenciador de arquivos",
+      openInFileManagerFailed: "Não foi possível abrir o gerenciador de arquivos",
       openInVSCode: "Abrir no VS Code",
       openInVSCodeFailed: "Não foi possível abrir o VS Code",
       download: "Baixar",

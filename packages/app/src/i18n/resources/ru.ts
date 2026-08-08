@@ -515,6 +515,7 @@ export const ru: TranslationResources = {
       copyPath: "Копировать путь",
       copyRelativePath: "Копировать относительный путь",
       openInFileManager: "Показать в файловом менеджере",
+      openInFileManagerFailed: "Не удалось открыть файловый менеджер",
       openInVSCode: "Открыть в VS Code",
       openInVSCodeFailed: "Не удалось открыть VS Code",
       download: "Скачать",

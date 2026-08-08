@@ -516,6 +516,7 @@ export const es: TranslationResources = {
       copyPath: "Copiar ruta",
       copyRelativePath: "Copiar ruta relativa",
       openInFileManager: "Mostrar en el administrador de archivos",
+      openInFileManagerFailed: "No se pudo abrir el administrador de archivos",
       openInVSCode: "Abrir en VS Code",
       openInVSCodeFailed: "No se pudo abrir VS Code",
       download: "Descargar",

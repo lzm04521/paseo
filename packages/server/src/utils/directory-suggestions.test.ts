@@ -162,6 +162,56 @@ describe("searchDirectoryEntries", () => {
     );
   });
 
+  it("keeps gitignore-overridden top-level directories selectable", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: searchRoot });
+    writeFileSync(path.join(searchRoot, ".gitignore"), "doc/\ndocs/\nhandoff/\nlogs/\n");
+    mkdirSync(path.join(searchRoot, "docs", "design"), { recursive: true });
+    mkdirSync(path.join(searchRoot, "handoff"), { recursive: true });
+    mkdirSync(path.join(searchRoot, "doc"), { recursive: true });
+    mkdirSync(path.join(searchRoot, "logs", "runs"), { recursive: true });
+    writeFileSync(path.join(searchRoot, "docs", "design", "overview.md"), "");
+    writeFileSync(path.join(searchRoot, "handoff", "notes.md"), "");
+    writeFileSync(path.join(searchRoot, "doc", "spec.md"), "");
+    writeFileSync(path.join(searchRoot, "logs", "runs", "trace.log"), "");
+
+    const common = {
+      root: searchRoot,
+      pathFormat: "relative" as const,
+      includeFiles: true,
+      includeDirectories: false,
+      respectGitIgnore: true,
+    };
+
+    const docsOverview = await searchDirectoryEntries({ ...common, query: "overview" });
+    const handoffNotes = await searchDirectoryEntries({ ...common, query: "notes" });
+    const docSpec = await searchDirectoryEntries({ ...common, query: "spec" });
+    const logsTrace = await searchDirectoryEntries({ ...common, query: "trace" });
+
+    expect(docsOverview.map((entry) => entry.path)).toEqual(["docs/design/overview.md"]);
+    expect(handoffNotes.map((entry) => entry.path)).toEqual(["handoff/notes.md"]);
+    expect(docSpec.map((entry) => entry.path)).toEqual(["doc/spec.md"]);
+    expect(logsTrace.map((entry) => entry.path)).toEqual([]);
+  });
+
+  it("does not override gitignore for nested same-name directories", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: searchRoot });
+    writeFileSync(path.join(searchRoot, ".gitignore"), "src/docs/\n");
+    mkdirSync(path.join(searchRoot, "src", "docs"), { recursive: true });
+    writeFileSync(path.join(searchRoot, "src", "docs", "nested.md"), "");
+
+    const results = await searchDirectoryEntries({
+      root: searchRoot,
+      query: "nested",
+      pathFormat: "relative",
+      includeFiles: true,
+      includeDirectories: false,
+      respectGitIgnore: true,
+    });
+
+    // src/docs is ignored and is NOT a workspace-rooted docs/, so the override does not apply.
+    expect(results.map((entry) => entry.path)).toEqual([]);
+  });
+
   it("configures raw blank queries independently from explicit root aliases", async () => {
     const rootEntries = [
       { path: "projects", kind: "directory" as const },

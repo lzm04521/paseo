@@ -394,6 +394,7 @@ export const ko = {
       moreActions: "추가 작업",
       copyRelativePath: "Copy relative path",
       openInFileManager: "Reveal in file manager",
+      openInFileManagerFailed: "Couldn't open file manager",
       openInVSCode: "Open in VS Code",
       openInVSCodeFailed: "Couldn't open VS Code",
     },

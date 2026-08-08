@@ -512,6 +512,7 @@ export const zhCN: TranslationResources = {
       copyPath: "复制路径",
       copyRelativePath: "复制相对路径",
       openInFileManager: "在文件管理器中打开",
+      openInFileManagerFailed: "无法打开文件管理器",
       openInVSCode: "在 VS Code 中打开",
       openInVSCodeFailed: "无法打开 VS Code",
       download: "下载",

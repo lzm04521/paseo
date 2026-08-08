@@ -516,6 +516,7 @@ export const ja: TranslationResources = {
       copyPath: "パスをコピー",
       copyRelativePath: "相対パスをコピー",
       openInFileManager: "ファイルマネージャーで表示",
+      openInFileManagerFailed: "ファイルマネージャーを開けませんでした",
       openInVSCode: "VS Code で開く",
       openInVSCodeFailed: "VS Code を開けませんでした",
       download: "ダウンロード",

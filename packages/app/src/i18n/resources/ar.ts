@@ -512,6 +512,7 @@ export const ar: TranslationResources = {
       copyPath: "نسخ المسار",
       copyRelativePath: "نسخ المسار النسبي",
       openInFileManager: "إظهار في مدير الملفات",
+      openInFileManagerFailed: "تعذر فتح مدير الملفات",
       openInVSCode: "فتح في VS Code",
       openInVSCodeFailed: "تعذّر فتح VS Code",
       download: "تحميل",
