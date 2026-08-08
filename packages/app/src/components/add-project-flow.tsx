@@ -73,6 +73,7 @@ import { isWeb } from "@/constants/platform";
 import { pickDirectory } from "@/desktop/pick-directory";
 import { useFetchQuery } from "@/data/query";
 import { getOpenProjectFailureReason, registerProjectDescriptor } from "@/hooks/open-project";
+import { i18n } from "@/i18n/i18next";
 import { useIsLocalDaemon, useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useCloneGithubProject, useOpenProject } from "@/hooks/use-open-project";
 import {
@@ -165,22 +166,23 @@ function methodIcon(method: AddProjectMethodId): FlowRowOption["icon"] {
 }
 
 function directoryOptionSubtitle(option: ProjectPickerOption, shortPath: string): string | null {
-  if (option.kind === "path") return "Open this path";
+  if (option.kind === "path") return i18n.t("addProjectFlow.openPath");
   if (shortPath === option.path) return null;
   return option.path;
 }
 
 function progressText(page: AddProjectPage): string {
-  if (page.kind === "github-location") return "Cloning project...";
-  if (page.kind === "new-directory-name") return "Creating directory...";
-  return "Adding project...";
+  if (page.kind === "github-location") return i18n.t("addProjectFlow.progress.cloning");
+  if (page.kind === "new-directory-name")
+    return i18n.t("addProjectFlow.progress.creatingDirectory");
+  return i18n.t("addProjectFlow.progress.addingProject");
 }
 
 function emptyText(page: AddProjectPage, host: AddProjectHost | null): string {
-  if (page.kind === "host") return "No connected hosts";
-  if (page.kind === "github-search") return "Enter a GitHub URL or owner/repo";
+  if (page.kind === "host") return i18n.t("addProjectFlow.empty.noHosts");
+  if (page.kind === "github-search") return i18n.t("addProjectFlow.empty.githubManual");
   if (page.kind === "method") return addProjectMethodEmptyText(host);
-  return "No matching options";
+  return i18n.t("addProjectFlow.empty.noMatchingOptions");
 }
 
 interface QueryErrorInput {
@@ -192,10 +194,12 @@ interface QueryErrorInput {
 }
 
 function queryErrorText(input: QueryErrorInput): string | null {
-  if (input.searchesDirectories && input.directoryFailed) return "Unable to search directories";
-  if (input.githubFailed) return "Unable to search GitHub repositories";
+  if (input.searchesDirectories && input.directoryFailed)
+    return i18n.t("addProjectFlow.errors.directorySearchFailed");
+  if (input.githubFailed) return i18n.t("addProjectFlow.errors.githubSearchFailed");
   if (input.githubError) return input.githubError;
-  if (input.githubAvailable === false) return input.githubError ?? "GitHub search is unavailable";
+  if (input.githubAvailable === false)
+    return input.githubError ?? i18n.t("addProjectFlow.errors.githubUnavailable");
   return null;
 }
 
@@ -206,37 +210,37 @@ function pageHostId(page: AddProjectPage): string | null {
 function pageTitle(page: AddProjectPage): string {
   switch (page.kind) {
     case "host":
-      return "Choose host";
+      return i18n.t("addProjectFlow.titles.host");
     case "method":
-      return "Add project";
+      return i18n.t("addProjectFlow.titles.method");
     case "directory-search":
-      return "Search for directory";
+      return i18n.t("addProjectFlow.titles.directorySearch");
     case "github-search":
-      return "Clone from GitHub";
+      return i18n.t("addProjectFlow.titles.githubSearch");
     case "github-location":
-      return "Choose destination";
+      return i18n.t("addProjectFlow.titles.githubLocation");
     case "new-directory-parent":
-      return "Choose parent directory";
+      return i18n.t("addProjectFlow.titles.newDirectoryParent");
     case "new-directory-name":
-      return "Name directory";
+      return i18n.t("addProjectFlow.titles.newDirectoryName");
   }
 }
 
 function pagePlaceholder(page: AddProjectPage): string {
   switch (page.kind) {
     case "host":
-      return "Search hosts...";
+      return i18n.t("addProjectFlow.placeholders.host");
     case "method":
-      return "Search methods...";
+      return i18n.t("addProjectFlow.placeholders.method");
     case "directory-search":
-      return "Search directories or enter a path...";
+      return i18n.t("addProjectFlow.placeholders.directorySearch");
     case "github-search":
-      return "Search or enter a GitHub repository...";
+      return i18n.t("addProjectFlow.placeholders.githubSearch");
     case "github-location":
     case "new-directory-parent":
-      return "Search parent directories or enter a path...";
+      return i18n.t("addProjectFlow.placeholders.parentDirectory");
     case "new-directory-name":
-      return "Directory name";
+      return i18n.t("addProjectFlow.placeholders.newDirectoryName");
   }
 }
 
@@ -585,8 +589,8 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       if (state.hosts.length === 0) {
         choices.push({
           id: "add-host",
-          title: "Add host",
-          subtitle: "No connected hosts",
+          title: i18n.t("addProjectFlow.addHost.title"),
+          subtitle: i18n.t("addProjectFlow.addHost.subtitle"),
           icon: Plus,
           testID: "add-project-flow-add-host",
           select: () => {

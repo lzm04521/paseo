@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useReducer, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ScheduleCadence } from "@getpaseo/protocol/schedule/types";
@@ -42,6 +43,7 @@ function buildCronCadence(expression: string, timezone: string): CronCadence {
 }
 
 export function CadenceEditor({ value, onChange, error, size = "md" }: CadenceEditorProps) {
+  const { t } = useTranslation();
   const deviceTimeZone = useMemo(getDeviceTimeZone, []);
   const normalizedValue = normalizeScheduleFormCadence(value, deviceTimeZone);
   const [cronText, setCronText] = useState(() => normalizedValue.expression);
@@ -87,18 +89,18 @@ export function CadenceEditor({ value, onChange, error, size = "md" }: CadenceEd
   }
 
   return (
-    <Field label="Cadence">
+    <Field label={t("schedules.cadence.label")}>
       <View style={styles.stack}>
         <SelectField
-          label="Cadence"
+          label={t("schedules.cadence.label")}
           value={selectedPresetId === "custom" ? null : selectedPresetId}
           selectedDisplay={selectedPresetDisplay}
           options={PRESET_OPTIONS}
           onChange={handlePresetChange}
-          placeholder="Select cadence"
-          emptyText="No cadences found"
+          placeholder={t("schedules.cadence.select")}
+          emptyText={t("schedules.cadence.noneFound")}
           searchable={false}
-          title="Cadence"
+          title={t("schedules.cadence.label")}
           size={size}
           triggerTestID="schedule-cadence-preset-trigger"
           field={false}
@@ -107,7 +109,7 @@ export function CadenceEditor({ value, onChange, error, size = "md" }: CadenceEd
         <FormTextInput
           size={size}
           testID="cadence-cron-expression"
-          accessibilityLabel="Cron expression"
+          accessibilityLabel={t("schedules.cadence.cronA11y")}
           initialValue={cronText}
           resetKey={`cadence-cron-${fieldResetKey}`}
           value={cronText}
