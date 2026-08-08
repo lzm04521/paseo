@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { EditorTarget, EditorTargetRuntime } from "../target.js";
 
 /**
@@ -35,13 +36,12 @@ function dopusCommands(runtime: EditorTargetRuntime): string[] {
 
 type ResolvedOpusRuntime =
   /**
-   * `dopusrt.exe` talks to the running Opus (starting it if needed) and can navigate plus select a
-   * file via the internal `Go` command.
+   * `dopusrt.exe` talks to the running Opus (starting it if needed) and navigates the active
+   * lister via the internal `Go` command. Preferred so an existing lister is reused.
    */
   | { kind: "runtime"; command: string }
   /**
-   * `dopus.exe` only opens a new lister at a path; it has no reliable reveal, so a file opens its
-   * containing directory instead.
+   * `dopus.exe` only opens a new lister at a path. Used when `dopusrt.exe` is absent.
    */
   | { kind: "standalone"; command: string };
 
@@ -56,18 +56,20 @@ function resolveOpusRuntime(runtime: EditorTargetRuntime): ResolvedOpusRuntime |
 const launchOpus: EditorTarget["launch"] = async (input, runtime) => {
   const resolved = resolveOpusRuntime(runtime);
   if (!resolved) throw new Error("Directory Opus is not installed");
+  // Opus's `Go` command takes a directory. `SELECT` is a separate Opus command, not a `Go`
+  // argument, so there's no reliable one-shot "reveal-and-select this file" from the command
+  // line — for a file we navigate to its containing folder (reveal-without-select).
+  const targetPath = input.filePath ? path.dirname(input.filePath) : input.workspacePath;
   if (resolved.kind === "runtime") {
     await runtime.spawnDetached({
       command: resolved.command,
-      args: input.filePath
-        ? ["/cmd", "Go", input.filePath, "SELECT"]
-        : ["/cmd", "Go", input.workspacePath],
+      args: ["/cmd", "Go", targetPath],
     });
     return;
   }
   await runtime.spawnDetached({
     command: resolved.command,
-    args: [input.filePath ?? input.workspacePath],
+    args: [targetPath],
   });
 };
 
