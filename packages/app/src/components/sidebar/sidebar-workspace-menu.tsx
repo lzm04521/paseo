@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { OpenInVSCodeMenuItem } from "@/workspace/open-in-editor/menu-item";
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
@@ -143,6 +144,10 @@ export function SidebarWorkspaceMenu({
         <OpenInFileManagerMenuItem
           path={openInFileManagerPath}
           testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
+        />
+        <OpenInVSCodeMenuItem
+          path={openInFileManagerPath}
+          testID={`sidebar-workspace-menu-open-in-vscode-${workspaceKey}`}
         />
         <DropdownMenuItem
           testID={`sidebar-workspace-menu-archive-${workspaceKey}`}

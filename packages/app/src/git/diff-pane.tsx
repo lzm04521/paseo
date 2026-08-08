@@ -84,6 +84,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { FILE_ACTIONS_MENU_WIDTH, FileActionsMenu } from "@/components/file-actions-menu";
 import { useRevealInFileManager } from "@/workspace/open-in-file-manager/use-reveal-in-file-manager";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 import { useFileDownload } from "@/hooks/use-file-download";
 import {
   buildAbsoluteExplorerPath,
@@ -222,6 +223,7 @@ interface DiffFileSectionProps {
   onCopyPath?: (path: string) => void;
   onCopyRelativePath?: (path: string) => void;
   onRevealInFileManager?: (path: string) => void;
+  onOpenInVSCode?: (path: string) => void;
   onDownload?: (path: string) => void;
   onHeaderHeightChange?: (path: string, height: number) => void;
   testID?: string;
@@ -917,6 +919,9 @@ function SplitDiffColumn({
   );
 }
 
+// DiffFileHeader sits at the cyclomatic-complexity edge (20); adding a per-file action pushes
+// it over the limit — same disable pattern as Composer and sidebar-workspace-list.
+// oxlint-disable-next-line complexity
 const DiffFileHeader = memo(function DiffFileHeader({
   file,
   workspaceFileDragScope,
@@ -930,6 +935,7 @@ const DiffFileHeader = memo(function DiffFileHeader({
   onCopyPath,
   onCopyRelativePath,
   onRevealInFileManager,
+  onOpenInVSCode,
   onDownload,
   onHeaderHeightChange,
   testID,
@@ -974,6 +980,10 @@ const DiffFileHeader = memo(function DiffFileHeader({
   const handleRevealInFileManager = useCallback(() => {
     onRevealInFileManager?.(file.path);
   }, [file.path, onRevealInFileManager]);
+
+  const handleOpenInVSCode = useCallback(() => {
+    onOpenInVSCode?.(file.path);
+  }, [file.path, onOpenInVSCode]);
 
   const handleDownload = useCallback(() => {
     onDownload?.(file.path);
@@ -1088,6 +1098,7 @@ const DiffFileHeader = memo(function DiffFileHeader({
             onCopyPath={onCopyPath ? handleCopyPath : undefined}
             onCopyRelativePath={onCopyRelativePath ? handleCopyRelativePath : undefined}
             onOpenInFileManager={onRevealInFileManager ? handleRevealInFileManager : undefined}
+            onOpenInVSCode={onOpenInVSCode ? handleOpenInVSCode : undefined}
             onDownload={onDownload ? handleDownload : undefined}
             onAddToChat={onAddToChat ? handleAddToChat : undefined}
             open={isActionsOpen}
@@ -1867,6 +1878,7 @@ interface SharedDiffViewProps {
         onCopyPath?: (path: string) => void;
         onCopyRelativePath?: (path: string) => void;
         onRevealInFileManager?: (path: string) => void;
+        onOpenInVSCode?: (path: string) => void;
         onDownload?: (path: string) => void;
         onExpandedPathsChange: (paths: string[]) => void;
         onCollapsedFoldersChange: (paths: string[]) => void;
@@ -1924,6 +1936,7 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
   const onCopyRelativePath = mode.kind === "working_tree" ? mode.onCopyRelativePath : undefined;
   const onRevealInFileManager =
     mode.kind === "working_tree" ? mode.onRevealInFileManager : undefined;
+  const onOpenInVSCode = mode.kind === "working_tree" ? mode.onOpenInVSCode : undefined;
   const onDownload = mode.kind === "working_tree" ? mode.onDownload : undefined;
   const compressedTree = useMemo(() => compressSingleChildChains(buildDiffTree(files)), [files]);
   const allFolderPaths = useMemo(() => collectDirPaths(compressedTree), [compressedTree]);
@@ -2245,6 +2258,7 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
             onCopyPath={onCopyPath}
             onCopyRelativePath={onCopyRelativePath}
             onRevealInFileManager={onRevealInFileManager}
+            onOpenInVSCode={onOpenInVSCode}
             onDownload={onDownload}
             onHeaderHeightChange={handleHeaderHeightChange}
             testID={`diff-file-${item.fileIndex}`}
@@ -2284,6 +2298,7 @@ export function SharedDiffView({ files, displayPreferences, mode }: SharedDiffVi
       onCopyPath,
       onCopyRelativePath,
       onRevealInFileManager,
+      onOpenInVSCode,
       onDownload,
     ],
   );
@@ -2823,6 +2838,16 @@ export function GitDiffPane({
     },
     [cwd, revealInFileManager],
   );
+  const { isAvailable: openInVSCodeAvailable, open: openInVSCode } = useOpenInVSCode();
+  const handleOpenInVSCode = useCallback(
+    (path: string) => {
+      openInVSCode({
+        workspacePath: buildAbsoluteExplorerPath({ workspaceRoot: cwd, entryPath: "." }),
+        filePath: buildAbsoluteExplorerPath({ workspaceRoot: cwd, entryPath: path }),
+      });
+    },
+    [cwd, openInVSCode],
+  );
   const handleDownloadPath = useCallback(
     (path: string) => {
       downloadFile({ fileName: path.split("/").pop() ?? path, path });
@@ -2843,6 +2868,7 @@ export function GitDiffPane({
       onCopyPath: handleCopyPath,
       onCopyRelativePath: handleCopyRelativePath,
       onRevealInFileManager: revealInFileManagerAvailable ? handleRevealInFileManager : undefined,
+      onOpenInVSCode: openInVSCodeAvailable ? handleOpenInVSCode : undefined,
       onDownload: handleDownloadPath,
       onExpandedPathsChange: changesTree.updateExpandedPaths,
       onCollapsedFoldersChange: changesTree.updateCollapsedFolders,
@@ -2861,6 +2887,8 @@ export function GitDiffPane({
       handleCopyRelativePath,
       handleRevealInFileManager,
       revealInFileManagerAvailable,
+      handleOpenInVSCode,
+      openInVSCodeAvailable,
       handleDownloadPath,
       changesTree.updateExpandedPaths,
       changesTree.updateCollapsedFolders,

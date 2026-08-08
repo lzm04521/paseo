@@ -2,6 +2,7 @@ import { useMemo, type ReactElement, type ReactNode } from "react";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
+  Code,
   Copy,
   Download,
   FileText,
@@ -41,6 +42,7 @@ interface FileActionsMenuProps {
   onCopyPath?: () => void;
   onCopyRelativePath?: () => void;
   onOpenInFileManager?: () => void;
+  onOpenInVSCode?: () => void;
   onDownload?: () => void;
   onAddToChat?: () => void;
   /** Optional metadata block rendered above the actions (e.g. size/modified). */
@@ -77,6 +79,7 @@ export function FileActionsMenu({
   onCopyPath,
   onCopyRelativePath,
   onOpenInFileManager,
+  onOpenInVSCode,
   onDownload,
   onAddToChat,
   header,
@@ -123,6 +126,14 @@ export function FileActionsMenu({
         onSelect: onOpenInFileManager,
       });
     }
+    if (fileExists && onOpenInVSCode) {
+      next.push({
+        key: "open-in-vscode",
+        label: t("workspace.fileActions.openInVSCode"),
+        icon: Code,
+        onSelect: onOpenInVSCode,
+      });
+    }
     if (availableFile && onDownload) {
       next.push({
         key: "download",
@@ -150,6 +161,7 @@ export function FileActionsMenu({
     onDownload,
     onOpenFile,
     onOpenInFileManager,
+    onOpenInVSCode,
     t,
     testIDPrefix,
   ]);

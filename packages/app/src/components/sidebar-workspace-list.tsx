@@ -133,6 +133,7 @@ import {
 } from "@/constants/platform";
 import { getDesktopHost } from "@/desktop/host";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { OpenInVSCodeMenuItem } from "@/workspace/open-in-editor/menu-item";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
@@ -621,6 +622,10 @@ function ProjectKebabMenu({
         <OpenInFileManagerMenuItem
           path={projectPath}
           testID={`sidebar-project-menu-open-folder-${projectKey}`}
+        />
+        <OpenInVSCodeMenuItem
+          path={projectPath}
+          testID={`sidebar-project-menu-open-in-vscode-${projectKey}`}
         />
         <DropdownMenuItem
           testID={`sidebar-project-menu-remove-${projectKey}`}

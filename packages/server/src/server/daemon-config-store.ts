@@ -265,6 +265,7 @@ function mergeMutableConfigIntoPersistedConfig(params: {
   const { persisted, mutable, removeProviders } = params;
   const browserToolsEnabled = readBrowserToolsEnabled(mutable);
   const metadataGenerationProviders = readMetadataGenerationProviders(mutable);
+  const metadataGenerationInstructions = readMetadataGenerationInstructions(mutable);
   const persistedProviderOverrides = omitProvidersFromOverrides(
     persisted.agents?.providers as Record<string, ProviderOverride> | undefined,
     removeProviders,
@@ -276,9 +277,13 @@ function mergeMutableConfigIntoPersistedConfig(params: {
   const persistedAgents = omitProvidersFromPersistedAgents(persisted.agents);
   const persistedMetadataGeneration = {
     providers: metadataGenerationProviders,
+    ...metadataGenerationInstructions,
   };
+  const hasMetadataGenerationOverrides =
+    metadataGenerationProviders.length > 0 ||
+    Object.keys(metadataGenerationInstructions).length > 0;
   const shouldPersistMetadataGeneration =
-    metadataGenerationProviders.length > 0 || persisted.agents?.metadataGeneration !== undefined;
+    hasMetadataGenerationOverrides || persisted.agents?.metadataGeneration !== undefined;
 
   let nextAgents = persistedAgents as PersistedConfig["agents"];
   if (providerOverrides && Object.keys(providerOverrides).length > 0) {
@@ -352,4 +357,36 @@ function readMetadataGenerationProviders(
       },
     ];
   });
+}
+
+const METADATA_GENERATION_INSTRUCTION_KEYS = [
+  "title",
+  "branchName",
+  "commitMessage",
+  "pullRequest",
+] as const;
+
+// Extracts the daemon-level metadataGeneration instructions (the global default
+// fallback) from the mutable config, dropping empty/whitespace-only entries so
+// the persisted file only carries intentional overrides. Mirrors the per-key
+// { instructions } shape used by paseo.json's metadataGeneration.
+function readMetadataGenerationInstructions(
+  mutable: MutableDaemonConfig,
+): Record<string, { instructions: string }> {
+  const metadataGeneration = mutable.metadataGeneration;
+  if (!isRecord(metadataGeneration)) {
+    return {};
+  }
+  const result: Record<string, { instructions: string }> = {};
+  for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+    const entry = metadataGeneration[key];
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const instructions = entry["instructions"];
+    if (typeof instructions === "string" && instructions.trim().length > 0) {
+      result[key] = { instructions };
+    }
+  }
+  return result;
 }

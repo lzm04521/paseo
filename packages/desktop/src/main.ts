@@ -35,7 +35,6 @@ import {
   resolveWindowBounds,
   setupWindowResizeEvents,
   setupWindowStatePersistence,
-  setupDefaultContextMenu,
   setupDragDropPrevention,
   buildStandardContextMenuItems,
 } from "./window/window-manager.js";
@@ -741,7 +740,10 @@ async function createWindow(
   if (windowStateStore) {
     setupWindowStatePersistence(mainWindow, windowStateStore);
   }
-  setupDefaultContextMenu(mainWindow);
+  // No main-window context menu: the app renders its own menus via the
+  // ContextMenu component, and the standard copy/paste/select-all popup is
+  // suppressed globally (see also public/index.html). Use keyboard shortcuts
+  // (Ctrl+C/V/X/A) for text clipboard and selection on the main window.
   setupDragDropPrevention(mainWindow);
   mainWindow.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     if (!isPaseoBrowserWebviewAttach(params)) {

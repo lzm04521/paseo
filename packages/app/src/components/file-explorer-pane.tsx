@@ -52,6 +52,7 @@ import {
 } from "@/file-explorer/tree";
 import { useWorkspaceFileDragSource } from "@/attachments/use-workspace-file-drag-source";
 import { useRevealInFileManager } from "@/workspace/open-in-file-manager/use-reveal-in-file-manager";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 
 const SORT_OPTIONS: { value: SortOption }[] = [
   { value: "name" },
@@ -86,6 +87,7 @@ interface TreeRowItemProps {
   onCopyPath: (path: string) => void;
   onCopyRelativePath: (path: string) => void;
   onRevealInFileManager?: (path: string) => void;
+  onOpenInVSCode?: (entryPath: string, isDirectory: boolean) => void;
   onDownloadEntry: (entry: ExplorerEntry) => void;
   onAddToChat?: (path: string) => void;
   testID?: string;
@@ -118,6 +120,7 @@ function TreeRowItem({
   onCopyPath,
   onCopyRelativePath,
   onRevealInFileManager,
+  onOpenInVSCode,
   onDownloadEntry,
   onAddToChat,
   testID,
@@ -158,6 +161,10 @@ function TreeRowItem({
     const dirPath = isDirectory ? entry.path : parentExplorerPath(entry.path);
     onRevealInFileManager(dirPath);
   }, [onRevealInFileManager, isDirectory, entry.path]);
+
+  const handleOpenInVSCode = useCallback(() => {
+    onOpenInVSCode?.(entry.path, isDirectory);
+  }, [onOpenInVSCode, entry.path, isDirectory]);
 
   const handleDownload = useCallback(() => {
     onDownloadEntry(entry);
@@ -215,6 +222,7 @@ function TreeRowItem({
         onCopyPath={handleCopy}
         onCopyRelativePath={handleCopyRelative}
         onOpenInFileManager={onRevealInFileManager ? handleRevealInFileManager : undefined}
+        onOpenInVSCode={onOpenInVSCode ? handleOpenInVSCode : undefined}
         onDownload={handleDownload}
         onAddToChat={onAddToChat ? handleAddToChat : undefined}
         header={metaHeader}
@@ -398,6 +406,32 @@ export function FileExplorerPane({
     [normalizedWorkspaceRoot, revealInFileManager],
   );
 
+  const { isAvailable: openInVSCodeAvailable, open: openInVSCode } = useOpenInVSCode();
+  const handleOpenInVSCode = useCallback(
+    (relativeEntryPath: string, isDirectory: boolean) => {
+      if (isDirectory) {
+        openInVSCode({
+          workspacePath: buildAbsoluteExplorerPath({
+            workspaceRoot: normalizedWorkspaceRoot,
+            entryPath: relativeEntryPath,
+          }),
+        });
+        return;
+      }
+      openInVSCode({
+        workspacePath: buildAbsoluteExplorerPath({
+          workspaceRoot: normalizedWorkspaceRoot,
+          entryPath: ".",
+        }),
+        filePath: buildAbsoluteExplorerPath({
+          workspaceRoot: normalizedWorkspaceRoot,
+          entryPath: relativeEntryPath,
+        }),
+      });
+    },
+    [normalizedWorkspaceRoot, openInVSCode],
+  );
+
   const handleDownloadEntry = useCallback(
     (entry: ExplorerEntry) => {
       if (entry.kind !== "file") {
@@ -508,6 +542,7 @@ export function FileExplorerPane({
         onCopyPath={handleCopyPath}
         onCopyRelativePath={handleCopyRelativePath}
         onRevealInFileManager={revealInFileManagerAvailable ? handleRevealInFileManager : undefined}
+        onOpenInVSCode={openInVSCodeAvailable ? handleOpenInVSCode : undefined}
         onDownloadEntry={handleDownloadEntry}
         onAddToChat={onAddToChat}
       />
@@ -519,6 +554,8 @@ export function FileExplorerPane({
       handleCopyRelativePath,
       handleRevealInFileManager,
       revealInFileManagerAvailable,
+      handleOpenInVSCode,
+      openInVSCodeAvailable,
       handleDownloadEntry,
       isDirectoryLoading,
       selectedEntryPath,
@@ -835,6 +872,7 @@ function TreeRowDispatcher({
   onCopyPath,
   onCopyRelativePath,
   onRevealInFileManager,
+  onOpenInVSCode,
   onDownloadEntry,
   onAddToChat,
 }: {
@@ -848,6 +886,7 @@ function TreeRowDispatcher({
   onCopyPath: (path: string) => void | Promise<void>;
   onCopyRelativePath: (path: string) => void | Promise<void>;
   onRevealInFileManager?: (path: string) => void;
+  onOpenInVSCode?: (entryPath: string, isDirectory: boolean) => void;
   onDownloadEntry: (entry: ExplorerEntry) => void;
   onAddToChat?: (path: string) => void;
 }) {
@@ -871,6 +910,7 @@ function TreeRowDispatcher({
       onCopyPath={onCopyPath}
       onCopyRelativePath={onCopyRelativePath}
       onRevealInFileManager={onRevealInFileManager}
+      onOpenInVSCode={onOpenInVSCode}
       onDownloadEntry={onDownloadEntry}
       onAddToChat={onAddToChat}
       testID={`file-explorer-row-${info.index}`}
