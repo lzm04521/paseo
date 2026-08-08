@@ -1964,11 +1964,15 @@ export const fr: TranslationResources = {
       searchPlaceholder: "Rechercher des raccourcis",
       unavailableOnMobile: "Les raccourcis clavier ne sont disponibles que sur le bureau",
       capturePrompt: "Appuyez sur le raccourci...",
+      unassigned: "Non défini",
       actions: {
+        menu: "Actions pour {{name}}",
         done: "Fait",
         cancel: "Annuler",
+        bind: "Attribuer",
         rebind: "Relier",
-        reset: "Réinitialiser",
+        clear: "Effacer",
+        reset: "Rétablir la valeur par défaut",
         resetAll: "Tout réinitialiser",
       },
       sections: {

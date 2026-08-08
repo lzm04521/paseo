@@ -1913,11 +1913,15 @@ export const ar: TranslationResources = {
       searchPlaceholder: "البحث في الاختصارات",
       unavailableOnMobile: "اختصارات لوحة المفاتيح متاحة فقط على سطح المكتب",
       capturePrompt: "اضغط على الاختصار...",
+      unassigned: "غير معين",
       actions: {
+        menu: "إجراءات {{name}}",
         done: "منتهي",
         cancel: "يلغي",
+        bind: "ربط",
         rebind: "إعادة ربط",
-        reset: "إعادة ضبط",
+        clear: "مسح",
+        reset: "إعادة الضبط إلى الافتراضي",
         resetAll: "إعادة ضبط الكل",
       },
       sections: {

@@ -1929,11 +1929,15 @@ export const ja: TranslationResources = {
       searchPlaceholder: "ショートカットを検索",
       unavailableOnMobile: "キーボードショートカットはデスクトップでのみ利用できます",
       capturePrompt: "ショートカットを押してください...",
+      unassigned: "未設定",
       actions: {
+        menu: "{{name}} のアクション",
         done: "完了",
         cancel: "キャンセル",
+        bind: "割り当て",
         rebind: "再割り当て",
-        reset: "リセット",
+        clear: "クリア",
+        reset: "デフォルトに戻す",
         resetAll: "すべてリセット",
       },
       sections: {

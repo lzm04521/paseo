@@ -1923,11 +1923,15 @@ export const en = {
       searchPlaceholder: "Search shortcuts",
       unavailableOnMobile: "Keyboard shortcuts are only available on desktop",
       capturePrompt: "Press shortcut...",
+      unassigned: "Not set",
       actions: {
+        menu: "Actions for {{name}}",
         done: "Done",
         cancel: "Cancel",
+        bind: "Bind",
         rebind: "Rebind",
-        reset: "Reset",
+        clear: "Clear",
+        reset: "Reset to default",
         resetAll: "Reset all",
       },
       sections: {

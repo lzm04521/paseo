@@ -1924,11 +1924,15 @@ export const ko: TranslationResources = {
       searchPlaceholder: "검색 단축키",
       unavailableOnMobile: "키보드 단축키는 데스크톱에서만 사용할 수 있습니다",
       capturePrompt: "단축키를 누르세요...",
+      unassigned: "설정되지 않음",
       actions: {
+        menu: "{{name}} 작업",
         done: "완료",
         cancel: "취소",
+        bind: "지정",
         rebind: "다시 지정",
-        reset: "재설정",
+        clear: "지우기",
+        reset: "기본값으로 재설정",
         resetAll: "모두 재설정",
       },
       sections: {

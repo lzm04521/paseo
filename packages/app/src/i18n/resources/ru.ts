@@ -1951,11 +1951,15 @@ export const ru: TranslationResources = {
       searchPlaceholder: "Поиск сочетаний клавиш",
       unavailableOnMobile: "Сочетания клавиш доступны только на рабочем столе.",
       capturePrompt: "Нажмите ярлык...",
+      unassigned: "Не задано",
       actions: {
+        menu: "Действия для {{name}}",
         done: "Сделанный",
         cancel: "Отмена",
+        bind: "Привязать",
         rebind: "Перепривязка",
-        reset: "Перезагрузить",
+        clear: "Очистить",
+        reset: "Сбросить к значению по умолчанию",
         resetAll: "Сбросить все",
       },
       sections: {
