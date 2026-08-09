@@ -84,6 +84,7 @@ export function createNoopWorkspaceGitService(
       workspaceRefreshQueuedCount: 0,
       fetchInFlightCount: 0,
       snapshotUpdatedListenerCount: 0,
+      watcherErrorCallbackCount: 0,
     }),
     dispose: () => {},
     ...overrides,

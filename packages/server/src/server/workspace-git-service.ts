@@ -58,6 +58,8 @@ const FORGE_PR_STATUS_POLL_FAST_INTERVAL_MS = 20_000;
 const FORGE_PR_STATUS_POLL_SLOW_INTERVAL_MS = 120_000;
 const FORGE_PR_STATUS_POLL_ERROR_BACKOFF_CAP_MS = 300_000;
 const DEGRADED_GIT_POLL_INTERVAL_MS = 5_000;
+const WATCH_RECOVERY_BASE_DELAY_MS = 30_000;
+const WATCH_RECOVERY_MAX_ATTEMPTS = 3;
 // Auxiliary reads may reuse cached values within this window; snapshots do not expire on read.
 const WORKSPACE_GIT_AUXILIARY_READ_TTL_MS = 15_000;
 // Non-forced refresh triggers share this minimum gap to absorb watcher/self-heal bursts; force bypasses it.
@@ -196,6 +198,7 @@ export interface WorkspaceGitServiceMetrics {
   workspaceRefreshQueuedCount: number;
   fetchInFlightCount: number;
   snapshotUpdatedListenerCount: number;
+  watcherErrorCallbackCount: number;
 }
 
 export type WorkspaceGitListener = (snapshot: WorkspaceGitRuntimeSnapshot) => void;
@@ -371,7 +374,9 @@ interface RepoGitTarget {
   cwd: string;
   workspaceKeys: Set<string>;
   subscription: parcelWatcher.AsyncSubscription | null;
+  fallbackPolling: boolean;
   fallbackPollTimer: NodeJS.Timeout | null;
+  recovery: WatchRecoveryState;
   intervalId: NodeJS.Timeout | null;
   fetchInFlight: boolean;
   closed: boolean;
@@ -390,10 +395,23 @@ interface WorkingTreeWatchTarget {
   ignoredDirectoriesRefreshPromise: Promise<void> | null;
   aliases: Set<string>;
   workspaceKeys: Set<string>;
+  fallbackPolling: boolean;
   fallbackPollTimer: NodeJS.Timeout | null;
+  recovery: WatchRecoveryState;
   listeners: Set<() => void>;
   closed: boolean;
 }
+
+interface WatchRecoveryState {
+  attemptCount: number;
+  timer: NodeJS.Timeout | null;
+}
+
+type WorkingTreeWatchFallbackReason =
+  | "not_a_git_checkout"
+  | "watcher_error"
+  | "watcher_setup_failed"
+  | "watcher_teardown_failed";
 
 interface WorkspaceGitAuxiliaryReadCacheEntry<T> {
   value: T | null;
@@ -477,6 +495,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     string,
     WorkspaceGitAuxiliaryReadCacheEntry<CheckoutDiffResult>
   >({ max: WORKSPACE_GIT_CHECKOUT_DIFF_CACHE_MAX });
+  private watcherErrorCallbackCount = 0;
   constructor(options: WorkspaceGitServiceOptions) {
     this.logger = options.logger.child({ module: "workspace-git-service" });
     this.paseoHome = options.paseoHome;
@@ -566,6 +585,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       workspaceRefreshQueuedCount,
       fetchInFlightCount,
       snapshotUpdatedListenerCount: this.snapshotUpdatedListeners.size,
+      watcherErrorCallbackCount: this.watcherErrorCallbackCount,
     };
   }
 
@@ -1153,34 +1173,52 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       ignoredDirectoriesRefreshPromise: null,
       aliases: new Set([cwd]),
       workspaceKeys: new Set(),
+      fallbackPolling: false,
       fallbackPollTimer: null,
+      recovery: { attemptCount: 0, timer: null },
       listeners: new Set(),
       closed: false,
     };
 
+    this.workingTreeWatchTargets.set(cwd, target);
+    this.workingTreeWatchAliases.set(cwd, cwd);
     await this.startWorkingTreeSubscription(target);
 
     if (repoRoot === null) {
       this.startWorkingTreeWatchFallback(target, "not_a_git_checkout");
     }
 
-    this.workingTreeWatchTargets.set(cwd, target);
-    this.workingTreeWatchAliases.set(cwd, cwd);
     return target;
   }
 
-  private async startWorkingTreeSubscription(target: WorkingTreeWatchTarget): Promise<void> {
+  private async startWorkingTreeSubscription(
+    target: WorkingTreeWatchTarget,
+    options?: { replaceFallback?: boolean },
+  ): Promise<boolean> {
     const ignore = [join(target.watchPath, ".git"), ...target.ignoredDirectories];
+    let watcherErrored = false;
+    let subscribeSettled = false;
     try {
       const subscription = await this.deps.subscribe(
         target.watchPath,
         (error, events) => {
           if (error) {
+            if (watcherErrored) {
+              return;
+            }
+            watcherErrored = true;
+            this.watcherErrorCallbackCount += 1;
             this.logger.warn(
               { err: error, cwd: target.cwd },
               "Working tree watcher error; using degraded polling",
             );
             this.degradeWorkingTreeWatch(target, "watcher_error");
+            if (subscribeSettled) {
+              this.scheduleWorkingTreeWatchRecovery(target);
+            }
+            return;
+          }
+          if (watcherErrored) {
             return;
           }
           if (!this.hasRelevantWorkingTreeEvent(target, events)) {
@@ -1190,27 +1228,53 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         },
         { ignore },
       );
-      if (target.closed || target.fallbackPollTimer || target.subscription) {
-        await subscription.unsubscribe();
-      } else {
-        target.subscription = subscription;
+      subscribeSettled = true;
+      if (watcherErrored) {
+        this.scheduleWorkingTreeWatchRecovery(target);
+        return false;
       }
+      if (
+        target.closed ||
+        (target.fallbackPolling && !options?.replaceFallback) ||
+        target.subscription
+      ) {
+        await subscription.unsubscribe();
+        return false;
+      }
+      target.subscription = subscription;
+      if (options?.replaceFallback && target.repoRoot !== null) {
+        target.fallbackPolling = false;
+        if (target.fallbackPollTimer) {
+          clearTimeout(target.fallbackPollTimer);
+          target.fallbackPollTimer = null;
+        }
+      }
+      return true;
     } catch (error) {
+      subscribeSettled = true;
+      if (watcherErrored) {
+        this.scheduleWorkingTreeWatchRecovery(target);
+        return false;
+      }
       this.logger.warn(
         { err: error, cwd: target.cwd },
         "Failed to start working tree watcher; using degraded polling",
       );
-      this.startWorkingTreeWatchFallback(target, "watcher_setup_failed");
+      if (!options?.replaceFallback) {
+        this.startWorkingTreeWatchFallback(target, "watcher_setup_failed");
+      }
+      return false;
     }
   }
 
   private startWorkingTreeWatchFallback(
     target: WorkingTreeWatchTarget,
-    reason: "not_a_git_checkout" | "watcher_error" | "watcher_setup_failed",
+    reason: WorkingTreeWatchFallbackReason,
   ): void {
-    if (target.fallbackPollTimer) {
+    if (target.fallbackPolling) {
       return;
     }
+    target.fallbackPolling = true;
     const { cwd } = target;
     const poll = async () => {
       target.fallbackPollTimer = null;
@@ -1241,6 +1305,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       this.notifyWorkingTreeConsumers(target);
       if (!target.closed && (target.subscription === null || target.repoRoot === null)) {
         target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+      } else {
+        target.fallbackPolling = false;
       }
     };
     target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
@@ -1255,14 +1321,42 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   }
 
   private degradeWorkingTreeWatch(target: WorkingTreeWatchTarget, reason: "watcher_error"): void {
-    if (target.subscription) {
-      const subscription = target.subscription;
-      target.subscription = null;
-      void subscription.unsubscribe().catch((error) => {
-        this.logger.warn({ err: error, cwd: target.cwd }, "Failed to stop working tree watcher");
-      });
-    }
+    // COMPAT(parcel-watcher-eintr): added in v0.3.0, remove after 2027-02-09. Unsubscribing an
+    // errored subscription races native teardown and can strand the Node main thread in
+    // InotifyBackend::~InotifyBackend(): https://github.com/parcel-bundler/watcher/issues/253
+    target.subscription = null;
+    this.notifyWorkingTreeChanged(target, "working-tree-watch-error");
     this.startWorkingTreeWatchFallback(target, reason);
+  }
+
+  private scheduleWorkingTreeWatchRecovery(target: WorkingTreeWatchTarget): void {
+    if (
+      target.closed ||
+      target.subscription ||
+      target.recovery.timer ||
+      target.recovery.attemptCount >= WATCH_RECOVERY_MAX_ATTEMPTS
+    ) {
+      return;
+    }
+    target.recovery.attemptCount += 1;
+    const delayMs = WATCH_RECOVERY_BASE_DELAY_MS * 2 ** (target.recovery.attemptCount - 1);
+    target.recovery.timer = setTimeout(() => {
+      target.recovery.timer = null;
+      void this.recoverWorkingTreeWatch(target);
+    }, delayMs);
+  }
+
+  private async recoverWorkingTreeWatch(target: WorkingTreeWatchTarget): Promise<void> {
+    if (target.closed || target.subscription) {
+      return;
+    }
+    const recovered = await this.startWorkingTreeSubscription(target, { replaceFallback: true });
+    if (!recovered) {
+      this.scheduleWorkingTreeWatchRecovery(target);
+      return;
+    }
+    this.logger.info({ cwd: target.cwd }, "Working tree watcher recovered");
+    this.notifyWorkingTreeChanged(target, "working-tree-watch-recovered");
   }
 
   private async promoteWorkingTreeWatchTarget(
@@ -1273,9 +1367,12 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       return;
     }
     target.repoRoot = repoRoot;
-    if (target.subscription && target.fallbackPollTimer) {
-      clearTimeout(target.fallbackPollTimer);
-      target.fallbackPollTimer = null;
+    if (target.subscription && target.fallbackPolling) {
+      target.fallbackPolling = false;
+      if (target.fallbackPollTimer) {
+        clearTimeout(target.fallbackPollTimer);
+        target.fallbackPollTimer = null;
+      }
     }
     await this.refreshWorkingTreeIgnoredDirectories(target);
   }
@@ -1305,7 +1402,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   }
 
   private refreshWorkingTreeIgnoredDirectories(target: WorkingTreeWatchTarget): Promise<void> {
-    if (target.closed || target.repoRoot === null || target.fallbackPollTimer) {
+    if (target.closed || target.repoRoot === null || target.fallbackPolling) {
       return Promise.resolve();
     }
     if (target.ignoredDirectoriesRefreshPromise) {
@@ -1334,9 +1431,17 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const ignoredDirectories = await this.loadIgnoredDirs(target.watchPath);
     if (
       target.closed ||
-      target.fallbackPollTimer ||
+      target.fallbackPolling ||
       this.haveSamePaths(target.ignoredDirectories, ignoredDirectories)
     ) {
+      return;
+    }
+
+    const removedIgnoredDirectory = Array.from(target.ignoredDirectories).some(
+      (path) => !ignoredDirectories.has(path),
+    );
+    target.ignoredDirectories = ignoredDirectories;
+    if (!removedIgnoredDirectory) {
       return;
     }
 
@@ -1346,8 +1451,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       try {
         await subscription.unsubscribe();
       } catch (error) {
-        if (!target.closed && !target.fallbackPollTimer) {
-          target.subscription = subscription;
+        if (!target.closed && !target.fallbackPolling) {
+          this.startWorkingTreeWatchFallback(target, "watcher_teardown_failed");
         }
         this.logger.warn(
           { err: error, cwd: target.cwd },
@@ -1356,11 +1461,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         return;
       }
     }
-    if (target.closed || target.fallbackPollTimer) {
+    if (target.closed || target.fallbackPolling) {
       return;
     }
 
-    target.ignoredDirectories = ignoredDirectories;
     await this.startWorkingTreeSubscription(target);
     this.notifyWorkingTreeChanged(target, "working-tree-watch-reconfigured");
   }
@@ -1452,7 +1556,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       cwd: workspaceTarget.cwd,
       workspaceKeys: new Set([workspaceTarget.cwd]),
       subscription: null,
+      fallbackPolling: false,
       fallbackPollTimer: null,
+      recovery: { attemptCount: 0, timer: null },
       intervalId: null,
       fetchInFlight: false,
       closed: false,
@@ -1490,21 +1596,37 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     void this.runRepoFetch(repoTarget);
   }
 
-  private async startRepoMetadataObservation(target: RepoGitTarget): Promise<void> {
+  private async startRepoMetadataObservation(
+    target: RepoGitTarget,
+    options?: { replaceFallback?: boolean },
+  ): Promise<boolean> {
     const ignore = getPrunedGitMetadataPaths("common").map((path) =>
       join(target.repoGitRoot, path),
     );
     const matchesRepoGitRoot = createRealpathAwarePathMatcher(target.repoGitRoot);
+    let watcherErrored = false;
+    let subscribeSettled = false;
     try {
       const subscription = await this.deps.subscribe(
         target.repoGitRoot,
         (error, events) => {
           if (error) {
+            if (watcherErrored) {
+              return;
+            }
+            watcherErrored = true;
+            this.watcherErrorCallbackCount += 1;
             this.logger.warn(
               { err: error, repoGitRoot: target.repoGitRoot },
               "Repository metadata watcher error; using degraded polling",
             );
             this.degradeRepoMetadataWatch(target);
+            if (subscribeSettled) {
+              this.scheduleRepoMetadataWatchRecovery(target);
+            }
+            return;
+          }
+          if (watcherErrored) {
             return;
           }
           const relevantEvents = events.filter(
@@ -1523,36 +1645,80 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         },
         { ignore },
       );
+      subscribeSettled = true;
+      if (watcherErrored) {
+        this.scheduleRepoMetadataWatchRecovery(target);
+        return false;
+      }
       if (
         target.closed ||
-        target.fallbackPollTimer ||
+        (target.fallbackPolling && !options?.replaceFallback) ||
         this.repoTargets.get(target.repoGitRoot) !== target
       ) {
         await subscription.unsubscribe();
-      } else {
-        target.subscription = subscription;
+        return false;
       }
+      target.subscription = subscription;
+      if (options?.replaceFallback) {
+        target.fallbackPolling = false;
+        if (target.fallbackPollTimer) {
+          clearTimeout(target.fallbackPollTimer);
+          target.fallbackPollTimer = null;
+        }
+      }
+      return true;
     } catch (error) {
+      subscribeSettled = true;
+      if (watcherErrored) {
+        this.scheduleRepoMetadataWatchRecovery(target);
+        return false;
+      }
       this.logger.warn(
         { err: error, repoGitRoot: target.repoGitRoot },
         "Failed to start repository metadata watcher; using degraded polling",
       );
-      this.startRepoMetadataFallback(target);
+      if (!options?.replaceFallback) {
+        this.startRepoMetadataFallback(target);
+      }
+      return false;
     }
   }
 
   private degradeRepoMetadataWatch(target: RepoGitTarget): void {
-    if (target.subscription) {
-      const subscription = target.subscription;
-      target.subscription = null;
-      void subscription.unsubscribe().catch((error) => {
-        this.logger.warn(
-          { err: error, repoGitRoot: target.repoGitRoot },
-          "Failed to stop repository metadata watcher",
-        );
-      });
-    }
+    // COMPAT(parcel-watcher-eintr): added in v0.3.0, remove after 2027-02-09. See
+    // degradeWorkingTreeWatch for why this errored subscription must be abandoned.
+    target.subscription = null;
+    this.scheduleRepoMetadataRefresh(target, "git-metadata-watch-error", true);
     this.startRepoMetadataFallback(target);
+  }
+
+  private scheduleRepoMetadataWatchRecovery(target: RepoGitTarget): void {
+    if (
+      target.closed ||
+      target.subscription ||
+      target.recovery.timer ||
+      target.recovery.attemptCount >= WATCH_RECOVERY_MAX_ATTEMPTS
+    ) {
+      return;
+    }
+    target.recovery.attemptCount += 1;
+    const delayMs = WATCH_RECOVERY_BASE_DELAY_MS * 2 ** (target.recovery.attemptCount - 1);
+    target.recovery.timer = setTimeout(() => {
+      target.recovery.timer = null;
+      void this.recoverRepoMetadataWatch(target);
+    }, delayMs);
+  }
+
+  private async recoverRepoMetadataWatch(target: RepoGitTarget): Promise<void> {
+    if (target.closed || target.subscription) {
+      return;
+    }
+    const recovered = await this.startRepoMetadataObservation(target, { replaceFallback: true });
+    if (!recovered) {
+      this.scheduleRepoMetadataWatchRecovery(target);
+      return;
+    }
+    this.logger.info({ repoGitRoot: target.repoGitRoot }, "Repository metadata watcher recovered");
   }
 
   private routeRepoMetadataEvents(
@@ -1743,9 +1909,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   }
 
   private startRepoMetadataFallback(target: RepoGitTarget): void {
-    if (target.fallbackPollTimer || target.closed) {
+    if (target.fallbackPolling || target.closed) {
       return;
     }
+    target.fallbackPolling = true;
     const poll = async () => {
       target.fallbackPollTimer = null;
       if (target.closed || this.repoTargets.get(target.repoGitRoot) !== target) {
@@ -1781,8 +1948,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       for (const workingTreeTarget of workingTreeTargets) {
         this.notifyWorkingTreeConsumers(workingTreeTarget);
       }
-      if (!target.closed) {
+      if (!target.closed && target.subscription === null) {
         target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+      } else {
+        target.fallbackPolling = false;
       }
     };
     target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
@@ -2647,6 +2816,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       clearTimeout(target.fallbackPollTimer);
       target.fallbackPollTimer = null;
     }
+    target.fallbackPolling = false;
+    if (target.recovery.timer) {
+      clearTimeout(target.recovery.timer);
+      target.recovery.timer = null;
+    }
 
     if (target.subscription) {
       const subscription = target.subscription;
@@ -2668,6 +2842,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (target.fallbackPollTimer) {
       clearTimeout(target.fallbackPollTimer);
       target.fallbackPollTimer = null;
+    }
+    target.fallbackPolling = false;
+    if (target.recovery.timer) {
+      clearTimeout(target.recovery.timer);
+      target.recovery.timer = null;
     }
     if (target.subscription) {
       const subscription = target.subscription;
