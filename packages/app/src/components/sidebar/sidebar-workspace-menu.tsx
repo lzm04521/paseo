@@ -179,15 +179,15 @@ function SidebarWorkspaceMenuItems({
           {isPinned ? t("sidebar.workspace.actions.unpin") : t("sidebar.workspace.actions.pin")}
         </WorkspaceMenuItem>
       ) : null}
-      <OpenInVSCodeMenuItem
-        surface={surface}
-        path={openInFileManagerPath}
-        testID={`sidebar-workspace-menu-open-vscode-${workspaceKey}`}
-      />
       <OpenInFileManagerMenuItem
         surface={surface}
         path={openInFileManagerPath}
         testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
+      />
+      <OpenInVSCodeMenuItem
+        surface={surface}
+        path={openInFileManagerPath}
+        testID={`sidebar-workspace-menu-open-vscode-${workspaceKey}`}
       />
       {onArchive ? (
         <WorkspaceMenuItem

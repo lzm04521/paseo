@@ -87,15 +87,6 @@ export function FileActionsContextMenuContent({
         onSelect: onCopyRelativePath,
       });
     }
-    if (onOpenInVSCode) {
-      next.push({
-        key: "open-in-vscode",
-        label: t("workspace.fileActions.openInVSCode"),
-        icon: Code,
-        onSelect: onOpenInVSCode,
-        testID: testIDPrefix ? `${testIDPrefix}-open-in-vscode` : undefined,
-      });
-    }
     if (onOpenInFileManager) {
       next.push({
         key: "open-in-file-manager",
@@ -103,6 +94,15 @@ export function FileActionsContextMenuContent({
         icon: FolderOpen,
         onSelect: onOpenInFileManager,
         testID: testIDPrefix ? `${testIDPrefix}-open-in-file-manager` : undefined,
+      });
+    }
+    if (onOpenInVSCode) {
+      next.push({
+        key: "open-in-vscode",
+        label: t("workspace.fileActions.openInVSCode"),
+        icon: Code,
+        onSelect: onOpenInVSCode,
+        testID: testIDPrefix ? `${testIDPrefix}-open-in-vscode` : undefined,
       });
     }
     if (availableFile && onDownload) {

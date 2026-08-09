@@ -593,15 +593,15 @@ function ProjectMenuItems({
           {t("sidebar.project.actions.openNewWindow")}
         </ProjectMenuItem>
       ) : null}
-      <OpenInVSCodeMenuItem
-        surface={surface}
-        path={projectPath}
-        testID={`sidebar-project-menu-open-vscode-${projectViewKey}`}
-      />
       <OpenInFileManagerMenuItem
         surface={surface}
         path={projectPath}
         testID={`sidebar-project-menu-open-folder-${projectViewKey}`}
+      />
+      <OpenInVSCodeMenuItem
+        surface={surface}
+        path={projectPath}
+        testID={`sidebar-project-menu-open-vscode-${projectViewKey}`}
       />
       <ProjectMenuItem
         surface={surface}
