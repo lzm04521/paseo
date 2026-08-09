@@ -1093,7 +1093,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(watcher.subscribe).toHaveBeenCalledTimes(1);
     });
     await vi.advanceTimersByTimeAsync(35_000);
-    expect(service.getMetrics().workingTreeWatchSetupInFlightCount).toBe(1);
+    expect(service.getMetrics().workingTreeWatchSetupInFlightCount).toBe(0);
+    expect(service.getMetrics().workspaceObservationSetupAdmissionActiveCount).toBe(0);
     expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(1);
 
     openedSubscription.resolve({ unsubscribe: erroredUnsubscribe });
