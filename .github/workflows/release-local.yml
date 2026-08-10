@@ -1,0 +1,71 @@
+name: release-local
+
+# 自用发布：打 local-v* tag 自动构建 Windows x64 exe 并挂到 fork Release。
+# electron-updater 运行时查本仓库 Release 的 latest.yml 做更新检查
+# （electron-builder.yml 的 publish 已指向 lzm04521/paseo）。
+
+on:
+  push:
+    tags:
+      - 'local-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 0.3.1，对应 local/v<version> 分支）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout 发版分支
+        uses: actions/checkout@v4
+        with:
+          # tag 触发：用 tag commit；手动触发：checkout local/v<version>
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('local/v{0}', inputs.version) || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build app deps (highlight/relay/client/protocol)
+        run: npm run build:app-deps:clean
+
+      - name: Expo web bundle (electron)
+        run: npx expo export --platform web
+        working-directory: packages/app
+        env:
+          PASEO_WEB_PLATFORM: electron
+
+      - name: Build server + cli
+        run: npm run build:server:clean
+
+      - name: Build desktop main (tsc)
+        run: npm run build:main
+        working-directory: packages/desktop
+
+      - name: electron-builder (win nsis x64，只打 x64)
+        run: electron-builder --config electron-builder.yml --win nsis --x64 --publish never
+        working-directory: packages/desktop
+
+      - name: Upload exe + latest.yml to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # latest.yml 是 electron-updater 检查更新必需
+          files: |
+            packages/desktop/release/Paseo-Setup-*-x64.exe
+            packages/desktop/release/latest.yml
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('local-v{0}', inputs.version) || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && format('local-v{0}', inputs.version) || github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
