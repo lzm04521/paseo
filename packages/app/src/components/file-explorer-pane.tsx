@@ -410,17 +410,17 @@ export function FileExplorerPane({
   const handleOpenInVSCodeEntry = useCallback(
     (entry: ExplorerEntry) => {
       if (!normalizedWorkspaceRoot) return;
-      const absolutePath =
-        entry.path === "."
-          ? undefined
-          : buildAbsoluteExplorerPath({
-              workspaceRoot: normalizedWorkspaceRoot,
-              entryPath: entry.path,
-            });
-      openInVSCodeAction({
-        workspacePath: normalizedWorkspaceRoot,
-        ...(absolutePath ? { filePath: absolutePath } : {}),
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
       });
+      if (entry.kind === "directory") {
+        // Open the selected directory itself as the VS Code workspace root.
+        openInVSCodeAction({ workspacePath: absoluteEntryPath });
+        return;
+      }
+      // Open the selected file inside the workspace.
+      openInVSCodeAction({ workspacePath: normalizedWorkspaceRoot, filePath: absoluteEntryPath });
     },
     [normalizedWorkspaceRoot, openInVSCodeAction],
   );
@@ -428,18 +428,21 @@ export function FileExplorerPane({
   const handleOpenInFileManagerEntry = useCallback(
     (entry: ExplorerEntry) => {
       if (!normalizedWorkspaceRoot || !fileManagerTargetId) return;
-      const absolutePath =
-        entry.path === "."
-          ? undefined
-          : buildAbsoluteExplorerPath({
-              workspaceRoot: normalizedWorkspaceRoot,
-              entryPath: entry.path,
-            });
-      void openDesktopTarget({
-        editorId: fileManagerTargetId,
-        workspacePath: normalizedWorkspaceRoot,
-        ...(absolutePath ? { filePath: absolutePath } : {}),
-      }).catch((openError) => {
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
+      });
+      // Directory: open it directly. File: pass it as filePath so the target opens its
+      // containing directory (on Windows, explorerTarget prefers Opus then Explorer).
+      const input =
+        entry.kind === "directory"
+          ? { editorId: fileManagerTargetId, workspacePath: absoluteEntryPath }
+          : {
+              editorId: fileManagerTargetId,
+              workspacePath: normalizedWorkspaceRoot,
+              filePath: absoluteEntryPath,
+            };
+      void openDesktopTarget(input).catch((openError) => {
         console.warn("[file-explorer] open in file manager failed", openError);
         toast.error(t("workspace.fileActions.openInFileManagerFailed"));
       });

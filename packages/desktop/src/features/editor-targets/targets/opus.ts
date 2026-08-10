@@ -1,10 +1,10 @@
 import path from "node:path";
-import type { EditorTarget, EditorTargetRuntime } from "../target.js";
+import type { EditorTargetLaunchInput, EditorTargetRuntime } from "../target.js";
 
 /**
- * Directory Opus (GPSoftware), a Windows file manager. Registered ahead of the built-in
- * `explorerTarget` so a machine that has Opus installed uses it for "Open in file manager";
- * machines without it fall through to Windows Explorer.
+ * Directory Opus (GPSoftware), a Windows file manager. Not registered as its own target —
+ * `explorerTarget` calls into `tryLaunchOpus` so a single "Explorer" entry uses Opus when
+ * installed and otherwise falls back to Windows Explorer.
  */
 function dopusrtCommands(runtime: EditorTargetRuntime): string[] {
   const candidates: string[] = [];
@@ -53,38 +53,31 @@ function resolveOpusRuntime(runtime: EditorTargetRuntime): ResolvedOpusRuntime |
   return null;
 }
 
-const launchOpus: EditorTarget["launch"] = async (input, runtime) => {
+/**
+ * If Directory Opus is installed, open `input`'s path in it and return true. Returns false
+ * when Opus isn't available so the caller can fall back to the platform file manager.
+ *
+ * Opus's `Go` command takes a directory. `SELECT` is a separate Opus command, not a `Go`
+ * argument, so there's no reliable one-shot "reveal-and-select this file" from the command
+ * line — for a file we navigate to its containing folder (reveal-without-select).
+ */
+export async function tryLaunchOpus(
+  input: EditorTargetLaunchInput,
+  runtime: EditorTargetRuntime,
+): Promise<boolean> {
   const resolved = resolveOpusRuntime(runtime);
-  if (!resolved) throw new Error("Directory Opus is not installed");
-  // Opus's `Go` command takes a directory. `SELECT` is a separate Opus command, not a `Go`
-  // argument, so there's no reliable one-shot "reveal-and-select this file" from the command
-  // line — for a file we navigate to its containing folder (reveal-without-select).
+  if (!resolved) return false;
   const targetPath = input.filePath ? path.dirname(input.filePath) : input.workspacePath;
   if (resolved.kind === "runtime") {
     await runtime.spawnDetached({
       command: resolved.command,
       args: ["/cmd", "Go", targetPath],
     });
-    return;
+    return true;
   }
   await runtime.spawnDetached({
     command: resolved.command,
     args: [targetPath],
   });
-};
-
-export const opusTarget: EditorTarget = {
-  id: "opus",
-  async describe() {
-    return {
-      id: this.id,
-      label: "Opus",
-      kind: "file-manager",
-      icon: { kind: "symbol", name: "folder" },
-    };
-  },
-  async isInstalled(runtime) {
-    return runtime.platform === "win32" && resolveOpusRuntime(runtime) !== null;
-  },
-  launch: launchOpus,
-};
+  return true;
+}

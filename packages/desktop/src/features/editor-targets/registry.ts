@@ -14,7 +14,6 @@ import { explorerTarget, fileManagerTarget, finderTarget } from "./targets/file-
 import { golandTarget } from "./targets/goland.js";
 import { intellijIdeaTarget } from "./targets/intellij-idea.js";
 import { kiroTarget } from "./targets/kiro.js";
-import { opusTarget } from "./targets/opus.js";
 import { phpstormTarget } from "./targets/phpstorm.js";
 import { pycharmTarget } from "./targets/pycharm.js";
 import { riderTarget } from "./targets/rider.js";
@@ -49,7 +48,6 @@ export const EDITOR_TARGETS: readonly EditorTarget[] = [
   rustroverTarget,
   webstormTarget,
   finderTarget,
-  opusTarget,
   explorerTarget,
   fileManagerTarget,
 ];
