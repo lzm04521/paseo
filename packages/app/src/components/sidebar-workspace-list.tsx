@@ -147,6 +147,7 @@ import {
 } from "@/constants/platform";
 import { getDesktopHost } from "@/desktop/host";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { OpenInVSCodeMenuItem } from "@/workspace/open-in-editor/menu-item";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
@@ -599,6 +600,11 @@ function ProjectMenuItems({
         surface={surface}
         path={projectPath}
         testID={`sidebar-project-menu-open-folder-${projectViewKey}`}
+      />
+      <OpenInVSCodeMenuItem
+        surface={surface}
+        path={projectPath}
+        testID={`sidebar-project-menu-open-vscode-${projectViewKey}`}
       />
       <ProjectMenuItem
         surface={surface}

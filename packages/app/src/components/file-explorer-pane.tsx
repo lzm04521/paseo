@@ -43,6 +43,10 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-actions";
+import { getIsElectron } from "@/constants/platform";
+import { useToast } from "@/contexts/toast-context";
+import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 import { usePanelStore, type ExpandedPathsUpdate, type SortOption } from "@/stores/panel-store";
 import { formatTimeAgo } from "@/utils/time";
 import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
@@ -88,6 +92,9 @@ interface TreeRowItemProps {
   loading: boolean;
   onEntryPress: (entry: ExplorerEntry) => void;
   onCopyPath: (path: string) => void;
+  onCopyRelativePath?: (path: string) => void | Promise<void>;
+  onOpenInVSCode?: (entry: ExplorerEntry) => void;
+  onOpenInFileManager?: (entry: ExplorerEntry) => void;
   onDownloadEntry: (entry: ExplorerEntry) => void;
   onAddToChat?: (path: string) => void;
   testID?: string;
@@ -118,6 +125,9 @@ function TreeRowItem({
   loading,
   onEntryPress,
   onCopyPath,
+  onCopyRelativePath,
+  onOpenInVSCode,
+  onOpenInFileManager,
   onDownloadEntry,
   onAddToChat,
   testID,
@@ -155,6 +165,18 @@ function TreeRowItem({
   const handleAddToChat = useCallback(() => {
     onAddToChat?.(entry.path);
   }, [onAddToChat, entry.path]);
+
+  const handleCopyRelativePath = useCallback(() => {
+    onCopyRelativePath?.(entry.path);
+  }, [onCopyRelativePath, entry.path]);
+
+  const handleOpenInVSCode = useCallback(() => {
+    onOpenInVSCode?.(entry);
+  }, [onOpenInVSCode, entry]);
+
+  const handleOpenInFileManager = useCallback(() => {
+    onOpenInFileManager?.(entry);
+  }, [onOpenInFileManager, entry]);
 
   const metaHeader = useMemo(
     () => (
@@ -209,6 +231,9 @@ function TreeRowItem({
       <FileActionsContextMenuContent
         fileKind={entry.kind}
         onCopyPath={handleCopy}
+        onCopyRelativePath={onCopyRelativePath ? handleCopyRelativePath : undefined}
+        onOpenInVSCode={onOpenInVSCode ? handleOpenInVSCode : undefined}
+        onOpenInFileManager={onOpenInFileManager ? handleOpenInFileManager : undefined}
         onDownload={handleDownload}
         onAddToChat={onAddToChat ? handleAddToChat : undefined}
         header={metaHeader}
@@ -262,6 +287,17 @@ export function FileExplorerPane({
     workspaceId,
     workspaceRoot: normalizedWorkspaceRoot,
   });
+  const toast = useToast();
+  const openInVSCode = useOpenInVSCode();
+  const canOpenInVSCode = openInVSCode.isAvailable;
+  const openInVSCodeAction = openInVSCode.open;
+  const { targets: desktopOpenTargets } = useDesktopOpenTargets({
+    isLocalExecution: getIsElectron() && hasWorkspaceScope,
+  });
+  const fileManagerTargetId = desktopOpenTargets.find(
+    (target) => target.kind === "file-manager",
+  )?.id;
+  const canOpenInFileManager = fileManagerTargetId !== undefined;
   const sortOption = usePanelStore((state) => state.explorerSortOption);
   const showHiddenFiles = usePanelStore((state) => state.explorerShowHiddenFiles);
   const setSortOption = usePanelStore((state) => state.setExplorerSortOption);
@@ -365,6 +401,50 @@ export function FileExplorerPane({
       );
     },
     [normalizedWorkspaceRoot],
+  );
+
+  const handleCopyRelativePath = useCallback(async (path: string) => {
+    await Clipboard.setStringAsync(path);
+  }, []);
+
+  const handleOpenInVSCodeEntry = useCallback(
+    (entry: ExplorerEntry) => {
+      if (!normalizedWorkspaceRoot) return;
+      const absolutePath =
+        entry.path === "."
+          ? undefined
+          : buildAbsoluteExplorerPath({
+              workspaceRoot: normalizedWorkspaceRoot,
+              entryPath: entry.path,
+            });
+      openInVSCodeAction({
+        workspacePath: normalizedWorkspaceRoot,
+        ...(absolutePath ? { filePath: absolutePath } : {}),
+      });
+    },
+    [normalizedWorkspaceRoot, openInVSCodeAction],
+  );
+
+  const handleOpenInFileManagerEntry = useCallback(
+    (entry: ExplorerEntry) => {
+      if (!normalizedWorkspaceRoot || !fileManagerTargetId) return;
+      const absolutePath =
+        entry.path === "."
+          ? undefined
+          : buildAbsoluteExplorerPath({
+              workspaceRoot: normalizedWorkspaceRoot,
+              entryPath: entry.path,
+            });
+      void openDesktopTarget({
+        editorId: fileManagerTargetId,
+        workspacePath: normalizedWorkspaceRoot,
+        ...(absolutePath ? { filePath: absolutePath } : {}),
+      }).catch((openError) => {
+        console.warn("[file-explorer] open in file manager failed", openError);
+        toast.error(t("workspace.fileActions.openInFileManagerFailed"));
+      });
+    },
+    [fileManagerTargetId, normalizedWorkspaceRoot, t, toast],
   );
 
   const handleDownloadEntry = useCallback(
@@ -475,18 +555,26 @@ export function FileExplorerPane({
         isDirectoryLoading={isDirectoryLoading}
         onEntryPress={handleEntryPress}
         onCopyPath={handleCopyPath}
+        onCopyRelativePath={handleCopyRelativePath}
+        onOpenInVSCode={canOpenInVSCode ? handleOpenInVSCodeEntry : undefined}
+        onOpenInFileManager={canOpenInFileManager ? handleOpenInFileManagerEntry : undefined}
         onDownloadEntry={handleDownloadEntry}
         onAddToChat={onAddToChat}
       />
     ),
     [
+      canOpenInFileManager,
+      canOpenInVSCode,
       expandedPaths,
-      handleEntryPress,
       handleCopyPath,
+      handleCopyRelativePath,
       handleDownloadEntry,
+      handleEntryPress,
+      handleOpenInFileManagerEntry,
+      handleOpenInVSCodeEntry,
       isDirectoryLoading,
-      selectedEntryPath,
       onAddToChat,
+      selectedEntryPath,
       serverId,
       workspaceId,
     ],
@@ -805,6 +893,9 @@ function TreeRowDispatcher({
   isDirectoryLoading,
   onEntryPress,
   onCopyPath,
+  onCopyRelativePath,
+  onOpenInVSCode,
+  onOpenInFileManager,
   onDownloadEntry,
   onAddToChat,
 }: {
@@ -816,6 +907,9 @@ function TreeRowDispatcher({
   isDirectoryLoading: (path: string) => boolean;
   onEntryPress: (entry: ExplorerEntry) => void;
   onCopyPath: (path: string) => void | Promise<void>;
+  onCopyRelativePath?: (path: string) => void | Promise<void>;
+  onOpenInVSCode?: (entry: ExplorerEntry) => void;
+  onOpenInFileManager?: (entry: ExplorerEntry) => void;
   onDownloadEntry: (entry: ExplorerEntry) => void;
   onAddToChat?: (path: string) => void;
 }) {
@@ -837,6 +931,9 @@ function TreeRowDispatcher({
       loading={loading}
       onEntryPress={onEntryPress}
       onCopyPath={onCopyPath}
+      onCopyRelativePath={onCopyRelativePath}
+      onOpenInVSCode={onOpenInVSCode}
+      onOpenInFileManager={onOpenInFileManager}
       onDownloadEntry={onDownloadEntry}
       onAddToChat={onAddToChat}
       testID={`file-explorer-row-${info.index}`}

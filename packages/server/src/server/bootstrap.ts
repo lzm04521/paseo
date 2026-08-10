@@ -434,6 +434,10 @@ export interface PaseoDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    title?: { instructions?: string };
+    branchName?: { instructions?: string };
+    commitMessage?: { instructions?: string };
+    pullRequest?: { instructions?: string };
   };
   providerOverrides?: Record<string, ProviderOverride>;
   log?: PersistedConfig["log"];
@@ -527,6 +531,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
     metadataGeneration: {
+      ...config.metadataGeneration,
       providers: config.metadataGeneration?.providers ?? [],
     },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
