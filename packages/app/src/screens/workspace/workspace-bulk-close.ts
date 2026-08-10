@@ -151,3 +151,41 @@ export async function closeBulkWorkspaceTabs(input: CloseBulkWorkspaceTabsInput)
     });
   }
 }
+
+export interface ProtectedLastAgentResult<Tab> {
+  /** Tab id of the agent kept open, or null when no protection was applied. */
+  protectedAgentTabId: string | null;
+  /** Close list with the protected agent removed. */
+  remainingTabsToClose: Tab[];
+}
+
+/**
+ * Keeps at least one agent tab open across the workspace. When a close operation
+ * would archive every agent, the last agent in the close list (by close order) is
+ * held back so a workspace never loses its final conversation.
+ */
+export function protectLastAgentTab<Tab extends { tabId: string; target: { kind: string } }>(
+  allTabs: ReadonlyArray<{ target: { kind: string } }>,
+  tabsToClose: ReadonlyArray<Tab>,
+): ProtectedLastAgentResult<Tab> {
+  const allAgentCount = allTabs.filter((tab) => tab.target.kind === "agent").length;
+  if (allAgentCount === 0) {
+    return { protectedAgentTabId: null, remainingTabsToClose: [...tabsToClose] };
+  }
+  const closingAgentCount = tabsToClose.filter((tab) => tab.target.kind === "agent").length;
+  if (closingAgentCount < allAgentCount) {
+    return { protectedAgentTabId: null, remainingTabsToClose: [...tabsToClose] };
+  }
+
+  let protectedAgentTabId: string | null = null;
+  const remainingTabsToClose: Tab[] = [];
+  for (let i = tabsToClose.length - 1; i >= 0; i--) {
+    const tab = tabsToClose[i];
+    if (protectedAgentTabId === null && tab.target.kind === "agent") {
+      protectedAgentTabId = tab.tabId;
+      continue;
+    }
+    remainingTabsToClose.unshift(tab);
+  }
+  return { protectedAgentTabId, remainingTabsToClose };
+}

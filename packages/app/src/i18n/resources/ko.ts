@@ -565,6 +565,7 @@ export const ko = {
         reloadingAgent: "에이전트 다시 로드 중...",
         reloadedAgent: "에이전트를 다시 로드했습니다",
         failedToReloadAgent: "에이전트를 다시 로드하지 못했습니다",
+        cannotCloseLastAgent: "마지막 에이전트 대화를 닫을 수 없습니다",
       },
       confirmations: {
         close: "닫기",

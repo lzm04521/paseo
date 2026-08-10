@@ -684,6 +684,7 @@ export const en = {
         reloadingAgent: "Reloading agent...",
         reloadedAgent: "Reloaded agent",
         failedToReloadAgent: "Failed to reload agent",
+        cannotCloseLastAgent: "Cannot close the last agent conversation",
       },
       confirmations: {
         close: "Close",

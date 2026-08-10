@@ -689,6 +689,7 @@ export const ru: TranslationResources = {
         reloadingAgent: "Перезагрузка агента...",
         reloadedAgent: "Перезагруженный агент",
         failedToReloadAgent: "Не удалось перезагрузить агент",
+        cannotCloseLastAgent: "Нельзя закрыть последний диалог агента",
       },
       confirmations: {
         unsavedTitle: "Несохранённые изменения",

@@ -3,6 +3,7 @@ import {
   buildBulkCloseConfirmationMessage,
   classifyBulkClosableTabs,
   closeBulkWorkspaceTabs,
+  protectLastAgentTab,
 } from "@/screens/workspace/workspace-bulk-close";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 
@@ -165,5 +166,52 @@ describe("workspace bulk close helpers", () => {
       { tabId: "terminal_t1", target: { kind: "terminal", terminalId: "t1" } },
       { tabId: "file_/repo/README.md", target: { kind: "file", path: "/repo/README.md" } },
     ]);
+  });
+});
+
+describe("protectLastAgentTab", () => {
+  it("passes through when the workspace has no agents", () => {
+    const allTabs = [makeTerminalTab("t1"), makeFileTab("/repo/README.md")];
+    const tabsToClose = [makeTerminalTab("t1")];
+    expect(protectLastAgentTab(allTabs, tabsToClose)).toEqual({
+      protectedAgentTabId: null,
+      remainingTabsToClose: tabsToClose,
+    });
+  });
+
+  it("passes through when other agents stay open after the close", () => {
+    const allTabs = [makeAgentTab("a1"), makeAgentTab("a2")];
+    const tabsToClose = [makeAgentTab("a1")];
+    expect(protectLastAgentTab(allTabs, tabsToClose)).toEqual({
+      protectedAgentTabId: null,
+      remainingTabsToClose: tabsToClose,
+    });
+  });
+
+  it("protects the only agent and leaves nothing to close", () => {
+    const allTabs = [makeAgentTab("a1")];
+    const tabsToClose = [makeAgentTab("a1")];
+    expect(protectLastAgentTab(allTabs, tabsToClose)).toEqual({
+      protectedAgentTabId: "agent_a1",
+      remainingTabsToClose: [],
+    });
+  });
+
+  it("keeps the last agent in close order and still closes the rest", () => {
+    const allTabs = [makeAgentTab("a1"), makeAgentTab("a2"), makeFileTab("/repo/README.md")];
+    const tabsToClose = [makeAgentTab("a1"), makeAgentTab("a2"), makeFileTab("/repo/README.md")];
+    expect(protectLastAgentTab(allTabs, tabsToClose)).toEqual({
+      protectedAgentTabId: "agent_a2",
+      remainingTabsToClose: [makeAgentTab("a1"), makeFileTab("/repo/README.md")],
+    });
+  });
+
+  it("still closes non-agent tabs when protecting the last agent", () => {
+    const allTabs = [makeAgentTab("a1"), makeTerminalTab("t1")];
+    const tabsToClose = [makeAgentTab("a1"), makeTerminalTab("t1")];
+    expect(protectLastAgentTab(allTabs, tabsToClose)).toEqual({
+      protectedAgentTabId: "agent_a1",
+      remainingTabsToClose: [makeTerminalTab("t1")],
+    });
   });
 });

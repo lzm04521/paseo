@@ -690,6 +690,7 @@ export const fr: TranslationResources = {
         reloadingAgent: "Agent de rechargement...",
         reloadedAgent: "Agent rechargé",
         failedToReloadAgent: "Échec du rechargement de l'agent",
+        cannotCloseLastAgent: "Impossible de fermer la dernière conversation de l'agent",
       },
       confirmations: {
         unsavedTitle: "Modifications non enregistrées",
