@@ -2329,6 +2329,19 @@ export const en = {
           saving: "Saving...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "File search overrides",
+          hint: "Top-level directories that stay selectable in @-mentions even when gitignored. One per line. Built-in default: doc, docs, handoff. Save an empty list to disable bypass.",
+          edit: "Edit",
+          sheetTitle: "File search overrides",
+          accessibilityLabel: "File search overrides",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "Reset",
+          save: "Save",
+          saving: "Saving...",
+        },
+      },
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

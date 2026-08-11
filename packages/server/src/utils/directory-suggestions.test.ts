@@ -219,6 +219,52 @@ describe("searchDirectoryEntries", () => {
     expect(results.map((entry) => entry.path)).toEqual([]);
   });
 
+  it("honors a custom gitIgnorePathOverrides list in place of the default", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: searchRoot });
+    writeFileSync(path.join(searchRoot, ".gitignore"), "doc/\ndocs/\nhandoff/\nnotes/\n");
+    mkdirSync(path.join(searchRoot, "docs", "design"), { recursive: true });
+    mkdirSync(path.join(searchRoot, "notes"), { recursive: true });
+    writeFileSync(path.join(searchRoot, "docs", "design", "overview.md"), "");
+    writeFileSync(path.join(searchRoot, "notes", "scratch.md"), "");
+
+    const common = {
+      root: searchRoot,
+      pathFormat: "relative" as const,
+      includeFiles: true,
+      includeDirectories: false,
+      respectGitIgnore: true,
+      // Only `notes` is overridden; the built-in doc/docs/handoff defaults are fully replaced.
+      gitIgnorePathOverrides: ["notes"] as readonly string[],
+    };
+
+    const notesScratch = await searchDirectoryEntries({ ...common, query: "scratch" });
+    const docsOverview = await searchDirectoryEntries({ ...common, query: "overview" });
+
+    expect(notesScratch.map((entry) => entry.path)).toEqual(["notes/scratch.md"]);
+    // docs/ stays gitignored because the custom list no longer includes it.
+    expect(docsOverview.map((entry) => entry.path)).toEqual([]);
+  });
+
+  it("treats an empty gitIgnorePathOverrides as an explicit choice that disables bypass", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: searchRoot });
+    writeFileSync(path.join(searchRoot, ".gitignore"), "doc/\ndocs/\nhandoff/\n");
+    mkdirSync(path.join(searchRoot, "docs", "design"), { recursive: true });
+    writeFileSync(path.join(searchRoot, "docs", "design", "overview.md"), "");
+
+    const results = await searchDirectoryEntries({
+      root: searchRoot,
+      query: "overview",
+      pathFormat: "relative",
+      includeFiles: true,
+      includeDirectories: false,
+      respectGitIgnore: true,
+      gitIgnorePathOverrides: [],
+    });
+
+    // An empty list is an explicit choice: none of the default doc/docs/handoff are bypassed.
+    expect(results.map((entry) => entry.path)).toEqual([]);
+  });
+
   it("configures raw blank queries independently from explicit root aliases", async () => {
     const rootEntries = [
       { path: "projects", kind: "directory" as const },

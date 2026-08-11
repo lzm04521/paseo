@@ -2132,6 +2132,19 @@ export const ko = {
           saving: "저장하는 중...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "파일 검색 재정의",
+          hint: "gitignore에 무시되더라도 @-멘션에서 선택 가능한 상태로 유지되는 최상위 디렉터리. 한 줄에 하나씩. 기본값: doc, docs, handoff. 빈 목록을 저장하면 우회를 비활성화합니다.",
+          edit: "편집",
+          sheetTitle: "파일 검색 재정의",
+          accessibilityLabel: "파일 검색 재정의",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "재설정",
+          save: "저장",
+          saving: "저장 중...",
+        },
+      },
       agents: {
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
       },

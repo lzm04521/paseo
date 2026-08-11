@@ -2357,6 +2357,19 @@ export const ru: TranslationResources = {
           saving: "Сохранение...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "Переопределения поиска файлов",
+          hint: "Каталоги верхнего уровня, которые остаются доступными для выбора в @-упоминаниях, даже если они в gitignore. По одному в строке. Встроенное значение по умолчанию: doc, docs, handoff. Сохранение пустого списка отключает обход.",
+          edit: "Изменить",
+          sheetTitle: "Переопределения поиска файлов",
+          accessibilityLabel: "Переопределения поиска файлов",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "Сбросить",
+          save: "Сохранить",
+          saving: "Сохранение...",
+        },
+      },
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

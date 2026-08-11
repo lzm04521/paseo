@@ -2296,6 +2296,19 @@ export const zhCN: TranslationResources = {
           saving: "保存中...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "文件搜索覆盖",
+          hint: "即使在 .gitignore 中被忽略，这些顶层目录在 @ 提及时仍可被选中。每行一个。内置默认：doc、docs、handoff。保存空列表可关闭此覆盖。",
+          edit: "编辑",
+          sheetTitle: "文件搜索覆盖",
+          accessibilityLabel: "文件搜索覆盖",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "重置",
+          save: "保存",
+          saving: "保存中...",
+        },
+      },
       agents: {
         unavailable: "连接到这个 Host 以管理 Agent",
       },

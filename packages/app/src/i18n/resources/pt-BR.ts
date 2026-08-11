@@ -2352,6 +2352,19 @@ export const ptBR: TranslationResources = {
           saving: "Salvando...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "Substituições de busca de arquivos",
+          hint: "Diretórios de nível superior que permanecem selecionáveis em @-menções mesmo quando ignorados pelo gitignore. Um por linha. Padrão embutido: doc, docs, handoff. Salvar uma lista vazia desativa o bypass.",
+          edit: "Editar",
+          sheetTitle: "Substituições de busca de arquivos",
+          accessibilityLabel: "Substituições de busca de arquivos",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "Redefinir",
+          save: "Salvar",
+          saving: "Salvando...",
+        },
+      },
       agents: {
         unavailable: "Conecte-se a este host para gerenciar agentes",
       },

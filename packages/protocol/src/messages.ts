@@ -158,6 +158,11 @@ const MutableRelayConfigSchema = z
     enabled: z.boolean(),
   })
   .passthrough();
+const MutableFileSearchConfigSchema = z
+  .object({
+    gitIgnoreOverrides: z.array(z.string().trim().min(1)).optional(),
+  })
+  .passthrough();
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -174,6 +179,7 @@ export const MutableDaemonConfigSchema = z
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
   })
   .passthrough();
 
@@ -191,6 +197,7 @@ export const MutableDaemonConfigPatchSchema = z
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
   })
   .partial()
   .passthrough();

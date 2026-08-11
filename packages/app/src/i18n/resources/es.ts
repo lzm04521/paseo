@@ -2368,6 +2368,19 @@ export const es: TranslationResources = {
           saving: "Guardando...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "Anulaciones de búsqueda de archivos",
+          hint: "Directorios de nivel superior que siguen siendo seleccionables en @-menciones incluso cuando están en gitignore. Uno por línea. Predeterminado integrado: doc, docs, handoff. Guardar una lista vacía desactiva la omisión.",
+          edit: "Editar",
+          sheetTitle: "Anulaciones de búsqueda de archivos",
+          accessibilityLabel: "Anulaciones de búsqueda de archivos",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "Restablecer",
+          save: "Guardar",
+          saving: "Guardando...",
+        },
+      },
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

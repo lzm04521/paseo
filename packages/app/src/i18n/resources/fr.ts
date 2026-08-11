@@ -2372,6 +2372,19 @@ export const fr: TranslationResources = {
           saving: "Sauvegarde...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "Remplacements de recherche de fichiers",
+          hint: "Répertoires de premier niveau qui restent sélectionnables dans les @-mentions même lorsqu'ils sont ignorés par gitignore. Un par ligne. Valeur par défaut intégrée : doc, docs, handoff. Enregistrer une liste vide désactive le contournement.",
+          edit: "Modifier",
+          sheetTitle: "Remplacements de recherche de fichiers",
+          accessibilityLabel: "Remplacements de recherche de fichiers",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "Réinitialiser",
+          save: "Enregistrer",
+          saving: "Enregistrement...",
+        },
+      },
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

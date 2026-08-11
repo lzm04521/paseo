@@ -2318,6 +2318,19 @@ export const ar: TranslationResources = {
           saving: "جارٍ الحفظ...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "تجاوزات بحث الملفات",
+          hint: "أدلة المستوى الأعلى التي تبقى قابلة للتحديد في @-mentions حتى عند تجاهلها بواسطة gitignore. واحدة لكل سطر. الافتراضي المدمج: doc، docs، handoff. حفظ قائمة فارغة يعطل التجاوز.",
+          edit: "تحرير",
+          sheetTitle: "تجاوزات بحث الملفات",
+          accessibilityLabel: "تجاوزات بحث الملفات",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "إعادة تعيين",
+          save: "حفظ",
+          saving: "جارٍ الحفظ...",
+        },
+      },
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

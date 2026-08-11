@@ -2337,6 +2337,19 @@ export const ja: TranslationResources = {
           saving: "保存中...",
         },
       },
+      fileSearch: {
+        defaults: {
+          title: "ファイル検索のオーバーライド",
+          hint: "gitignore で無視されていても、@-mention で選択可能なままにするトップレベルディレクトリ。1 行に 1 つ。組み込みデフォルト：doc、docs、handoff。空のリストを保存するとバイパスを無効化します。",
+          edit: "編集",
+          sheetTitle: "ファイル検索のオーバーライド",
+          accessibilityLabel: "ファイル検索のオーバーライド",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "リセット",
+          save: "保存",
+          saving: "保存中...",
+        },
+      },
       agents: {
         unavailable: "エージェントを管理するにはこのホストに接続してください",
       },
