@@ -24,7 +24,7 @@ description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工�
 
 **按版本规模选策略**：
 
-- **小/中版本 + 改动正交** → **优先 `git merge local/旧 --no-commit --no-ff`** 快速合并，git 三方合并自动处理正交改动，零手解（v0.3.0→v0.3.1 实战：交集 14 文件全 auto-merge）。拍平成单 commit：`git commit --no-verify -m tmp` → `git reset --soft v<新版本>` → 重新 commit。详见 memory `paseo-local-build-workflow`「git merge 快速合并」段。
+- **小/中版本 + 改动正交** → **优先 `git merge local/旧 --no-commit --no-ff`** 快速合并，git 三方合并自动处理正交改动，零手解（v0.3.0→v0.3.1 实战：交集 14 文件全 auto-merge）。拍平成单 commit：**先** `git commit --no-verify -m tmp` 完成 merge（`git reset --soft` 在 merge 进行中报 `fatal: Cannot do soft reset in the middle of a merge`，必须先 commit），再 `git reset --soft v<新版本>` 清 MERGE_HEAD，重新 commit。详见 memory `paseo-local-build-workflow`「git merge 快速合并」段。
 - **大版本 / 冲突多** → **策略 B：逐个功能评估保留/丢弃，保留项重新应用**（本 skill 下文主线）。
 
 两策略都要先做下文「盘点上一工作线补丁 + 逐个评估」——评估结论决定 merge 是否够用 / 哪些要重做。
@@ -88,7 +88,7 @@ git diff v<旧版本 tag>..local/v<旧版本> --name-only   # 改了哪些文件
 ### 4. 重新应用保留项
 
 - **代码**：`git merge-file` 三方合并（base=旧 tag 文件，ours=新 tag 工作区，theirs=旧本地版）。冲突手解，保留上游结构调整 + 本地逻辑。
-- **i18n**：tsx 脚本读旧版 key，补到新 9 语种文件（`ar/en/es/fr/ja/ko/pt-BR/ru/zh-CN`）。无翻译语种（ko 等）用英文 fallback，改完跑 `resources.test.ts`（强制全语种 key 同步 + 非英文语种翻译比例 <25%）。
+- **i18n**：tsx 脚本读旧版 key，补到新 9 语种文件（`ar/en/es/fr/ja/ko/pt-BR/ru/zh-CN`）。无翻译语种（ko 等）用英文 fallback，改完跑 `resources.test.ts`（强制全语种 key 同步 + 非英文语种翻译比例 <25%）。**批量补译 zh-CN 英文残留**（v0.3.1 实战：上游新功能 zh-CN 有 160 条英文残留，test 因 <25% 阈值不报但实际未本地化；参照 ja 翻译筛出 146 条补译，残留降到 15）：写临时 tsx 脚本 `import { zhCN }` + 翻译映射 → 深度 set → 自定义序列化器（2 空格缩进 / 双引号 / 尾逗号）重写文件 → `npm run format:files` 规范化，比逐个 Edit 高效。zh-CN.ts 无注释，重写不丢内容。
 - **新依赖**：checkout 新 tag 后 node_modules 是旧版的，Metro bundle 报 `Unable to resolve module` → `npm install` 补。
 
 ### 5. 验证门禁（全过才算完成）
@@ -155,10 +155,10 @@ git push --force-with-lease=main:<旧 main sha> origin main
 
 ## 当前已知本地独有功能清单（**参考起点，非最终方案**——以 `git log local/*` + git diff 为唯一权威）
 
-> **已核对 local/v0.3.1（2026-08-10，单 commit `2e01f2941`，45 文件）**：下表 A/B 功能项**全部保留至 v0.3.1，无丢弃**；清单已按 v0.3.1 实际签入校正。
+> **已核对 local/v0.3.1（截至 2026-08-11，HEAD `74ac07c77`，多 commit 工作线）**：下表 A/B/C/D 功能项**全部保留至 v0.3.1，无丢弃**；清单已按工作线实际签入校正（`2e01f2941` port + 后续 `4e42a0398` Opus 重构 / `b5dff5a7e`+`2ce0b8979` tab 保护 / `4fb7cbb12` gitignore 配置化）。
 > 跟进新版本时**仍必须按步骤 2 重新核对**（git log/diff 为准），**有疑问提出**，不照抄此清单。
 
-### A. 已 commit（v0.3.1 拍平在 `local/v0.3.1 @ 2e01f2941`；下列功能 v0.3.0 起有，v0.3.1 全保留）
+### A. 已 commit（v0.3.1 工作线；下列功能 v0.3.0 起有，v0.3.1 全保留）
 
 1. **metadata generation daemon 级默认值**（三层 fallback：project → daemon → code default）
    - protocol `messages.ts`
@@ -168,9 +168,9 @@ git push --force-with-lease=main:<旧 main sha> origin main
 3. **全局禁止右键菜单**（desktop + web）：`desktop/src/main.ts`、`desktop/src/window/window-manager.ts`、`app/public/index.html`
 4. **i18n 9 语种 key 树**：ko 等缺翻译语种用英文 fallback
 
-### B. 文件操作增强（v0.3.1 拍平在 `local/v0.3.1 @ 2e01f2941`；v0.3.0 起有，v0.3.1 全保留）
+### B. 文件操作增强（v0.3.1 工作线；v0.3.0 起有，v0.3.1 持续演进——Opus 已合并进 Explorer entry、gitignore 例外已配置化）
 
-1. **Directory Opus 文件管理器兼容**：`desktop/src/features/editor-targets/targets/opus.ts`（新）+ `desktop/src/features/editor-targets/registry.ts` 注册（放在 `explorerTarget` 前）——win32 装了 Opus 自动优先于 Windows 资源管理器，未装自动回退 Explorer
+1. **Directory Opus 文件管理器兼容**（v0.3.1 重构，commit `4e42a0398`）：`desktop/src/features/editor-targets/targets/opus.ts` 导出 `tryLaunchOpus`，由 `explorerTarget`（`desktop/src/features/editor-targets/targets/file-manager.ts`）调用——单一 "Reveal in file manager" 菜单项，底层 win32 装了 Opus 优先用 Opus、未装回退 Windows 资源管理器。v0.3.0 是独立 `opusTarget` 注册在 `explorerTarget` 前，v0.3.1 合并进 Explorer entry（不再有独立 Opus 菜单项）。
    - launch：`dopusrt.exe /cmd Go <dir>` 复用已开 lister，fallback `dopus.exe <dir>` 开新 lister
    - 文件 reveal 退化为打开父目录（`path.dirname`），因为 Opus 命令行无可靠单命令 reveal+select（见「实现踩坑」）
 2. **「在 VSCode 打开」菜单**：`workspace/open-in-editor/menu-item.tsx`（`OpenInVSCodeMenuItem`，含 `surface` 双模式）+ `use-open-in-vscode.ts`
@@ -180,10 +180,20 @@ git push --force-with-lease=main:<旧 main sha> origin main
    - 在文件管理器中打开（文件→父目录，目录→自身）
    - 在 VSCode 打开（文件/文件夹）
    - **菜单顺序**：file manager 在 VSCode 之上（`file-actions-menu.tsx` push 顺序 + 两处 sidebar JSX 顺序）
-4. **@ 文件选择 gitignore 例外**：`server/utils/directory-suggestions.ts` 的 `GIT_IGNORE_PATH_OVERRIDES = ["doc","docs","handoff"]`——这三个顶层目录即使被 .gitignore 排除，@ 提及文件时仍可见（仅顶层，嵌套同名不绕过）
+4. **@ 文件选择 gitignore 例外（v0.3.1 已配置化，commit `4fb7cbb12`）**：`server/utils/directory-suggestions.ts` 默认列表 `DEFAULT_GIT_IGNORE_PATH_OVERRIDES = ["doc","docs","handoff"]`（原 `GIT_IGNORE_PATH_OVERRIDES` 改名）——这三个顶层目录即使被 .gitignore 排除，@ 提及文件时仍可见（仅顶层，嵌套同名不绕过）。**现已 daemon 全局可配置**：protocol `MutableFileSearchConfigSchema`（`fileSearch.gitIgnoreOverrides`，`packages/protocol/src/messages.ts`）+ daemon 接入（`packages/server/src/server/session.ts handleDirectorySuggestionsRequest` 读 `daemonConfigStore.get().fileSearch?.gitIgnoreOverrides` 注入 `searchDirectoryEntries` 的 `gitIgnorePathOverrides` option）+ 设置页 UI `FileSearchDefaultsCard`（`packages/app/src/screens/settings/host-page.tsx`，Host → Agents → "File search overrides"，textarea 每行一个目录名）+ 9 语种 i18n `settings.host.fileSearch.defaults.*`。**语义**：字段缺省→内置默认；非空数组→全量替换默认；`[]`→关闭所有豁免，完全信 gitignore。未做（留待后续）：project 级覆盖（`paseo.json`）+ 三层 fallback（project > daemon > code default，照搬 `build-metadata-prompt.ts:59-70`）。
 5. **i18n**：9 语种补 `workspace.fileActions.openInFileManagerFailed`（右侧 file manager 失败 toast）
 
-### C. fork 运维补丁（v0.3.1 起有，跟随每个 local/v{version} 分支 + main）
+### C. workspace tab 保护（v0.3.1 工作线，commit `2ce0b8979`）
+
+禁止关闭 workspace 内最后一个 agent（对话）tab——其他类型 tab（file / terminal / browser / draft / subagent）照常关闭。保护按 workspace 全局算（`uiTabs` 跨 split pane 合计）。
+
+- `packages/app/src/screens/workspace/workspace-bulk-close.ts`（新）：纯函数 `protectLastAgentTab(allTabs, tabsToClose)`——当一次关闭会清空 workspace 全部 agent tab 时，按关闭顺序保留最后一个 agent，其余照常返回关闭；返回 `{ protectedAgentTabId, remainingTabsToClose }`。泛型 `<Tab extends { tabId; target: { kind } }>`。含 test（无 agent / 多 agent 不保护 / 唯一 agent 保护 / 多 agent 批量保留最后 / 混合 tab 保护 agent 仍关非 agent）。
+- `packages/app/src/screens/workspace/workspace-screen.tsx`：单 tab 关闭入口 `handleCloseAgentTab` + 批量入口 `handleBulkCloseTabs`（close left/right/others）开头都调 `protectLastAgentTab` 拦截，被保护则弹 warning toast 并 return。覆盖所有关闭入口（X 按钮、右键菜单 close/closeOthers/closeLeft/closeRight、中键、mobile ⋯ 菜单、快捷键）。
+- i18n 9 语种 `workspace.tabs.toasts.cannotCloseLastAgent`。
+- 若想改成「每个 pane 各留一个 agent」：把 `handleBulkCloseTabs` 里的 `uiTabs` 换成对应 pane 的 `paneTabs`、单 tab 路径同样按 pane 算。
+- 顺手 fix（commit `b5dff5a7e`）：`packages/app/src/components/draggable-list.native.tsx:122` 的 `dragGestureHostPresented` 加 `// @ts-ignore`，消除上游预存 typecheck 错误（见踩坑 #4）。
+
+### D. fork 运维补丁（v0.3.1 起有，跟随每个 local/v{version} 分支 + main）
 
 1. **electron-builder publish 改 fork**：`packages/desktop/electron-builder.yml` 的 `publish.owner` getpaseo → lzm04521（repo 仍是 paseo）。让 electron-updater 查 fork release 自动更新。
 2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `local-v*` + workflow_dispatch；windows-latest；`npx electron-builder --win nsis --x64 --publish never`；softprops/action-gh-release 上传 exe + latest.yml）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
@@ -198,7 +208,7 @@ git push --force-with-lease=main:<旧 main sha> origin main
    - `dopusrt.exe /cmd Go <dir>`：复用已开 lister（Opus 未运行时命令可能丢失）；`dopus.exe <dir>`：开新 lister（可靠）。`opus.ts` 优先 dopusrt，fallback dopus。
    - 检测：`dopusrt.exe`/`dopus.exe` 在 `%ProgramFiles%/GPSoftware/Directory Opus/`；绝对路径用 `/` 拼 env（如 `${ProgramFiles}/GPSoftware/...`），Node `existsSync` 在 win32 能处理混合 `\` `/` 分隔符。
 3. **build 前确认分支**：`build-local.sh` 本身不切分支，但 IDE/并发终端可能切走。build 失败先查 `git rev-parse --abbrev-ref HEAD`——曾在 `local/v0.2.5`（旧回退分支）上 build，因其引用 v0.3.0 才有的 `open-in-editor/` 而 Metro resolve 失败，误判为代码问题。
-4. **app typecheck pre-existing 错误**：`draggable-list.native.tsx:122` 的 `dragGestureHostPresented`（react-native-draggable-flatlist 库类型不匹配）在 v0.3.0 就有，非本地补丁引入。用 `git stash` 对比确认后忽略；tsgo 一次报全量错误，只要错误文件不在本次改动里就是 pre-existing。
+4. **app typecheck pre-existing 错误**（已在 local/v0.3.1 本地修复，commit `b5dff5a7e`）：`draggable-list.native.tsx:122` 的 `dragGestureHostPresented`（react-native-draggable-flatlist 库类型不匹配）原是上游预存错误，本地照同文件 `waitFor` 同样模式加 `// @ts-ignore` 消除。跟进新版本时：若上游已修则丢弃本地 `@ts-ignore`，若上游仍报该错则重应用。判断 pre-existing 的方法不变——`git stash` 对比，tsgo 一次报全量错误，只要错误文件不在本次改动里就是 pre-existing。
 5. **主进程 editor-targets 检测可独立验证**：`listAvailableEditorTargets` 不依赖 electron API（只 `isInstalled` 用 `resolveCommand`/`hasMacApplication`，`describe` 用 `loadIcon`）。写临时 tsx 脚本 mock runtime（`platform`/`env`/`pathExists`/`resolveCommand` 复制 `resolveExecutable`，`loadIcon` 返回 symbol）即可离线跑出 win32 实际检测到的 vscode/opus/explorer，无需启动 electron。
 6. **release-local workflow 必须在 tag commit 上**（v0.3.1 实测）：GitHub 对 tag push 触发时查的是 **tag commit 上的 workflow 文件**，只放 main（默认分支注册）不够——tag 打在 local/v{version} 的 commit，该 commit 必须含 release-local.yml 才触发。所以 workflow 文件随 fork 运维补丁进每个 local/v{version} 分支（main 也留一份注册）。
 7. **CI bash 步骤调本地 CLI 要用 `npx`**（v0.3.1 实测）：GitHub Actions 的 bash 步骤不把 `node_modules/.bin` 加 PATH（不像本地 `build-local.sh` 前置 PATH）。`electron-builder` 直接调报 `command not found`（exit 127）；`npx electron-builder` 能找本地依赖。`npm run xxx` 自带 PATH 注入不受影响。
