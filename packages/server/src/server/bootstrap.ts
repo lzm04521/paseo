@@ -137,6 +137,7 @@ import {
 } from "./agent/tools/paseo-tools.js";
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import { migrateLegacyImageDowngrade } from "./agent/providers/claude/image-downgrade.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -398,6 +399,7 @@ export interface PaseoDaemonConfig {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  claudeImageDowngrade?: "off" | "on";
   terminalProfiles?: TerminalProfile[];
   staticDir: string;
   mcpDebug: boolean;
@@ -537,6 +539,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
+    claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -562,6 +565,10 @@ export async function createPaseoDaemon(
     logger,
     { relayEnabledMutable: config.relayEnabledMutable ?? true },
   );
+  const legacyDowngradeMode = migrateLegacyImageDowngrade(config.paseoHome, logger);
+  if (legacyDowngradeMode === "on") {
+    daemonConfigStore.patch({ claudeImageDowngrade: "on" });
+  }
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
 
@@ -832,6 +839,7 @@ export async function createPaseoDaemon(
     managedProcesses,
     isDev: config.isDev === true,
     extraClients: config.agentClients,
+    getDaemonConfig: () => daemonConfigStore.get(),
   });
   const initialAgentManagerState = providerSnapshotManager.getAgentManagerProviderState();
   const agentManager = new AgentManager({

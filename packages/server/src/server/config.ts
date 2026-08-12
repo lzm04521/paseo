@@ -450,6 +450,7 @@ function resolveStaticLoadConfigSettings(
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
+    claudeImageDowngrade: persisted.daemon?.claudeImageDowngrade ?? "off",
     terminalProfiles: persisted.daemon?.terminalProfiles,
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -478,6 +479,7 @@ export function loadConfig(
     browserToolsEnabled,
     autoArchiveAfterMerge,
     appendSystemPrompt,
+    claudeImageDowngrade,
     terminalProfiles,
     hostnames,
     trustedProxies,
@@ -519,6 +521,7 @@ export function loadConfig(
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
+    claudeImageDowngrade,
     terminalProfiles,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",

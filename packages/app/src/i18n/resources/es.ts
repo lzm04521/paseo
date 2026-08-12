@@ -2356,6 +2356,12 @@ export const es: TranslationResources = {
           save: "Guardar",
           saving: "Guardando...",
         },
+        imageDowngrade: {
+          title: "Degradación de imágenes de Claude",
+          hint: "Envía las imágenes del prompt como rutas de archivo en lugar de base64 para los modelos de Claude solo de texto",
+          accessibilityLabel: "Degradación de imágenes de Claude",
+          errorTitle: "No se pudo actualizar la degradación de imágenes de Claude",
+        },
       },
       metadata: {
         defaults: {

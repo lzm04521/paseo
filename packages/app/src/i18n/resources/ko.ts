@@ -2131,6 +2131,12 @@ export const ko = {
           save: "저장",
           saving: "저장하는 중...",
         },
+        imageDowngrade: {
+          title: "Claude 이미지 다운그레이드",
+          hint: "텍스트 전용 Claude 모델의 경우 프롬프트 이미지를 base64 대신 파일 경로로 보냅니다",
+          accessibilityLabel: "Claude 이미지 다운그레이드",
+          errorTitle: "Claude 이미지 다운그레이드를 업데이트할 수 없습니다",
+        },
       },
       fileSearch: {
         defaults: {

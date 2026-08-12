@@ -361,6 +361,7 @@ function mergeMutableConfigIntoPersistedConfig(params: {
       autoArchiveAfterMerge: mutable.autoArchiveAfterMerge,
       enableTerminalAgentHooks: mutable.enableTerminalAgentHooks,
       appendSystemPrompt: mutable.appendSystemPrompt,
+      claudeImageDowngrade: mutable.claudeImageDowngrade,
       ...(mutable.terminalProfiles !== undefined
         ? { terminalProfiles: mutable.terminalProfiles }
         : {}),

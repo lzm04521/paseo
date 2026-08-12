@@ -2340,6 +2340,12 @@ export const ptBR: TranslationResources = {
           save: "Salvar",
           saving: "Salvando...",
         },
+        imageDowngrade: {
+          title: "Redução de imagens do Claude",
+          hint: "Envia imagens do prompt como caminhos de arquivo em vez de base64 para modelos Claude somente texto",
+          accessibilityLabel: "Redução de imagens do Claude",
+          errorTitle: "Não foi possível atualizar a redução de imagens do Claude",
+        },
       },
       metadata: {
         defaults: {

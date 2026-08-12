@@ -2306,6 +2306,12 @@ export const ar: TranslationResources = {
           save: "حفظ",
           saving: "جارٍ الحفظ...",
         },
+        imageDowngrade: {
+          title: "تقليل دقة صور Claude",
+          hint: "إرسال صور المطالبة كمسارات ملفات بدلاً من base64 لنماذج Claude النصية فقط",
+          accessibilityLabel: "تقليل دقة صور Claude",
+          errorTitle: "تعذّر تحديث تقليل دقة صور Claude",
+        },
       },
       metadata: {
         defaults: {

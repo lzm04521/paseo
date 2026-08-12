@@ -2284,6 +2284,12 @@ export const zhCN: TranslationResources = {
           save: "保存",
           saving: "保存中...",
         },
+        imageDowngrade: {
+          title: "Claude 图片降级",
+          hint: "对仅支持文本的 Claude 模型，将提示图片以文件路径而非 base64 发送",
+          accessibilityLabel: "Claude 图片降级",
+          errorTitle: "无法更新 Claude 图片降级设置",
+        },
       },
       metadata: {
         defaults: {

@@ -178,6 +178,7 @@ export const MutableDaemonConfigSchema = z
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
+    claudeImageDowngrade: z.enum(["off", "on"]).default("off"),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
   })
@@ -196,6 +197,7 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
+    claudeImageDowngrade: z.enum(["off", "on"]).optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
   })

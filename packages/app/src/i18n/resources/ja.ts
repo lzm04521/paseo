@@ -2325,6 +2325,12 @@ export const ja: TranslationResources = {
           save: "保存",
           saving: "保存中...",
         },
+        imageDowngrade: {
+          title: "Claude 画像ダウングレード",
+          hint: "テキストのみのClaudeモデルでは、プロンプト画像をbase64ではなくファイルパスで送信します",
+          accessibilityLabel: "Claude 画像ダウングレード",
+          errorTitle: "Claude 画像ダウングレードを更新できません",
+        },
       },
       metadata: {
         defaults: {

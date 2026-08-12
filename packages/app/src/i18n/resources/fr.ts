@@ -2360,6 +2360,12 @@ export const fr: TranslationResources = {
           save: "Sauvegarder",
           saving: "Sauvegarde...",
         },
+        imageDowngrade: {
+          title: "Dégradation des images Claude",
+          hint: "Envoyer les images du prompt comme chemins de fichier au lieu de base64 pour les modèles Claude texte uniquement",
+          accessibilityLabel: "Dégradation des images Claude",
+          errorTitle: "Impossible de mettre à jour la dégradation des images Claude",
+        },
       },
       metadata: {
         defaults: {

@@ -2345,6 +2345,12 @@ export const ru: TranslationResources = {
           save: "Сохранить",
           saving: "Сохранение...",
         },
+        imageDowngrade: {
+          title: "Понижение изображений Claude",
+          hint: "Отправлять изображения из промпта как пути к файлам вместо base64 для текстовых моделей Claude",
+          accessibilityLabel: "Понижение изображений Claude",
+          errorTitle: "Не удалось обновить понижение изображений Claude",
+        },
       },
       metadata: {
         defaults: {

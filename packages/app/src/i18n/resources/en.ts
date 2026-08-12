@@ -2317,6 +2317,12 @@ export const en = {
           save: "Save",
           saving: "Saving...",
         },
+        imageDowngrade: {
+          title: "Claude image downgrade",
+          hint: "Send prompt images as file paths instead of base64 for text-only Claude models",
+          accessibilityLabel: "Claude image downgrade",
+          errorTitle: "Unable to update Claude image downgrade",
+        },
       },
       metadata: {
         defaults: {
