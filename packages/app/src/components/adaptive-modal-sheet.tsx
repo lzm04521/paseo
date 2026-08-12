@@ -28,6 +28,7 @@ import {
 import { getCompactSheetSafeAreaPadding } from "@/components/adaptive-modal-sheet-layout";
 import { createControlGeometry } from "@/components/ui/control-geometry";
 import { isNative, isWeb } from "@/constants/platform";
+import { useImeCompositionGuard } from "@/hooks/use-ime-composition-guard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Horizontal indent token shared by the sheet header (title, back arrow,
@@ -303,12 +304,26 @@ const ThemedBottomSheetTextInput = withUnistyles(BottomSheetTextInput, (theme) =
 export const AdaptiveTextInput = forwardRef<TextInput, AdaptiveTextInputProps>(
   function AdaptiveTextInputInner(props, ref) {
     const isMobile = useIsCompactFormFactor();
-    const { value: _value, initialValue, resetKey, defaultValue, style, ...inputProps } = props;
+    const {
+      value: _value,
+      initialValue,
+      resetKey,
+      defaultValue,
+      style,
+      multiline,
+      ...inputProps
+    } = props;
     // Leaf-owned color goes LAST so callers cannot override it with a stale
     // theme read. Outline color is theme-aware on web :focus-visible.
+    const inputMode =
+      inputProps.inputMode ?? (inputProps.keyboardType == null ? ("text" as const) : undefined);
+    // Web IME guard: see use-ime-composition-guard. Single-line only — multiline
+    // needs handleContentSizeChange to fire during composition to auto-grow.
+    const setRef = useImeCompositionGuard<TextInput>(ref, isWeb && !multiline);
     const textInputProps = {
       ...inputProps,
       defaultValue: initialValue ?? defaultValue,
+      inputMode,
       style: [styles.adaptiveInputOutline, style, styles.adaptiveInputText],
     };
 
@@ -316,12 +331,12 @@ export const AdaptiveTextInput = forwardRef<TextInput, AdaptiveTextInputProps>(
       return (
         <ThemedBottomSheetTextInput
           key={resetKey}
-          ref={ref as unknown as Ref<never>}
+          ref={setRef as unknown as Ref<never>}
           {...textInputProps}
         />
       );
     }
-    return <ThemedTextInput key={resetKey} ref={ref} {...textInputProps} />;
+    return <ThemedTextInput key={resetKey} ref={setRef} {...textInputProps} />;
   },
 );
 

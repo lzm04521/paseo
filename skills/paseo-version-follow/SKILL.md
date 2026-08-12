@@ -199,6 +199,28 @@ git push --force-with-lease=main:<旧 main sha> origin main
 2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `local-v*` + workflow_dispatch；windows-latest；`npx electron-builder --win nsis --x64 --publish never`；softprops/action-gh-release 上传 exe + latest.yml）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
 3. **删除上游 11 个 workflow**（`.github/workflows/` 的 ci/android-apk-release/deploy-_/desktop-_/docker/nix* 等）：fork 不跑上游 CI/部署。上游 tag glob 是 `v*`，我们的 `local-v\*`以`l` 开头不匹配，互不干扰。
 
+### E. Web IME 候选词中断修复（v0.3.1 工作线，2026-08-12 会话签入）
+
+web/Electron 端 RNW `TextInput`（含 `AdaptiveTextInput` → `FormTextInput` 链路 + 独立 `SettingsTextArea`）在 IME composition 期间，每次 `input` event 触发 React 19 change-event restore 路径（`restoreStateOfTarget` → `updateInput`/`updateTextarea`），无条件重写 `element.type` / `defaultValue`。**Chromium 对 input `type` 属性的任何写入（set 跟 removeAttribute 一样）都取消 composition** —— 反直觉，set 同值也打断。
+
+修法：`packages/app/src/hooks/use-ime-composition-guard.{web,native,d.ts}` —— target 挂 capture 阶段 `input` listener，`isComposing` 时 `stopImmediatePropagation`（不 preventDefault，IME 文本照常写 DOM），阻止 event 到 React root（onChange 委托在 root 冒泡）。compositionend 后 Chromium 补发的非 composing input event 放行，RNW handleChange 自然提交。
+
+接入点：
+
+- `AdaptiveTextInput`（`packages/app/src/components/adaptive-modal-sheet.tsx`）：`useImeCompositionGuard(ref, isWeb && !multiline)`，单行 input（含 project-edit-name）
+- `SettingsTextArea`（`packages/app/src/components/settings-textarea.tsx`）：独立 RN `TextInput` multiline + 受控，单独接入 `useImeCompositionGuard(ref, isWeb)`（host-page-file-search-defaults-input + project-settings 等）
+
+关键（跟进新版时复查）：
+
+- `.d.ts` 从 `.native` re-export，tsc 用它解析 import（参照 `use-audio-recorder.d.ts` 模式）；Metro 运行时选 `.web.ts`/`.native.ts`
+- React Compiler 已启用，`cleanupRef` 在 callback ref 里写（commit 期，非渲染期）
+- AdaptiveTextInput 保留 `inputMode="text"` 默认（方案 A 遗留：set 不解决问题但 DOM `type="text"` 语义正确，方案 B 下 type 只在挂载时设一次、不再被 restore 动）
+- AdaptiveTextInput 的 `!multiline` 限制保留（避免影响可能有 onContentSizeChange 自动长高的 textarea 调用点）；SettingsTextArea 无 onContentSizeChange 不受影响
+
+诊断陷阱：exe 的 web bundle 在 `packages/desktop/release/win-unpacked/resources/app-dist/_expo/static/js/web/index-*.js`，**不在 app.asar**（asar 只含 server/desktop 代码）。验证 exe 含改动要 grep app-dist。
+
+完整诊断链（含方案 A 证伪过程）见 `handoff/20260811-handoff-IME候选词中断诊断.md` + memory `paseo-web-ime-composition-break`。
+
 ## 实现踩坑（v0.3.0 补丁实测得出，跟进新版时复查）
 
 1. **sidebar 文件操作菜单有两处**：`sidebar-workspace-menu.tsx`（workspace 级）和 `sidebar-workspace-list.tsx`（project 级，`ProjectMenuItem` + `projectPath`）。加菜单项（如「在 VSCode 打开」）必须两处都加，否则左侧 project 菜单漏项——实测漏过一次（`12da0bb` 修复）。grep `OpenInFileManagerMenuItem` 可定位所有需同步的菜单位置。

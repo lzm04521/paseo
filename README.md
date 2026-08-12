@@ -162,6 +162,14 @@ npm run build:server
 npm run typecheck
 ```
 
+## Fork changes
+
+This fork (`lzm04521/paseo`) carries local patches on top of upstream `getpaseo/paseo`. Release tags follow `local-v*` (upstream uses `v*`); electron-updater targets this fork's Releases.
+
+- **Web IME composition fix** — on web/Electron, RNW `TextInput` cancelled IME candidate windows mid-keystroke: every `input` event triggered React 19's change-event restore, which rewrites `element.type` / `defaultValue`, and Chromium aborts an in-flight composition the moment those attributes are touched (set and remove alike). Fixed by `useImeCompositionGuard` (`packages/app/src/hooks/use-ime-composition-guard.{web,native,d.ts}`) — a capture-phase `input` listener that `stopImmediatePropagation`s while `isComposing`, keeping the event off React's root listener. Wired into `AdaptiveTextInput` (single-line inputs) and `SettingsTextArea` (multi-line). Full diagnosis in `handoff/20260811-handoff-IME候选词中断诊断.md`.
+
+See skill `paseo-version-follow` for the version-follow and patch-porting workflow.
+
 ## Related projects
 
 - [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — official distributed relay, written in Elixir
