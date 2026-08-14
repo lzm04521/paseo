@@ -22,6 +22,8 @@ description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工�
 
 `git rebase --onto` 会卡在"本地旧实现 vs 上游新实现"的假冲突——大版本动辄 1000+ 文件、+10 万行，冲突无法手解。改用 checkout 新 tag 起新分支重做。
 
+**merge 前提是 merge-base 存在**：上游 rebase/amend 式发布会让"官方 vX tag commit"与"fork 曾用的 base commit"内容相同但 SHA 不同（v0.3.1 实例：官方 `bfec7ac3a` vs fork base `84ad901a1`，`git diff` 全空但 `git merge-base local/旧 v新` 无输出）。此时直接 merge 会把整个上游历史当作新增。解法：`git diff <a> <b> --stat` 验证 tree 等价 → `git replace --graft <官方 tag commit> <fork base commit>` 缝合 → 正常 merge → 拍平后 `git replace -d <官方 tag commit>` 清理（graft 对象只在本地，不影响 push）。**注意 annotated tag 对象（`git rev-parse vX` 解出 tag 对象）不是 commit，graft 必须用 commit SHA（`git rev-parse vX^{commit}`）。**
+
 **按版本规模选策略**：
 
 - **小/中版本 + 改动正交** → **优先 `git merge local/旧 --no-commit --no-ff`** 快速合并，git 三方合并自动处理正交改动，零手解（v0.3.0→v0.3.1 实战：交集 14 文件全 auto-merge）。拍平成单 commit：**先** `git commit --no-verify -m tmp` 完成 merge（`git reset --soft` 在 merge 进行中报 `fatal: Cannot do soft reset in the middle of a merge`，必须先 commit），再 `git reset --soft v<新版本>` 清 MERGE_HEAD，重新 commit。详见 memory `paseo-local-build-workflow`「git merge 快速合并」段。
@@ -53,6 +55,8 @@ git fetch upstream refs/tags/v<新版本>:refs/tags/v<新版本> --depth 1
 git checkout -b local/v<新版本> v<新版本>
 git push -u origin local/v<新版本>   # 推到自己 fork（origin=lzm04521/paseo），早推早备份
 ```
+
+浅克隆图可能不连通：先 `git fetch upstream +refs/heads/main:refs/remotes/upstream/main --deepen=30` 加深，再查 `git merge-base local/v<旧版本> v<新版本>`；仍为空则按上文「核心思路」graft 缝合（deepen 用 `+` force refspec，浅克隆下普通 fetch 会 non-fast-forward reject）。
 
 ### 2. 盘点上一工作线的本地补丁（**以 git log 为唯一权威，skill 清单仅供参考**）
 
@@ -155,17 +159,17 @@ git push --force-with-lease=main:<旧 main sha> origin main
 
 ## 当前已知本地独有功能清单（**参考起点，非最终方案**——以 `git log local/*` + git diff 为唯一权威）
 
-> **已核对 local/v0.3.1（截至 2026-08-12，HEAD `de4b5f9d8`，多 commit 工作线）**：下表 A–F 功能项**全部保留至 v0.3.1，无丢弃**；清单已按工作线实际签入校正（`2bbb44f20` port + 后续 `7d641d0b7` Opus 重构 / `040b343d5`+`f5ceeec28` tab 保护 / `f081a3e48` gitignore 配置化）。
+> **已核对 local/v0.4.0（截至 2026-08-14，HEAD `c5c813d62` = port `ac23bc870` + 清理 commit，base = v0.4.0 `b44bb63cf`）**：A/C/D/E/F 全保留；A1 与上游 #3215（metadata **模型**选择页）正交共存于同一 schema；B1/B2 零冲突；B3 **部分丢弃**（copyRelativePath + reveal 上游 #3027 已实现，revealIn 走 desktopOpenTargets→editor-targets bridge，Opus 兼容自动生效；「在 VSCode 打开」保留并按上游新菜单结构重插）；F 适配上游抽 helper 模式。冲突 15 文件（9 语种 + 6 代码），详见 `handoff/20260814-handoff-port-to-v0.4.0.md`。
 > 跟进新版本时**仍必须按步骤 2 重新核对**（git log/diff 为准），**有疑问提出**，不照抄此清单。
 >
 > **2026-08-12 历史重写**：fork 全部签入身份统一为 `lzm04521 <lzm04521@126.com>`（filter-branch 改写原 `SIE-李兆满 <lizhaoman@chinasie.com>` 的 24 个提交，author+committer），四个分支 24 个提交 SHA 全变、内容逐字节不变，上游提交与上游 tag 未动。本 skill 引用的均为重写后新 SHA；旧 SHA（含 handoff 文档里的）仅本地 `backup/pre-rewrite-*` tag 可解析。
 
 ### A. 已 commit（v0.3.1 工作线；下列功能 v0.3.0 起有，v0.3.1 全保留）
 
-1. **metadata generation daemon 级默认值**（三层 fallback：project → daemon → code default）
-   - protocol `messages.ts`
-   - server `build-metadata-prompt.ts` / `daemon-config-store.ts` / `persisted-config.ts` / `bootstrap.ts` / `session.ts` / `structured-generation-providers.ts` / `git-metadata-generator.ts` / `worktree-branch-name-generator.ts`（含 test）
-   - app `screens/settings/host-page.tsx` 的 `MetadataGenerationDefaultsCard`
+1. **metadata generation daemon 级默认值**（三层 fallback：project → daemon → code default；管的是**指令文本**，与上游 #3215 的模型选择正交）
+   - protocol `messages.ts`（本地 instructions 四 key 与上游 `providers` 合并于同一 `MutableMetadataGenerationConfigSchema`）
+   - server `utils/build-metadata-prompt.ts`（**注意路径在 `src/utils/` 不在 `src/server/`**）/ `daemon-config-store.ts` / `persisted-config.ts` / `bootstrap.ts` / `session.ts` / `structured-generation-providers.ts` / `session/checkout/git-metadata-generator.ts` / `worktree-branch-name-generator.ts`（含 test）
+   - app `screens/settings/host-page.tsx` 的 `MetadataGenerationDefaultsCard`（与上游 `MetadataGenerationPage` 独立并存）
 2. **schedules + add-project flow 中文化**：`add-project-flow/options.ts` + `components/add-project-flow.tsx`、`components/schedules/*`（cadence-editor/schedule-form-sheet/schedule-row/schedules-table）、`screens/schedules-screen.tsx`、`screens/project-settings-screen.tsx`、`utils/project-config-form.ts`（+test）
 3. **全局禁止右键菜单**（desktop + web）：`desktop/src/main.ts`、`desktop/src/window/window-manager.ts`、`app/public/index.html`
 4. **i18n 9 语种 key 树**：ko 等缺翻译语种用英文 fallback
@@ -177,13 +181,12 @@ git push --force-with-lease=main:<旧 main sha> origin main
    - 文件 reveal 退化为打开父目录（`path.dirname`），因为 Opus 命令行无可靠单命令 reveal+select（见「实现踩坑」）
 2. **「在 VSCode 打开」菜单**：`workspace/open-in-editor/menu-item.tsx`（`OpenInVSCodeMenuItem`，含 `surface` 双模式）+ `use-open-in-vscode.ts`
    - **必须接入两处 sidebar 菜单**：`sidebar-workspace-menu.tsx`（workspace 级三点+右键）**和** `sidebar-workspace-list.tsx`（project 级 `ProjectMenuItem` + `projectPath`）。漏一处左侧 project 菜单就没该项。
-3. **右侧文件浏览器菜单增强**（`file-actions-menu.tsx` + `file-explorer-pane.tsx`）：
-   - 复制虚拟路径（相对 workspace root 的 `entry.path`，区别于「复制路径」=绝对路径）
-   - 在文件管理器中打开（文件→父目录，目录→自身）
-   - 在 VSCode 打开（文件/文件夹）
-   - **菜单顺序**：file manager 在 VSCode 之上（`file-actions-menu.tsx` push 顺序 + 两处 sidebar JSX 顺序）
+3. **右侧文件浏览器菜单增强**（`file-actions-menu.tsx` + `file-explorer-pane.tsx`；**v0.4.0 起部分由上游实现，见下**）：
+   - ~~复制虚拟路径~~ / ~~在文件管理器中打开~~：**v0.4.0 上游 #3027 已实现**（`copyRelativePath` + `revealIn {{target}}`，后者走 `desktopOpenTargets.find(kind==="file-manager")` → editor-targets bridge——**我们 Opus 合并进 file-manager target 的逻辑自动生效，无需本地代码**）
+   - **在 VSCode 打开（文件/文件夹）**：本地独有保留。v0.4.0 上游重写了菜单结构（props 链四层：`renderTreeRow` → `TreeRowDispatcher` → `TreeRowItem` → `FileActionsContextMenuContent`），重插点：menu 加 `onOpenInVSCode` prop + spec（排 `reveal` 之后）+ deps；pane 每层加 `onOpenInVSCodeEntry` prop、`TreeRowItem` 加 `handleOpenInVSCode`、主组件 `useOpenInVSCode()` + `handleOpenInVSCodeEntry`（目录→自身作 workspace root，文件→workspace root + filePath）+ renderTreeRow deps
+   - 上游重写区冲突取 `--ours`（上游版）后手工重插，**不要**保留旧版文件布局
 4. **@ 文件选择 gitignore 例外（v0.3.1 已配置化，commit `f081a3e48`）**：`server/utils/directory-suggestions.ts` 默认列表 `DEFAULT_GIT_IGNORE_PATH_OVERRIDES = ["doc","docs","handoff"]`（原 `GIT_IGNORE_PATH_OVERRIDES` 改名）——这三个顶层目录即使被 .gitignore 排除，@ 提及文件时仍可见（仅顶层，嵌套同名不绕过）。**现已 daemon 全局可配置**：protocol `MutableFileSearchConfigSchema`（`fileSearch.gitIgnoreOverrides`，`packages/protocol/src/messages.ts`）+ daemon 接入（`packages/server/src/server/session.ts handleDirectorySuggestionsRequest` 读 `daemonConfigStore.get().fileSearch?.gitIgnoreOverrides` 注入 `searchDirectoryEntries` 的 `gitIgnorePathOverrides` option）+ 设置页 UI `FileSearchDefaultsCard`（`packages/app/src/screens/settings/host-page.tsx`，Host → Agents → "File search overrides"，textarea 每行一个目录名）+ 9 语种 i18n `settings.host.fileSearch.defaults.*`。**语义**：字段缺省→内置默认；非空数组→全量替换默认；`[]`→关闭所有豁免，完全信 gitignore。未做（留待后续）：project 级覆盖（`paseo.json`）+ 三层 fallback（project > daemon > code default，照搬 `build-metadata-prompt.ts:59-70`）。
-5. **i18n**：9 语种补 `workspace.fileActions.openInFileManagerFailed`（右侧 file manager 失败 toast）
+5. **i18n**：~~9 语种补 `workspace.fileActions.openInFileManagerFailed`~~（v0.4.0 起该 key 已删，reveal 失败用上游 `fileExplorer.errors.revealFailed`）；保留 `openInVSCode`/`openInVSCodeFailed` 9 语种 key
 
 ### C. workspace tab 保护（v0.3.1 工作线，commit `f5ceeec28`）
 
@@ -249,6 +252,11 @@ Claude 图片降级（给 Claude 的图片附件降级为 `图片：<路径>` �
 5. **主进程 editor-targets 检测可独立验证**：`listAvailableEditorTargets` 不依赖 electron API（只 `isInstalled` 用 `resolveCommand`/`hasMacApplication`，`describe` 用 `loadIcon`）。写临时 tsx 脚本 mock runtime（`platform`/`env`/`pathExists`/`resolveCommand` 复制 `resolveExecutable`，`loadIcon` 返回 symbol）即可离线跑出 win32 实际检测到的 vscode/opus/explorer，无需启动 electron。
 6. **release-local workflow 必须在 tag commit 上**（v0.3.1 实测）：GitHub 对 tag push 触发时查的是 **tag commit 上的 workflow 文件**，只放 main（默认分支注册）不够——tag 打在 local/v{version} 的 commit，该 commit 必须含 release-local.yml 才触发。所以 workflow 文件随 fork 运维补丁进每个 local/v{version} 分支（main 也留一份注册）。
 7. **CI bash 步骤调本地 CLI 要用 `npx`**（v0.3.1 实测）：GitHub Actions 的 bash 步骤不把 `node_modules/.bin` 加 PATH（不像本地 `build-local.sh` 前置 PATH）。`electron-builder` 直接调报 `command not found`（exit 127）；`npx electron-builder` 能找本地依赖。`npm run xxx` 自带 PATH 注入不受影响。
+8. **i18n 批量解冲突后查重复 key**（v0.4.0 实测）：ko 等英文 fallback 语种的 theirs 侧带旧 key（如 `copyRelativePath`），上游若同期新增同名 key 的真翻译 → 重复 key TS1117（typecheck 才报，i18n 测试不报）。merge 解完 i18n 后 `grep -c` 每语种重点 key 或直接靠 typecheck 抓。
+9. **merge 残留行会爆 complexity lint**（v0.4.0 实测）：上游把 `??` 链抽成 `resolveXxx(persisted)` helper 降 `resolveStaticLoadConfigSettings` 复杂度；merge 两边全留（独立 `terminalProfiles` 行 + 我们 `claudeImageDowngrade` 的 `??`）→ complexity 22>20 爆 `eslint(complexity)`。修法照上游模式：删 helper 已覆盖的冗余行 + 本地字段也抽 helper（`config.ts` 的 `resolveClaudeImageDowngrade`）。**上游有抽 helper 模式的文件，本地新增字段一律跟该模式，不写裸 `??` 行。**
+10. **server 测试 `undefined._zod` = protocol dist 陈旧**（v0.4.0 实测）：checkout 新 tag 后跑 server 测试，`z.array(AgentProfileSchema)` 类报 `Cannot read properties of undefined (reading '_zod')`——import 的 protocol dist 里没有新导出。先 `npm run build:server` 重建 declarations 再重测，不要改业务代码。
+11. **bash cwd 跨调用漂移**：连续 Bash 调用的 cwd 会延续（曾停在 `packages/app` 导致 `cd packages/app` 失败短路、后续命令在错误目录跑）。多步命令用绝对路径 `/d/GitHub/paseo.me` 起手，或每条命令自带 `cd` 并校验。
+12. **tag push 可能被 auto classifier 拦**（v0.4.0 实测）：`git push origin local-v*` 触发发版，Stage 2 classifier 瞬时故障会连续拦截（分支 push 正常）。重试数分钟内可过；用户明确授权后继续重试即可。
 
 ## 不适用本项目（避免误触发）
 
