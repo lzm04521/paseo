@@ -437,7 +437,6 @@ export const ko = {
         cancel: "취소",
         failed: "변경 사항을 버리지 못했습니다",
       },
-      copyRelativePath: "Copy relative path",
       openInVSCode: "Open in VS Code",
       openInVSCodeFailed: "Couldn't open VS Code",
     },

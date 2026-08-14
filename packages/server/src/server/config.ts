@@ -19,6 +19,7 @@ import type {
 } from "./agent/provider-launch-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import { mergeHostnames, parseHostnamesEnv, type HostnamesConfig } from "./hostnames.js";
@@ -438,6 +439,12 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
+function resolveClaudeImageDowngrade(
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): MutableDaemonConfig["claudeImageDowngrade"] {
+  return persisted.daemon?.claudeImageDowngrade ?? "off";
+}
+
 /**
  * Both profile lists stay `undefined` when absent rather than defaulting to an
  * empty array: for terminal profiles that is what selects the built-in
@@ -463,8 +470,7 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     ...resolveProfileLists(persisted),
-    claudeImageDowngrade: persisted.daemon?.claudeImageDowngrade ?? "off",
-    terminalProfiles: persisted.daemon?.terminalProfiles,
+    claudeImageDowngrade: resolveClaudeImageDowngrade(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
       parseHostnamesEnv(env.PASEO_HOSTNAMES ?? env.PASEO_ALLOWED_HOSTS),
