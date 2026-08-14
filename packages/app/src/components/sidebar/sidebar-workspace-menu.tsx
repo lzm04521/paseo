@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { OpenInVSCodeMenuItem } from "@/workspace/open-in-editor/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
   workspaceServiceLabelKey,
@@ -182,6 +183,11 @@ function SidebarWorkspaceMenuItems({
         surface={surface}
         path={openInFileManagerPath}
         testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
+      />
+      <OpenInVSCodeMenuItem
+        surface={surface}
+        path={openInFileManagerPath}
+        testID={`sidebar-workspace-menu-open-vscode-${workspaceKey}`}
       />
       {onArchive ? (
         <WorkspaceMenuItem

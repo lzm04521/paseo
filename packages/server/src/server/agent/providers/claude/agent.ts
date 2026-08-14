@@ -79,6 +79,7 @@ import { claudeQuery, type ClaudeOptions, type ClaudeQueryFactory } from "./quer
 import { realClaudeRewindSdk, revertClaudeConversation, revertClaudeFiles } from "./rewind.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
 import { claudeProjectDirSync } from "./project-dir.js";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
 import {
   isProviderImageMarkdown,
@@ -396,6 +397,7 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   configDir?: string;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 interface ClaudeAgentSessionOptions {
@@ -408,6 +410,7 @@ interface ClaudeAgentSessionOptions {
   logger: Logger;
   queryFactory?: ClaudeQueryFactory;
   resolveBinary: () => Promise<string>;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 type ClaudeThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -1480,6 +1483,7 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly configDir?: string;
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
 
   constructor(options: ClaudeAgentClientOptions) {
     this.defaults = options.defaults;
@@ -1491,6 +1495,7 @@ export class ClaudeAgentClient implements AgentClient {
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.configDir = options.configDir;
+    this.getDaemonConfig = options.getDaemonConfig;
   }
 
   resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
@@ -1512,6 +1517,7 @@ export class ClaudeAgentClient implements AgentClient {
       logger: this.logger,
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -1540,6 +1546,7 @@ export class ClaudeAgentClient implements AgentClient {
       logger: this.logger,
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -2018,6 +2025,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
   private query: Query | null = null;
   private childProcess: ChildProcess | null = null;
   private input: AsyncMessageInput<SDKUserMessage> | null = null;
@@ -2085,6 +2093,7 @@ class ClaudeAgentSession implements AgentSession {
     this.logger = options.logger.child({ agentId: this.agentId });
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary;
+    this.getDaemonConfig = options.getDaemonConfig;
     this.contextUsage = new ClaudeContextUsageState(
       findClaudeModel(this.config.model)?.contextWindowMaxTokens,
     );
@@ -3208,6 +3217,22 @@ class ClaudeAgentSession implements AgentSession {
     return result;
   }
 
+  private shouldDowngradeImage(): boolean {
+    return this.getDaemonConfig?.().claudeImageDowngrade === "on";
+  }
+
+  private saveImageToTemp(chunk: { data: string; mimeType: string }): string {
+    try {
+      return materializeProviderImage({ data: chunk.data, mimeType: chunk.mimeType }).path;
+    } catch (error) {
+      this.logger.warn(
+        { err: error },
+        "Failed to materialize image for downgrade; sending placeholder path",
+      );
+      return "<保存失败>";
+    }
+  }
+
   private toSdkUserMessage(prompt: AgentPromptInput): SDKUserMessage {
     const content: Array<
       | { type: "text"; text: string }
@@ -3220,12 +3245,19 @@ class ClaudeAgentSession implements AgentSession {
           };
         }
     > = [];
+    const downgrade = this.shouldDowngradeImage();
     if (Array.isArray(prompt)) {
       for (const chunk of prompt) {
         if (chunk.type === "text") {
           content.push({ type: "text", text: chunk.text });
         } else if (chunk.type === "image") {
-          if (isImageMimeType(chunk.mimeType)) {
+          if (!isImageMimeType(chunk.mimeType)) {
+            continue;
+          }
+          if (downgrade) {
+            const absPath = this.saveImageToTemp(chunk);
+            content.push({ type: "text", text: `图片：${absPath}` });
+          } else {
             content.push({
               type: "image",
               source: {

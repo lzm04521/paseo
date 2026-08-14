@@ -1,6 +1,4 @@
-import type { TranslationResources } from "./en";
-
-export const ko: TranslationResources = {
+export const ko = {
   common: {
     back: "뒤로",
     loading: "불러오는 중...",
@@ -439,6 +437,9 @@ export const ko: TranslationResources = {
         cancel: "취소",
         failed: "변경 사항을 버리지 못했습니다",
       },
+      copyRelativePath: "Copy relative path",
+      openInVSCode: "Open in VS Code",
+      openInVSCodeFailed: "Couldn't open VS Code",
     },
     fileExplorer: {
       sort: {
@@ -617,6 +618,7 @@ export const ko: TranslationResources = {
         reloadedAgent: "에이전트를 다시 로드했습니다",
         failedToReloadAgent: "에이전트를 다시 로드하지 못했습니다",
         failedToCloseAgent: "에이전트를 닫지 못했습니다",
+        cannotCloseLastAgent: "마지막 에이전트 대화를 닫을 수 없습니다",
       },
       confirmations: {
         close: "닫기",
@@ -1006,6 +1008,7 @@ export const ko: TranslationResources = {
       home: "홈",
       settings: "설정",
       closeSidebar: "사이드바 닫기",
+      openCommandCenter: "Open command center",
     },
     help: {
       trigger: "도움말 및 지원",
@@ -1021,6 +1024,7 @@ export const ko: TranslationResources = {
     sections: {
       sessions: "기록",
       schedules: "일정",
+      workspaces: "Workspaces",
     },
     worktreeSetup: {
       title: "워크트리 스크립트 설정",
@@ -1038,6 +1042,8 @@ export const ko: TranslationResources = {
         openFolderFailed: "폴더를 열 수 없습니다.",
         remove: "프로젝트 제거",
         removing: "제거하는 중...",
+        openInVSCode: "Open in VS Code",
+        openInVSCodeFailed: "Couldn't open VS Code",
       },
       confirmations: {
         removeTitle: "프로젝트를 제거할까요?",
@@ -1078,6 +1084,7 @@ export const ko: TranslationResources = {
         hideFromSidebar: "사이드바에서 숨기기",
         archiving: "보관하는 중...",
         hiding: "숨기는 중...",
+        markAsRead: "Mark as read",
       },
       confirmations: {
         hideTitle: "워크스페이스를 숨길까요?",
@@ -1098,7 +1105,19 @@ export const ko: TranslationResources = {
         hostDisconnected: "호스트가 연결되어 있지 않습니다",
         hideFailed: "워크스페이스를 숨기지 못했습니다",
         archiveFailed: "워크스페이스를 보관하지 못했습니다.",
+        markAsReadFailed: "Failed to mark workspace as read",
       },
+    },
+    displayPreferences: {
+      accessibilityLabel: "Display preferences",
+      groupBy: "Group by",
+      groupByProject: "Project",
+      groupByStatus: "Status",
+      filter: "Filter",
+      allHosts: "All hosts",
+      workspaceTitle: "Workspace title",
+      title: "Title",
+      branchName: "Branch name",
     },
   },
   newWorkspace: {
@@ -2185,6 +2204,25 @@ export const ko: TranslationResources = {
           save: "저장",
           saving: "저장하는 중...",
         },
+        imageDowngrade: {
+          title: "Claude 이미지 다운그레이드",
+          hint: "텍스트 전용 Claude 모델의 경우 프롬프트 이미지를 base64 대신 파일 경로로 보냅니다",
+          accessibilityLabel: "Claude 이미지 다운그레이드",
+          errorTitle: "Claude 이미지 다운그레이드를 업데이트할 수 없습니다",
+        },
+      },
+      fileSearch: {
+        defaults: {
+          title: "파일 검색 재정의",
+          hint: "gitignore에 무시되더라도 @-멘션에서 선택 가능한 상태로 유지되는 최상위 디렉터리. 한 줄에 하나씩. 기본값: doc, docs, handoff. 빈 목록을 저장하면 우회를 비활성화합니다.",
+          edit: "편집",
+          sheetTitle: "파일 검색 재정의",
+          accessibilityLabel: "파일 검색 재정의",
+          placeholder: "doc\ndocs\nhandoff",
+          reset: "재설정",
+          save: "저장",
+          saving: "저장 중...",
+        },
       },
       agents: {
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
@@ -2325,6 +2363,17 @@ export const ko: TranslationResources = {
           localErrorMessage: "localhost 연결을 제거할 수 없습니다",
         },
       },
+      metadata: {
+        defaults: {
+          title: "Metadata generation defaults",
+          hint: "Global default prompts for auto-generated titles, branch names, commit messages, and PRs. Per-project paseo.json overrides these.",
+          edit: "Edit",
+          sheetTitle: "Metadata generation defaults",
+          reset: "Reset",
+          save: "Save",
+          saving: "Saving...",
+        },
+      },
     },
     providers: {
       title: "프로바이더",
@@ -2463,6 +2512,9 @@ export const ko: TranslationResources = {
         commitMessagePlaceholder: "스코프와 함께 Conventional Commits를 사용하세요",
         pullRequest: "풀 리퀘스트",
         pullRequestPlaceholder: "한 문단 요약으로 시작하고 테스트 계획 섹션을 포함하세요",
+        titleGeneration: "Title generation",
+        titleGenerationPlaceholder:
+          "Generate concise, clear task titles and follow the project's terminology and language conventions",
       },
       writeFailures: {
         staleTitle: "디스크에서 구성이 변경되었습니다",
@@ -2480,4 +2532,189 @@ export const ko: TranslationResources = {
       },
     },
   },
-};
+  schedules: {
+    title: "Schedules",
+    filters: {
+      active: "Active",
+      ended: "Ended",
+    },
+    empty: {
+      noActiveTitle: "No active schedules",
+      noActiveDescription: "Schedules run agents on a cadence.",
+      noEndedTitle: "No ended schedules",
+      seeDocs: "See docs",
+    },
+    errors: {
+      unableToLoad: "Unable to load schedules",
+      hostLoadFailed: "{{serverName}}: Could not load schedules",
+      cronRequired: "Choose a cron cadence before creating this schedule",
+    },
+    actions: {
+      new: "New schedule",
+      retry: "Try again",
+      cancel: "Cancel",
+      saveChanges: "Save changes",
+      create: "Create schedule",
+      delete: "Delete",
+      pauseSchedule: "Pause schedule",
+      resumeSchedule: "Resume schedule",
+      runNow: "Run now",
+      editSchedule: "Edit schedule",
+      editHeartbeat: "Edit heartbeat",
+      deleteSchedule: "Delete schedule",
+      deleteHeartbeat: "Delete heartbeat",
+    },
+    pending: {
+      pausing: "Pausing...",
+      resuming: "Resuming...",
+      starting: "Starting...",
+      deleting: "Deleting...",
+    },
+    statuses: {
+      active: "Active",
+      paused: "Paused",
+      expired: "Expired",
+      finished: "Finished",
+      targetGone: "Target gone",
+    },
+    product: {
+      schedule: "Schedule",
+      heartbeat: "Heartbeat",
+    },
+    meta: {
+      created: "Created {{time}}",
+      lastRun: "Last run {{time}}",
+      neverRun: "Never run",
+      nextRun: "Next run {{time}}",
+    },
+    accessibility: {
+      editScheduleTitle: "Edit schedule {{title}}",
+      editHeartbeatTitle: "Edit heartbeat {{title}}",
+      scheduleActions: "Schedule actions",
+      heartbeatActions: "Heartbeat actions",
+    },
+    deleteConfirm: {
+      scheduleTitle: "Delete schedule",
+      heartbeatTitle: "Delete heartbeat",
+      message: 'Delete "{{title}}"? This cannot be undone.',
+    },
+    cadence: {
+      label: "Cadence",
+      select: "Select cadence",
+      noneFound: "No cadences found",
+      cronA11y: "Cron expression",
+    },
+    form: {
+      newTitle: "New schedule",
+      editScheduleTitle: "Edit schedule",
+      editHeartbeatTitle: "Edit heartbeat",
+      agentUnavailable: "Agent unavailable",
+      untitledAgent: "Untitled agent",
+      fields: {
+        name: "Name",
+        nameA11y: "Schedule name",
+        namePlaceholder: "Optional",
+        prompt: "Prompt",
+        promptA11y: "Prompt",
+        promptPlaceholder: "What should the agent do each run?",
+        maxRuns: "Max runs",
+        maxRunsA11y: "Max runs",
+        maxRunsPlaceholder: "Unlimited",
+        target: "Target",
+        host: "Host",
+        selectHost: "Select host",
+        noHosts: "No hosts found",
+        hostTitle: "Host",
+        project: "Project",
+        selectProject: "Select project",
+        noProjects: "No projects found",
+        chooseHostFirst: "Choose a host first.",
+        searchProjects: "Search projects...",
+        projectTitle: "Select project",
+        model: "Model",
+        thinking: "Thinking",
+        selectThinking: "Select thinking",
+        noThinking: "No thinking options found",
+        thinkingTitle: "Select thinking",
+        mode: "Mode",
+        modeDefault: "Default mode",
+        noModes: "No modes found",
+        noModesForModel: "No modes are available for this model.",
+        modeTitle: "Select mode",
+        archiveOnFinish: "Archive on finish",
+        archiveOnFinishA11y: "Archive on finish",
+        isolationLabel: "Isolation",
+        isolationLocal: "Local",
+        isolationWorktree: "Worktree",
+        isolationSelect: "Select isolation",
+        isolationNone: "No isolation options found",
+        isolationTitle: "Isolation",
+      },
+    },
+  },
+  addProjectFlow: {
+    titles: {
+      host: "Choose host",
+      method: "Add project",
+      directorySearch: "Search for directory",
+      githubSearch: "Clone from GitHub",
+      githubLocation: "Choose destination",
+      newDirectoryParent: "Choose parent directory",
+      newDirectoryName: "Name directory",
+    },
+    placeholders: {
+      host: "Search hosts...",
+      method: "Search methods...",
+      directorySearch: "Search directories or enter a path...",
+      githubSearch: "Search or enter a GitHub repository...",
+      parentDirectory: "Search parent directories or enter a path...",
+      newDirectoryName: "Directory name",
+    },
+    methods: {
+      directorySearch: {
+        label: "Search for directory",
+        description: "Find a directory on {{host}}",
+      },
+      browse: {
+        label: "Browse",
+        description: "Choose or create a directory in Finder",
+      },
+      github: {
+        label: "Clone from GitHub",
+        description: "Search projects available to your GitHub account",
+        manualDescription: "Enter a GitHub URL or owner/repo",
+        unsupported: "Update this host to clone GitHub repositories",
+      },
+      newDirectory: {
+        label: "New directory",
+        description: "Create an empty directory on {{host}}",
+        unsupported: "Update this host to create directories",
+      },
+    },
+    progress: {
+      cloning: "Cloning project...",
+      creatingDirectory: "Creating directory...",
+      addingProject: "Adding project...",
+    },
+    empty: {
+      noHosts: "No connected hosts",
+      githubManual: "Enter a GitHub URL or owner/repo",
+      noMatchingOptions: "No matching options",
+      hostUnsupported: "Update the host to use Add Project.",
+    },
+    errors: {
+      directorySearchFailed: "Unable to search directories",
+      githubSearchFailed: "Unable to search GitHub repositories",
+      githubUnavailable: "GitHub search is unavailable",
+    },
+    addHost: {
+      title: "Add host",
+      subtitle: "No connected hosts",
+    },
+    openPath: "Open this path",
+    cloneUrl: "Clone this repository URL",
+    cloneVia: "Clone owner/repo via {{protocol}}",
+    alreadyExists: "Already exists",
+    parentDirectory: "Parent directory: {{parent}}",
+  },
+} as const;

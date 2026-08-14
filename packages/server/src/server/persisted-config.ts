@@ -165,9 +165,19 @@ const StructuredGenerationProviderConfigSchema = z
   })
   .strict();
 
+const AgentMetadataGenerationEntrySchema = z
+  .object({
+    instructions: z.string().min(1),
+  })
+  .strict();
+
 const AgentMetadataGenerationSchema = z
   .object({
     providers: z.array(StructuredGenerationProviderConfigSchema).optional(),
+    title: AgentMetadataGenerationEntrySchema.optional(),
+    branchName: AgentMetadataGenerationEntrySchema.optional(),
+    commitMessage: AgentMetadataGenerationEntrySchema.optional(),
+    pullRequest: AgentMetadataGenerationEntrySchema.optional(),
   })
   .strict();
 
@@ -258,6 +268,7 @@ export const PersistedConfigSchema = z
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
+        claudeImageDowngrade: z.enum(["off", "on"]).optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z

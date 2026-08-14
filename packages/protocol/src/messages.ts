@@ -116,9 +116,23 @@ const MutableStructuredGenerationProviderSchema = z
   })
   .passthrough();
 
+const MutableMetadataGenerationEntrySchema = z
+  .object({
+    instructions: z.string().optional(),
+  })
+  .passthrough();
+
+// daemon-level metadataGeneration instructions are the global fallback used when
+// a project's paseo.json does not override the same key; project-level wins. See
+// buildMetadataPrompt's three-tier fallback (project override → daemon default →
+// code default). Mirrors the per-key shape of paseo.json's metadataGeneration.
 const MutableMetadataGenerationConfigSchema = z
   .object({
     providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+    title: MutableMetadataGenerationEntrySchema.optional(),
+    branchName: MutableMetadataGenerationEntrySchema.optional(),
+    commitMessage: MutableMetadataGenerationEntrySchema.optional(),
+    pullRequest: MutableMetadataGenerationEntrySchema.optional(),
   })
   .passthrough();
 
@@ -173,6 +187,11 @@ const MutableRelayConfigSchema = z
     enabled: z.boolean(),
   })
   .passthrough();
+const MutableFileSearchConfigSchema = z
+  .object({
+    gitIgnoreOverrides: z.array(z.string().trim().min(1)).optional(),
+  })
+  .passthrough();
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -188,8 +207,10 @@ export const MutableDaemonConfigSchema = z
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
+    claudeImageDowngrade: z.enum(["off", "on"]).default("off"),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
   })
   .passthrough();
 
@@ -206,8 +227,10 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
+    claudeImageDowngrade: z.enum(["off", "on"]).optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
   })
   .partial()
   .passthrough();

@@ -1,7 +1,9 @@
 import type { StyleProp, TextStyle } from "react-native";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { isWeb } from "@/constants/platform";
+import { useImeCompositionGuard } from "@/hooks/use-ime-composition-guard";
 import { settingsStyles } from "@/styles/settings";
 
 interface SettingsTextAreaProps {
@@ -23,9 +25,16 @@ export function SettingsTextArea({
 }: SettingsTextAreaProps) {
   const { theme } = useUnistyles();
   const inputStyle = useMemo(() => [styles.input, style], [style]);
+  const ref = useRef<TextInput>(null);
+  // Web IME guard: textarea 的打断是 ReactDOM updateTextarea 写 defaultValue
+  // 文本子节点，机制跟 input 同源（拦 input event 阻止 React restore）。本组件
+  // 无 onContentSizeChange，不会自动长高，拦 input event 无副作用。
+  // 见 use-ime-composition-guard。
+  const setRef = useImeCompositionGuard<TextInput>(ref, isWeb);
 
   return (
     <TextInput
+      ref={setRef}
       testID={testID}
       accessibilityLabel={accessibilityLabel}
       multiline
