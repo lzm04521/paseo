@@ -106,8 +106,12 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
     // Electron's built-in handler would install an older download without checking
     // whether a newer release has superseded it.
     autoUpdater.autoInstallOnAppQuit = false;
-    autoUpdater.allowPrerelease = input.releaseChannel === "beta";
-    autoUpdater.channel = input.releaseChannel === "beta" ? "beta" : "latest";
+    // Fork builds are versioned `<upstream>+patch-local.N`, a semver prerelease,
+    // so electron-builder publishes the update manifest as local.yml and every
+    // fork build counts as a prerelease. Pin the channel; the app-side
+    // stable/beta setting only selects upstream release channels.
+    autoUpdater.allowPrerelease = true;
+    autoUpdater.channel = "local";
     autoUpdater.allowDowngrade = false;
     autoUpdater.isUserWithinRollout = async (info) => {
       try {

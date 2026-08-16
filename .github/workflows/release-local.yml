@@ -1,17 +1,19 @@
 name: release-local
 
 # 自用发布：打 local-v* tag 自动构建 Windows x64 exe 并挂到 fork Release。
-# electron-updater 运行时查本仓库 Release 的 latest.yml 做更新检查
-# （electron-builder.yml 的 publish 已指向 lzm04521/paseo）。
+# fork 版本号 = 上游版本 patch+1 + -local.N（prerelease），electron-builder 产物
+# 是 local.yml；auto-updater.ts 的 channel 固定 "local" 查 local.yml。
+# 同时复制一份 latest.yml：0.4.0 及更早的旧客户端仍按 latest channel 检查更新。
+# electron-builder.yml 的 publish 已指向 lzm04521/paseo。
 
 on:
   push:
     tags:
-      - 'local-v*'
+      - "local-v*"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 0.3.1，对应 local/v<version> 分支）'
+        description: "版本号（如 0.3.1，对应 local/v<version> 分支）"
         required: true
 
 permissions:
@@ -33,7 +35,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install deps
         run: npm install
@@ -58,12 +60,17 @@ jobs:
         run: npx electron-builder --config electron-builder.yml --win nsis --x64 --publish never
         working-directory: packages/desktop
 
-      - name: Upload exe + latest.yml to Release
+      - name: 复制 local.yml 为 latest.yml（旧客户端兼容）
+        # prerelease 版本(-local.N)的产物是 local.yml；旧客户端仍查 latest.yml。
+        run: cp packages/desktop/release/local.yml packages/desktop/release/latest.yml
+
+      - name: Upload exe + update yml to Release
         uses: softprops/action-gh-release@v2
         with:
-          # latest.yml 是 electron-updater 检查更新必需
+          # local.yml / latest.yml 都是 electron-updater 检查更新必需（新/旧客户端各查一份）
           files: |
             packages/desktop/release/Paseo-Setup-*-x64.exe
+            packages/desktop/release/local.yml
             packages/desktop/release/latest.yml
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('local-v{0}', inputs.version) || github.ref_name }}
           name: ${{ github.event_name == 'workflow_dispatch' && format('local-v{0}', inputs.version) || github.ref_name }}
