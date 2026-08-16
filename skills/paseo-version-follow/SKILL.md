@@ -1,6 +1,6 @@
 ---
 name: paseo-version-follow
-description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工作流）。官方发新 tag 时，**合并前先审视上一版本本地签入记录逐个核对**（上游已实现→丢弃 / 本地独有→保留）——skill 清单仅供参考、以 git log 为唯一权威；优先 git merge 快速合并（小/中版本、改动正交），大版本用策略 B 选择性重做；过验证门禁后 push 到 fork（origin=lzm04521/paseo）+ 更新 main + bump fork 版本（上游版本 patch+1 + `-local.N`）+ 打 local-v* tag 触发 CI 自动构建发 Release（win x64 exe + local.yml/latest.yml，electron-updater 查 fork release 自动更新）+ 输出 handoff。触发词：paseo 发版、paseo 升级、paseo 版本跟进、paseo 新版本、跟进上游、port local patches、选择性重做、策略 B、rebase onto、官方 tag、version follow、发版跟进。
+description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工作流）。官方发新 tag 时，**合并前先审视上一版本本地签入记录逐个核对**（上游已实现→丢弃 / 本地独有→保留）——skill 清单仅供参考、以 git log 为唯一权威；优先 git merge 快速合并（小/中版本、改动正交），大版本用策略 B 选择性重做；过验证门禁后 push 到 fork（origin=lzm04521/paseo）+ 更新 main + bump fork 版本（上游版本 + `-local.N`）+ 打 local-v* tag 触发 CI 自动构建发 Release（win x64 exe + local.yml/latest.yml，electron-updater 查 fork release 自动更新）+ 输出 handoff。触发词：paseo 发版、paseo 升级、paseo 版本跟进、paseo 新版本、跟进上游、port local patches、选择性重做、策略 B、rebase onto、官方 tag、version follow、发版跟进。
 ---
 
 # Paseo 版本跟进（fork 自用，双策略：merge 优先 / 策略 B 兜底）
@@ -18,20 +18,21 @@ description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工�
 
 拓扑见 memory `paseo-fork-git-topology`，CI 发版见 `paseo-fork-ci-release`。官方发新版本 tag 时，移植本地补丁到新版本，验证后 bump fork 版本、打 `local-v*` tag 让 CI 发版。
 
-## fork 版本号方案（自 0.4.1-local.1 起）
+## fork 版本号方案（自 0.4.0-local.2 起，基数=上游版本）
 
-fork 构建版本号 = **上游版本 patch+1 + `-local.N`**（N 从 1 重新计），写在根 `package.json` 的 `version`；分支命名（`local/v<上游版本>`）不受影响。
+fork 构建版本号 = **上游版本 + `-local.N`**，写在根 `package.json` 的 `version`；分支命名（`local/v<上游版本>`）不受影响。
 
-- 基于上游 v0.4.0 迭代：`0.4.1-local.1` → `0.4.1-local.2` → …
-- 上游发 v0.5.0 后跟进：下一版 `0.5.1-local.1`（patch+1 保证恒大于历史所有 fork 版本，updater 升级链不断；上游永远不会发带 `-local` 的版本，不撞车）
-- **不要用 `<上游版本>-exp.N`**：prerelease 排序低于正式版（`0.4.0-exp1 < 0.4.0`，已装 0.4.0 永远升不上去，反而会被旧 latest.yml "升"回 0.4.0 丢掉 fork 增强）；且 electron-builder 按 prerelease 首标识符推导 channel，`exp1`/`exp2` 每版产物 yml 文件名都不同，updater 固定查的 channel 文件永远对不上
+- 基于上游 v0.4.0 迭代：`0.4.0-local.2` → `0.4.0-local.3` → …
+- 上游发 v0.5.0 后跟进：下一版 `0.5.0-local.1`——跨版本比较 patch 先行（`0.4.0-local.N < 0.5.0-local.1`），升级链无缝；fork 只查 fork release，上游官方版本号不进同一条链，不撞车
+- **0.4.x 系两个历史特例**：`0.4.1-local.1`（2026-08-16 首发）是方案切换的过渡版（基于 v0.4.0 但 patch+1），它把 `0.4.1-local.1` 这个号**用掉了——上游真发 v0.4.1 后，fork 首版从 `0.4.1-local.2` 起**；且它排序高于 `0.4.0-local.2`，已装它的机器收不到 l2+ 的自动更新，需手动装一次新版，此后恢复自动
+- 排序原理：prerelease 恒低于同号 release——**永远不要从"纯上游版本号"滑向"同号 `-local.1`"**（fork 历史上唯一这种情形 0.4.0→0.4.0-local.1 已被过渡版接走）。也**不要用 `-exp.N`**：首标识符不固定会让 electron-builder 每版 yml 文件名漂移（`exp1.yml`/`exp2.yml`），updater 固定查的 channel 文件永远对不上
 - `-local` 标识符固定、channel 写死 `"local"`（运维补丁 D4）。**yml 产物实测**（`--publish never`，首发踩坑）：electron-builder 不注入 prerelease channel，产物仍是 `latest.yml`，workflow 把它复制一份为 `local.yml`——fork 客户端（channel=local）查 `local.yml`，≤0.4.0 旧客户端（latest channel）查 `latest.yml`，两端同内容。**Release 保持非 prerelease 标记**（softprops 默认），否则 GitHub `releases/latest` API 不返回，两端全断
 - **expo 侧配套**（0.4.1-local.1 首发实测踩坑）：`expo export --platform web` 也执行 `app.config.js` 顶层的 `getNativeReleaseVersion(pkg.version)`（只构建 web 也逃不掉），上游正则只认 `-beta.N` 会直接抛错炸 CI。fork 已把 `packages/app/native-release-version.js` 的正则扩展为 `(?:beta|local)\.(\d+)`——`local.N` 复用 beta 的 iOS build slot，单调性同构（`0.4.1-local.1`→4001001 < `0.4.1-local.2` < `0.5.1-local.1`）。上游 merge 时保留此改动。
 
 **bump 流程**（每次发版，功能 commit 之后独立成 commit）：
 
 ```bash
-# 1. 根 package.json 的 version 手改为 <上游版本 patch+1>-local.<N>
+# 1. 根 package.json 的 version 手改为 <上游版本>-local.<N>（N 在该上游版本内递增；见上方 0.4.x 特例）
 # 2. 同步 workspace：
 npm run version:sync-internal   # 同步 10 个 packages/*/package.json + server/cli 的 @getpaseo/* 精确依赖
 npm install                     # 刷 package-lock.json
@@ -227,7 +228,7 @@ git push --force-with-lease=main:<旧 main sha> origin main
 1. **electron-builder publish 改 fork**：`packages/desktop/electron-builder.yml` 的 `publish.owner` getpaseo → lzm04521（repo 仍是 paseo）。让 electron-updater 查 fork release 自动更新。
 2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `local-v*` + workflow_dispatch；windows-latest；`npx electron-builder --win nsis --x64 --publish never`；构建后 `cp release/latest.yml release/local.yml`——`--publish never` 下产物是 latest.yml，复制出 local.yml 给 fork channel；softprops/action-gh-release 上传 exe + 双 yml）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
 3. **删除上游 11 个 workflow**（`.github/workflows/` 的 ci/android-apk-release/deploy-_/desktop-_/docker/nix* 等）：fork 不跑上游 CI/部署。上游 tag glob 是 `v*`，我们的 `local-v\*`以`l` 开头不匹配，互不干扰。
-4. **`auto-updater.ts` channel 写死 fork 渠道**（0.4.1-local.1 起）：`packages/desktop/src/features/auto-updater.ts` 的 `configure()` 里 `allowPrerelease = true; channel = "local"`（上游原值按 releaseChannel 选 latest/beta）。fork 版本是 `-local.N` prerelease，electron-builder 产物是 `local.yml`，updater 必须查同 channel；app 内 stable/beta 渠道设置只属上游发版体系（其 rollout 准入逻辑照旧生效，无害）。上游 merge 时保留此改动；上游若重构 configure/channel，按"channel 写死 local"重新套。`auto-updater.test.ts` 的 `pins the updater to the fork channel` 断言防回退。
+4. **`auto-updater.ts` channel 写死 fork 渠道**（0.4.x 工作线起，随 `68106d503` 进）：`packages/desktop/src/features/auto-updater.ts` 的 `configure()` 里 `allowPrerelease = true; channel = "local"`（上游原值按 releaseChannel 选 latest/beta）。fork 版本是 `-local.N` prerelease，updater 必须查 `local.yml`（workflow 从 latest.yml 复制，见 D2）；app 内 stable/beta 渠道设置只属上游发版体系（其 rollout 准入逻辑照旧生效，无害）。上游 merge 时保留此改动；上游若重构 configure/channel，按"channel 写死 local"重新套。`auto-updater.test.ts` 的 `pins the updater to the fork channel` 断言防回退。
 
 ### E. Web IME 候选词中断修复（v0.3.1 工作线，2026-08-12 会话签入）
 
