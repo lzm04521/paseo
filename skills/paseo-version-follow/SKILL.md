@@ -24,7 +24,7 @@ fork 构建版本号 = **上游版本 + `-local.N`**，写在根 `package.json` 
 
 - 基于上游 v0.4.0 迭代：`0.4.0-local.2` → `0.4.0-local.3` → …
 - 上游发 v0.5.0 后跟进：下一版 `0.5.0-local.1`——跨版本比较 patch 先行（`0.4.0-local.N < 0.5.0-local.1`），升级链无缝；fork 只查 fork release，上游官方版本号不进同一条链，不撞车
-- **0.4.x 系两个历史特例**：`0.4.1-local.1`（2026-08-16 首发）是方案切换的过渡版（基于 v0.4.0 但 patch+1），它把 `0.4.1-local.1` 这个号**用掉了——上游真发 v0.4.1 后，fork 首版从 `0.4.1-local.2` 起**；且它排序高于 `0.4.0-local.2`，已装它的机器收不到 l2+ 的自动更新，需手动装一次新版，此后恢复自动
+- **0.4.x 系两个历史特例**：`0.4.1-local.1`（2026-08-16 首发）是方案切换的过渡版（基于 v0.4.0 但 patch+1），它把 `0.4.1-local.1` 这个号**用掉了——上游真发 v0.4.1 后，fork 首版从 `0.4.1-local.2` 起**；且它排序高于 `0.4.0-local.2`，已装它的机器收不到 l2+ 的自动更新，需手动装一次新版，此后恢复自动（该 Release 与 tag 已删，构建仅存 git 历史 bump commit `c5dc1a463`，需要时可重打 tag 重建）
 - 排序原理：prerelease 恒低于同号 release——**永远不要从"纯上游版本号"滑向"同号 `-local.1`"**（fork 历史上唯一这种情形 0.4.0→0.4.0-local.1 已被过渡版接走）。也**不要用 `-exp.N`**：首标识符不固定会让 electron-builder 每版 yml 文件名漂移（`exp1.yml`/`exp2.yml`），updater 固定查的 channel 文件永远对不上
 - `-local` 标识符固定、channel 写死 `"local"`（运维补丁 D4）。**yml 产物实测**（`--publish never`，首发踩坑）：electron-builder 不注入 prerelease channel，产物仍是 `latest.yml`，workflow 把它复制一份为 `local.yml`——fork 客户端（channel=local）查 `local.yml`，≤0.4.0 旧客户端（latest channel）查 `latest.yml`，两端同内容。**Release 保持非 prerelease 标记**（softprops 默认），否则 GitHub `releases/latest` API 不返回，两端全断
 - **expo 侧配套**（0.4.1-local.1 首发实测踩坑）：`expo export --platform web` 也执行 `app.config.js` 顶层的 `getNativeReleaseVersion(pkg.version)`（只构建 web 也逃不掉），上游正则只认 `-beta.N` 会直接抛错炸 CI。fork 已把 `packages/app/native-release-version.js` 的正则扩展为 `(?:beta|local)\.(\d+)`——`local.N` 复用 beta 的 iOS build slot，单调性同构（`0.4.1-local.1`→4001001 < `0.4.1-local.2` < `0.5.1-local.1`）。上游 merge 时保留此改动。
