@@ -26,6 +26,7 @@ fork 构建版本号 = **上游版本 patch+1 + `-local.N`**（N 从 1 重新计
 - 上游发 v0.5.0 后跟进：下一版 `0.5.1-local.1`（patch+1 保证恒大于历史所有 fork 版本，updater 升级链不断；上游永远不会发带 `-local` 的版本，不撞车）
 - **不要用 `<上游版本>-exp.N`**：prerelease 排序低于正式版（`0.4.0-exp1 < 0.4.0`，已装 0.4.0 永远升不上去，反而会被旧 latest.yml "升"回 0.4.0 丢掉 fork 增强）；且 electron-builder 按 prerelease 首标识符推导 channel，`exp1`/`exp2` 每版产物 yml 文件名都不同，updater 固定查的 channel 文件永远对不上
 - `-local` 标识符固定 → 产物恒为 `local.yml`；`auto-updater.ts` 的 channel 写死 `"local"`（运维补丁 D4），workflow 构建后复制一份 `latest.yml` 兼容 ≤0.4.0 旧客户端（仍按 latest channel 检查）。**Release 保持非 prerelease 标记**（softprops 默认），否则 GitHub `releases/latest` API 不返回，两端全断
+- **expo 侧配套**（0.4.1-local.1 首发实测踩坑）：`expo export --platform web` 也执行 `app.config.js` 顶层的 `getNativeReleaseVersion(pkg.version)`（只构建 web 也逃不掉），上游正则只认 `-beta.N` 会直接抛错炸 CI。fork 已把 `packages/app/native-release-version.js` 的正则扩展为 `(?:beta|local)\.(\d+)`——`local.N` 复用 beta 的 iOS build slot，单调性同构（`0.4.1-local.1`→4001001 < `0.4.1-local.2` < `0.5.1-local.1`）。上游 merge 时保留此改动。
 
 **bump 流程**（每次发版，功能 commit 之后独立成 commit）：
 
