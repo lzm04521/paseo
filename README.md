@@ -2,7 +2,7 @@
      跟进上游新版本时必须保留本地版，不要被上游 README 覆盖：
        - merge 流程冲突：git checkout --theirs README.md && git add README.md
        - 策略 B 重做：    git checkout main -- README.md
-     详见 paseo-version-follow skill D 类清单。 -->
+     详见 paseo-version-follow skill D 类清单 D5。release-local workflow 有 guard 步骤校验本文件。 -->
 
 <p align="center">
   <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
@@ -31,33 +31,34 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe` 安装。**仅支持 Windows x64**。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.4.0-local.4-x64.exe`）安装。**仅支持 Windows x64**。
 
 已安装旧版时，应用启动后自动检查 fork Release 并升级（electron-updater）。
 
 ## 相对上游的改动
 
-本地补丁跟随每个 `local/v{version}` 发版分支维护，以 `git log local/*` 为权威。清单见 `paseo-version-follow` skill 与 `handoff/`。
+本地补丁跟随每个 `local/v{version}` 发版分支维护，以 `git log local/*` 为权威。清单见 `skills/paseo-version-follow` skill 与 `handoff/`。
 
 ### 桌面 / 文件操作
 
-- **Directory Opus 兼容**：装了 Directory Opus 时，「在文件管理器中显示」优先复用已开 Opus lister；未装回退 Windows 资源管理器。
-- **「在 VSCode 打开」**：workspace 三点菜单、project 三点菜单、文件浏览器右键菜单，均可在 VSCode 打开 workspace / project / 文件 / 文件夹。
-- **文件浏览器菜单增强**：复制相对 workspace root 的虚拟路径、在文件管理器中打开、在 VSCode 打开。
+- **Directory Opus 兼容**：装了 Directory Opus 时，「在文件管理器中显示 / Reveal」优先复用已开 Opus lister，未装回退 Windows 资源管理器；上游 v0.4.0 的 Reveal in file manager 也走这条 Opus 路径。
+- **「在 VSCode 打开」菜单**：workspace 三点菜单、project 三点菜单、文件浏览器右键菜单，均可在 VSCode 打开 workspace / project / 文件 / 文件夹。
 - **@ 文件选择 gitignore 例外**：`doc` / `docs` / `handoff` 顶层目录即使被 .gitignore 排除，@ 提及时仍可见；可在 Settings → Host → Agents 配置。
 
 ### UI / 行为
 
 - **workspace tab 保护**：禁止关闭 workspace 内最后一个 agent（对话）tab，其他类型 tab 照常关闭。
-- **metadata 生成默认值 daemon 级配置**：在 Settings → Host 统一配 metadata generation 默认 provider / model，新 agent 默认继承。
+- **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
+- **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
+- **Web 输入法（IME）候选词中断修复**：web / Electron 端微软拼音等 IME 每敲一个字符候选词就消失、无法连续选词——capture 阶段拦截 React change-event restore 修复（`use-ime-composition-guard` hook）。
 - **schedules / add-project flow 中文化**。
 - **全局禁止右键菜单**（desktop + web）。
-- **Web 输入法（IME）候选词中断修复**：web / Electron 端微软拼音等 IME 在输入框（如编辑 project 名称、文件搜索默认值）每敲一个字符候选词就消失、无法连续选词。根因是 RNW `TextInput` 的每次 `input` event 触发 React 19 change-event restore 重写 `type` / `defaultValue`，Chromium 因此取消 composition；用 capture 阶段 `stopImmediatePropagation` 在 `isComposing` 时拦住 event。详见 `handoff/20260811-handoff-IME候选词中断诊断.md`。
 
 ### 发版
 
-- **只构建 Windows x64 桌面版**：`local-v*` tag 触发 `release-local` workflow，在 windows-latest 上 `electron-builder --win nsis --x64`，发到 fork Release。
-- electron-updater 查 fork Release（`packages/desktop/electron-builder.yml` 的 `publish.owner=lzm04521`）自动更新。
+- **只构建 Windows x64 桌面版**：fork 版本号 = 上游版本 + `-local.N`（如 `0.4.0-local.4`），同名 tag（`*-local.*`）触发 `release-local` workflow，在 windows-latest 上 `electron-builder --win nsis --x64` 构建，发到 fork Release。
+- **自动更新锁定 fork 渠道**：`auto-updater` channel 写死 `local`，查 fork Release 的 `local.yml`；`latest.yml` 同内容一并上传，兼容 0.4.0 及更早按 latest 渠道检查的旧客户端。跨上游版本升级链无缝（`0.4.0-local.N < 0.5.0-local.1`）。
+- **CI guard**：release workflow 校验 README 是 fork 版，防止发版流程把 fork README 冲掉。
 - 删除上游 11 个 CI / 部署 workflow（fork 不跑上游 CI / Android / Docker / 网站 / Nix）。
 
 ## 跟进上游
