@@ -10,6 +10,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { buildSelectableProviderSelectorProviders } from "@/provider-selection/provider-selection";
+import { MetadataGenerationDefaultsCard } from "@/screens/settings/metadata-generation-defaults-card";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { settingsStyles } from "@/styles/settings";
 
@@ -159,6 +160,8 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
           </View>
         ) : null}
       </View>
+
+      <MetadataGenerationDefaultsCard serverId={serverId} />
     </SettingsSection>
   );
 }
