@@ -80,6 +80,12 @@ git push -u origin local/v<新版本>   # 推到自己 fork（origin=lzm04521/pa
 
 浅克隆图可能不连通：先 `git fetch upstream +refs/heads/main:refs/remotes/upstream/main --deepen=30` 加深，再查 `git merge-base local/v<旧版本> v<新版本>`；仍为空则按上文「核心思路」graft 缝合（deepen 用 `+` force refspec，浅克隆下普通 fetch 会 non-fast-forward reject）。
 
+**起新分支后立即还原 fork README**（新 tag 自带上游 README；此时 main 尚未被本次发版重置，是上一版 fork README 的可信来源）：
+
+```bash
+grep -q lzm04521 README.md || git checkout main -- README.md
+```
+
 ### 2. 盘点上一工作线的本地补丁（**以 git log 为唯一权威，skill 清单仅供参考**）
 
 > ⚠️ 下方「当前已知清单」是历史快照，**不是最终实施清单**。跟进新版本时必须用 git 重新核对，不能照抄。
@@ -164,6 +170,8 @@ git push origin <fork版本>            # 触发 release-local（glob *-local.*�
 git checkout main
 git reset --hard v<新版本>
 git cherry-pick <上次 fork-mgmt commit>   # 重新应用 release-local.yml + 删上游 workflow（main 必须有 workflow 才能注册）
+git checkout local/v<新版本> -- README.md skills/paseo-version-follow/SKILL.md   # reset 会冲掉 fork README/skill 文档，从发版分支取回
+git add README.md skills/ && git commit --no-verify -m "docs: restore fork README + version-follow skill after reset to v<新版本>"
 git push --force-with-lease=main:<旧 main sha> origin main
 ```
 
@@ -229,6 +237,7 @@ git push --force-with-lease=main:<旧 main sha> origin main
 2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `*-local.*` + workflow_dispatch（version+branch 双输入）；windows-latest；`npx electron-builder --win nsis --x64 --publish never`；构建后 `cp release/latest.yml release/local.yml`——`--publish never` 下产物是 latest.yml，复制出 local.yml 给 fork channel；softprops/action-gh-release 上传 exe + 双 yml）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
 3. **删除上游 11 个 workflow**（`.github/workflows/` 的 ci/android-apk-release/deploy-_/desktop-_/docker/nix* 等）：fork 不跑上游 CI/部署。上游 tag glob 是 `v*`，我们的 `<版本>` tag（如 `0.4.0-local.3`）数字开头不匹配，互不干扰。
 4. **`auto-updater.ts` channel 写死 fork 渠道**（0.4.x 工作线起，随 `68106d503` 进）：`packages/desktop/src/features/auto-updater.ts` 的 `configure()` 里 `allowPrerelease = true; channel = "local"`（上游原值按 releaseChannel 选 latest/beta）。fork 版本是 `-local.N` prerelease，updater 必须查 `local.yml`（workflow 从 latest.yml 复制，见 D2）；app 内 stable/beta 渠道设置只属上游发版体系（其 rollout 准入逻辑照旧生效，无害）。上游 merge 时保留此改动；上游若重构 configure/channel，按"channel 写死 local"重新套。`auto-updater.test.ts` 的 `pins the updater to the fork channel` 断言防回退。
+5. **`README.md` 是 fork 自定义版**（fork 说明 + 仅 win x64 + 改动清单 + 指向官方；顶部 HTML 注释有提示）：**曾两次被冲掉**——v0.4.0 port 时（2026-08-12 的 revert"fork 用 zh-CN README"从未落地，fork 版悬空）+ main reset 到新 tag 基底时（README commit 不在 cherry-pick 列表）。且 v0.4.0 重写本 skill 时本项曾丢失（教训：skill 重写也要逐项核对清单）。三个保留点：**起新分支后**立即 `grep -q lzm04521 README.md || git checkout main -- README.md`（步骤 1）；**merge/port 冲突**保本地版 `git checkout --theirs README.md && git add README.md`（theirs=被 merge 的旧分支=本地版）；**main 更新 reset 后** `git checkout local/v<新版本> -- README.md`（步骤 6②）。**CI 硬兜底**：release-local workflow 的 "Guard: README 必须是 fork 版" 步骤 grep `lzm04521`，tag commit 的 README 是上游版时直接 fail 发版。不用 `.gitattributes merge=ours`（fork merge 流程 ours=新 tag=上游版，语义反）。其他 `README.zh-CN/ja/ko.md` 保留上游原版。
 
 ### E. Web IME 候选词中断修复（v0.3.1 工作线，2026-08-12 会话签入）
 
