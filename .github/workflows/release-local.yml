@@ -39,6 +39,17 @@ jobs:
           # tag 触发：用 tag commit；手动触发：checkout 指定发版分支
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
 
+      - name: Guard: README 必须是 fork 版
+        # fork README 曾两次被上游版冲掉（v0.4.0 port + main reset 到新 tag 基底）。
+        # 上游 README 不含 lzm04521，含则视为 fork 版。被挡时恢复：
+        #   git checkout <含 fork README 的分支> -- README.md
+        # 见 skills/paseo-version-follow/SKILL.md D 类清单。
+        run: |
+          grep -q "lzm04521" README.md || {
+            echo "::error::README.md 是上游版——fork README 被发版流程冲掉了"
+            exit 1
+          }
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
