@@ -4,6 +4,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Alert } from "react-native";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
 const { configState, patchConfigMock } = vi.hoisted(() => ({
@@ -140,6 +141,10 @@ vi.mock("@/runtime/host-runtime", () => ({
 
 import { IdleAutoRestartCard } from "./idle-auto-restart-card";
 
+// react-native resolves to react-native-web under vitest; its Alert.alert is a
+// no-op static, so spy on it to observe failure alerts.
+const alertSpy = vi.spyOn(Alert, "alert");
+
 function makeConfig(enabled: boolean): MutableDaemonConfig {
   return {
     relay: { enabled: false },
@@ -170,6 +175,7 @@ describe("IdleAutoRestartCard", () => {
     configState.config = null;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
+    alertSpy.mockClear();
   });
 
   afterEach(() => {
@@ -195,6 +201,12 @@ describe("IdleAutoRestartCard", () => {
       '[data-testid="host-page-idle-auto-restart-switch"]',
     );
     if (!el) throw new Error("Expected idle auto-restart switch");
+    return el;
+  }
+
+  function requireElement(selector: string): HTMLElement {
+    const el = container?.querySelector<HTMLElement>(selector);
+    if (!el) throw new Error(`Expected element matching ${selector}`);
     return el;
   }
 
@@ -225,5 +237,28 @@ describe("IdleAutoRestartCard", () => {
     configState.config = null;
     render();
     expect(findSwitch().getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("alerts when saving the thresholds fails and keeps the sheet open", async () => {
+    configState.config = makeConfig(false);
+    render();
+
+    const editButton = requireElement('[data-testid="host-page-idle-auto-restart-edit"]');
+    await act(async () => {
+      editButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    expect(requireElement('[data-testid="host-page-idle-auto-restart-sheet"]')).not.toBeNull();
+
+    patchConfigMock.mockRejectedValueOnce(new Error("daemon offline"));
+    const saveButton = requireElement('[data-testid="host-page-idle-auto-restart-save"]');
+    await act(async () => {
+      saveButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(patchConfigMock).toHaveBeenCalledWith({
+      idleAutoRestart: { enabled: false, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 },
+    });
+    expect(alertSpy).toHaveBeenCalledWith("Unable to update", "daemon offline");
+    expect(requireElement('[data-testid="host-page-idle-auto-restart-sheet"]')).not.toBeNull();
   });
 });

@@ -104,9 +104,13 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
       })
       .catch((error) => {
         console.error("[HostPage] Failed to save idle auto-restart thresholds", error);
+        Alert.alert(
+          t("settings.host.daemon.idleAutoRestart.errorTitle"),
+          error instanceof Error ? error.message : String(error),
+        );
       })
       .finally(() => setIsSaving(false));
-  }, [canSave, uptimeValidation, idleValidation, idleAutoRestart, patchConfig]);
+  }, [canSave, uptimeValidation, idleValidation, idleAutoRestart, patchConfig, t]);
 
   if (!isConnected) return null;
 

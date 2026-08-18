@@ -809,6 +809,44 @@ describe("DaemonConfigStore", () => {
     expect(persisted.daemon?.claudeImageDowngrade).toBe("on");
   });
 
+  test("patch persists idle auto-restart into config.json", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+
+    // The daemon seeds the defaults before the store sees its first patch
+    // (config.ts resolveIdleAutoRestart, bootstrap.ts), so the in-memory node is
+    // runtime-complete and partial RPC patches deep-merge onto it.
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: { providers: [] },
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
+        idleAutoRestart: { enabled: false, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 },
+      },
+      undefined,
+    );
+
+    store.patch({ idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 60 } });
+
+    expect(store.get().idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 60,
+      idleThresholdMinutes: 10,
+    });
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 60,
+      idleThresholdMinutes: 10,
+    });
+  });
+
   test("schema defaults missing claudeImageDowngrade to off", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
