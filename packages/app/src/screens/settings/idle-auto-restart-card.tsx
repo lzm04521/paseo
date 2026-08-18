@@ -130,20 +130,23 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
               {t("settings.host.daemon.idleAutoRestart.hint")}
             </Text>
           </View>
-          <Switch
-            value={idleAutoRestart?.enabled === true}
-            onValueChange={handleEnabledChange}
-            accessibilityLabel={t("settings.host.daemon.idleAutoRestart.title")}
-            testID="host-page-idle-auto-restart-switch"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleOpen}
-            testID="host-page-idle-auto-restart-edit"
-          >
-            {t("settings.host.daemon.idleAutoRestart.settings")}
-          </Button>
+          {/* 尾部控件组：gap 隔开 Switch 与按钮，避免按钮 focus outline 压到 Switch */}
+          <View style={styles.rowControls}>
+            <Switch
+              value={idleAutoRestart?.enabled === true}
+              onValueChange={handleEnabledChange}
+              accessibilityLabel={t("settings.host.daemon.idleAutoRestart.title")}
+              testID="host-page-idle-auto-restart-switch"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleOpen}
+              testID="host-page-idle-auto-restart-edit"
+            >
+              {t("settings.host.daemon.idleAutoRestart.settings")}
+            </Button>
+          </View>
         </View>
       </View>
 
@@ -210,6 +213,11 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  rowControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
   sheetActions: {
     flexDirection: "row",
     gap: theme.spacing[3],
