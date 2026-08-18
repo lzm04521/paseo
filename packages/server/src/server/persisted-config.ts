@@ -298,6 +298,14 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
+        idleAutoRestart: z
+          .object({
+            enabled: z.boolean().optional(),
+            uptimeThresholdMinutes: z.number().int().min(1).max(10080).optional(),
+            idleThresholdMinutes: z.number().int().min(1).max(1440).optional(),
+          })
+          .strict()
+          .optional(),
         auth: DaemonAuthSchema.optional(),
       })
       .strict()

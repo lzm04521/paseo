@@ -86,4 +86,30 @@ describe("server config", () => {
       }),
     ).toBe(path.join(packageRoot, "app-dist"));
   });
+
+  test("resolves idleAutoRestart defaults and persisted values", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-idle-restart-"));
+    roots.push(paseoHome);
+
+    const defaults = loadConfig(paseoHome);
+    expect(defaults.idleAutoRestart).toEqual({
+      enabled: false,
+      uptimeThresholdMinutes: 240,
+      idleThresholdMinutes: 10,
+    });
+
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        daemon: { idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 60 } },
+      }),
+    );
+
+    const persisted = loadConfig(paseoHome);
+    expect(persisted.idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 60,
+      idleThresholdMinutes: 10,
+    });
+  });
 });

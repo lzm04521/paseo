@@ -170,6 +170,7 @@ import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import type { AgentProfile, FirstAgentContext, TerminalProfile } from "@getpaseo/protocol/messages";
+import { DEFAULT_IDLE_AUTO_RESTART_CONFIG } from "@getpaseo/protocol/messages";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
@@ -398,6 +399,7 @@ export interface PaseoDaemonConfig {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   claudeImageDowngrade?: "off" | "on";
+  idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   staticDir: string;
@@ -540,6 +542,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
+    idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
   };
 
   if (config.terminalProfiles !== undefined) {
