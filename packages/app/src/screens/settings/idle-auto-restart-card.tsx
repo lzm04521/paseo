@@ -45,6 +45,9 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
   const [idleDraft, setIdleDraft] = useState(String(persistedIdle));
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // AdaptiveTextInput 是非受控组件（value prop 会被丢弃），回显靠 initialValue + resetKey
+  // 重挂载；sheetSession 在每次打开时递增（先例：project-edit-sheet 的 urlResetKey）。
+  const [sheetSession, setSheetSession] = useState(0);
   const header = useMemo<SheetHeader>(
     () => ({ title: t("settings.host.daemon.idleAutoRestart.sheetTitle") }),
     [t],
@@ -77,6 +80,7 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
   const handleOpen = useCallback(() => {
     setUptimeDraft(String(persistedUptime));
     setIdleDraft(String(persistedIdle));
+    setSheetSession((n) => n + 1);
     setIsEditing(true);
   }, [persistedUptime, persistedIdle]);
 
@@ -158,7 +162,8 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
             testID="host-page-idle-auto-restart-uptime-field"
           >
             <FormTextInput
-              value={uptimeDraft}
+              initialValue={String(persistedUptime)}
+              resetKey={`uptime-${sheetSession}`}
               onChangeText={setUptimeDraft}
               inputMode="numeric"
               testID="host-page-idle-auto-restart-uptime-input"
@@ -171,7 +176,8 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
             testID="host-page-idle-auto-restart-idle-field"
           >
             <FormTextInput
-              value={idleDraft}
+              initialValue={String(persistedIdle)}
+              resetKey={`idle-${sheetSession}`}
               onChangeText={setIdleDraft}
               inputMode="numeric"
               testID="host-page-idle-auto-restart-idle-input"

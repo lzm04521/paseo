@@ -112,17 +112,22 @@ vi.mock("@/components/ui/form-field", () => ({
     );
   },
   FormTextInput: ({
-    value,
+    initialValue,
+    resetKey,
     onChangeText,
     testID,
   }: {
-    value: string;
+    // 忠实模拟真实 AdaptiveTextInput 契约：非受控，value prop 被丢弃，
+    // 种子值走 initialValue + resetKey 重挂载（见 adaptive-modal-sheet.tsx）。
+    initialValue?: string;
+    resetKey?: string | number;
     onChangeText?: (next: string) => void;
     testID?: string;
   }) =>
     React.createElement("input", {
+      key: resetKey,
       "data-testid": testID,
-      value,
+      defaultValue: initialValue,
       onChange: (event: { target: { value: string } }) => onChangeText?.(event.target.value),
     }),
 }));
@@ -237,6 +242,27 @@ describe("IdleAutoRestartCard", () => {
     configState.config = null;
     render();
     expect(findSwitch().getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("seeds the threshold inputs with the persisted values when the sheet opens", async () => {
+    // 回归：AdaptiveTextInput 非受控，回显必须走 initialValue（曾因传受控 value 被丢弃
+    // 导致每次打开 sheet 输入框空白，被误判为"没保存成功"）。
+    configState.config = makeConfig(true);
+    render();
+
+    const editButton = requireElement('[data-testid="host-page-idle-auto-restart-edit"]');
+    await act(async () => {
+      editButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    const uptimeInput = requireElement(
+      '[data-testid="host-page-idle-auto-restart-uptime-input"]',
+    ) as HTMLInputElement;
+    const idleInput = requireElement(
+      '[data-testid="host-page-idle-auto-restart-idle-input"]',
+    ) as HTMLInputElement;
+    expect(uptimeInput.defaultValue).toBe("240");
+    expect(idleInput.defaultValue).toBe("10");
   });
 
   it("alerts when saving the thresholds fails and keeps the sheet open", async () => {
