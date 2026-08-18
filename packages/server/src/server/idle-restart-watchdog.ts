@@ -69,3 +69,37 @@ export function evaluateTick(
     resolved,
   };
 }
+
+export interface IdleRestartTriggerInfo {
+  uptimeMinutes: number;
+  idleMinutes: number;
+  thresholds: { uptimeThresholdMinutes: number; idleThresholdMinutes: number };
+}
+
+export function startIdleRestartWatchdog(deps: {
+  getConfig: () => IdleAutoRestartTickConfig | undefined;
+  isBusy: () => boolean;
+  now: () => number;
+  onTrigger: (info: IdleRestartTriggerInfo) => void;
+  tickMs?: number;
+}): { stop(): void } {
+  let state = createIdleRestartWatchdogState(deps.now());
+  const tickMs = deps.tickMs ?? IDLE_RESTART_TICK_MS;
+  const timer = setInterval(() => {
+    const nowMs = deps.now();
+    const outcome = evaluateTick(state, deps.getConfig(), deps.isBusy(), nowMs);
+    state = {
+      startedAtMs: outcome.startedAtMs,
+      idleSince: outcome.idleSince,
+      fired: outcome.fired,
+    };
+    if (!outcome.shouldRestart) {
+      return;
+    }
+    const idleMinutes = outcome.idleSince === null ? 0 : (nowMs - outcome.idleSince) / 60_000;
+    const uptimeMinutes = (nowMs - outcome.startedAtMs) / 60_000;
+    deps.onTrigger({ uptimeMinutes, idleMinutes, thresholds: outcome.resolved });
+  }, tickMs);
+  timer.unref();
+  return { stop: () => clearInterval(timer) };
+}

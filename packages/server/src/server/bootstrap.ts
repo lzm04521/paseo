@@ -171,6 +171,7 @@ import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import type { AgentProfile, FirstAgentContext, TerminalProfile } from "@getpaseo/protocol/messages";
 import { DEFAULT_IDLE_AUTO_RESTART_CONFIG } from "@getpaseo/protocol/messages";
+import { agentCountsAsBusy, startIdleRestartWatchdog } from "./idle-restart-watchdog.js";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
@@ -471,6 +472,10 @@ export interface PaseoDaemonDependencies {
   serverFeatureOverrides?: {
     daemonStatusRpc?: boolean;
     relayConfig?: boolean;
+  };
+  idleRestartWatchdog?: {
+    tickMs?: number;
+    now?: () => number;
   };
 }
 
@@ -856,6 +861,32 @@ export async function createPaseoDaemon(
     },
     mcpAuthToken: agentMcpAuthToken,
     logger,
+  });
+
+  const idleRestartWatchdogOptions = dependencies.idleRestartWatchdog ?? {};
+  const idleRestartWatchdog = startIdleRestartWatchdog({
+    getConfig: () => daemonConfigStore.get().idleAutoRestart,
+    isBusy: () => agentManager.listAgents().some(agentCountsAsBusy),
+    now: idleRestartWatchdogOptions.now ?? Date.now,
+    tickMs: idleRestartWatchdogOptions.tickMs,
+    onTrigger: (info) => {
+      logger.warn(
+        {
+          reason: "idle_auto_restart",
+          uptimeMinutes: info.uptimeMinutes,
+          idleMinutes: info.idleMinutes,
+          agentsByLifecycle: agentManager.getMetricsSnapshot().byLifecycle,
+          configuredThresholds: info.thresholds,
+        },
+        "Idle auto-restart triggered",
+      );
+      config.onLifecycleIntent?.({
+        type: "restart",
+        clientId: "idle-auto-restart-watchdog",
+        requestId: randomUUID(),
+        reason: "idle_auto_restart",
+      });
+    },
   });
 
   const detachAgentStoragePersistence = attachAgentStoragePersistence(
@@ -1629,6 +1660,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    idleRestartWatchdog.stop();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();
