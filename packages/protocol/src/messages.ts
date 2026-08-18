@@ -192,6 +192,20 @@ const MutableFileSearchConfigSchema = z
     gitIgnoreOverrides: z.array(z.string().trim().min(1)).optional(),
   })
   .passthrough();
+
+export const DEFAULT_IDLE_AUTO_RESTART_CONFIG = {
+  enabled: false,
+  uptimeThresholdMinutes: 240,
+  idleThresholdMinutes: 10,
+} as const;
+
+const MutableIdleAutoRestartConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    uptimeThresholdMinutes: z.number().int().min(1).max(10080),
+    idleThresholdMinutes: z.number().int().min(1).max(1440),
+  })
+  .passthrough();
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -211,6 +225,7 @@ export const MutableDaemonConfigSchema = z
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
+    idleAutoRestart: MutableIdleAutoRestartConfigSchema.optional(),
   })
   .passthrough();
 
@@ -231,6 +246,7 @@ export const MutableDaemonConfigPatchSchema = z
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
+    idleAutoRestart: MutableIdleAutoRestartConfigSchema.partial().optional(),
   })
   .partial()
   .passthrough();
