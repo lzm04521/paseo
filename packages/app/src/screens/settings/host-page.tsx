@@ -59,6 +59,7 @@ import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { ClaudeImageDowngradeCard } from "@/screens/settings/claude-image-downgrade-card";
+import { IdleAutoRestartCard } from "./idle-auto-restart-card";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
@@ -1479,6 +1480,7 @@ function RemoveHostSection({
       testID="host-page-remove-host-card"
     >
       <RestartDaemonCard host={host} />
+      <IdleAutoRestartCard serverId={host.serverId} />
 
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
