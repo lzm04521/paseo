@@ -2534,6 +2534,7 @@ export const ar: TranslationResources = {
           title: "إعادة التشغيل التلقائي عند الخمول",
           hint: "يعيد تشغيل daemon تلقائيًا بعد مدة تشغيل طويلة دون مهام قيد التنفيذ. تُقاطَع الجلسات الخاملة وتُستعاد بعد إعادة التشغيل.",
           startedAtLine: "بدأ في {{time}} · يعمل لمدة {{uptime}}",
+          idleFor: "خامل لمدة {{duration}}",
           settings: "الإعدادات",
           sheetTitle: "إعادة التشغيل التلقائي عند الخمول",
           uptimeLabel: "دقائق التشغيل",

@@ -2352,6 +2352,7 @@ export const ko = {
           title: "유휴 시 자동 재시작",
           hint: "오래 실행되었고 실행 중인 작업이 없으면 데몬을 자동으로 재시작합니다. 유휴 세션은 중단되었다가 재시작 후 복원됩니다.",
           startedAtLine: "시작: {{time}} · 가동 시간 {{uptime}}",
+          idleFor: "유휴 {{duration}}",
           settings: "설정",
           sheetTitle: "유휴 시 자동 재시작",
           uptimeLabel: "실행 시간(분)",

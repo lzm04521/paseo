@@ -41,6 +41,7 @@ function makeSubsystem(overrides: {
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   listProviderAvailability?: () => Promise<ProviderAvailability[]>;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
   hubRelationships?: HubRelationshipManagement;
 }) {
   const emitted: SessionOutboundMessage[] = [];
@@ -62,6 +63,7 @@ function makeSubsystem(overrides: {
     listWorkspaces: async () => [],
     listProviderAvailability: overrides.listProviderAvailability ?? (async () => []),
     getWebSocketRuntimeMetrics: overrides.getWebSocketRuntimeMetrics,
+    getIdleRestartIdleSince: overrides.getIdleRestartIdleSince,
     hubRelationships: overrides.hubRelationships,
     logger: pino({ level: "silent" }),
   });
@@ -146,6 +148,7 @@ describe("DaemonSession", () => {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: "127.0.0.1:6767",
           relay: null,
           providers: [
@@ -179,7 +182,39 @@ describe("DaemonSession", () => {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: null,
+          relay: null,
+          providers: [],
+        },
+      },
+    ]);
+  });
+
+  test("status reports the idle-restart idleSince as an ISO timestamp when provided", async () => {
+    const idleSinceMs = Date.parse("2026-08-19T12:00:00.000Z");
+    const { subsystem, emitted } = makeSubsystem({
+      serverId: "srv-1",
+      daemonVersion: "1.2.3",
+      daemonRuntimeConfig: { listen: "127.0.0.1:6767", getRelayConfig: () => null },
+      getIdleRestartIdleSince: () => idleSinceMs,
+      listProviderAvailability: async () => [],
+    });
+
+    await subsystem.handleGetStatusRequest({ type: "daemon.get_status.request", requestId: "s-3" });
+
+    expect(emitted).toEqual([
+      {
+        type: "daemon.get_status.response",
+        payload: {
+          requestId: "s-3",
+          serverId: "srv-1",
+          version: "1.2.3",
+          pid: process.pid,
+          nodePath: process.execPath,
+          startedAt: null,
+          idleSince: "2026-08-19T12:00:00.000Z",
+          listen: "127.0.0.1:6767",
           relay: null,
           providers: [],
         },

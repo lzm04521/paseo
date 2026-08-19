@@ -1607,6 +1607,7 @@ export async function createPaseoDaemon(
               browserToolsBroker,
               hubRelationships,
               workspaceSetupRuntime,
+              () => idleRestartWatchdog.getIdleSince(),
             );
             relayRuntime = createRelayRuntime({
               config: {

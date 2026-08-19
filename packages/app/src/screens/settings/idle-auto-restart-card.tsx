@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
-import { useDaemonStartedAt } from "@/hooks/use-daemon-started-at";
+import { useDaemonStatusTimes } from "@/hooks/use-daemon-status-times";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
@@ -47,14 +47,17 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
   const [idleDraft, setIdleDraft] = useState(String(persistedIdle));
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const startedAt = useDaemonStartedAt(serverId, idleAutoRestart?.enabled === true);
-  // 运行时长展示用本地时钟，30s 一跳与 watchdog tick 对齐。
+  const { startedAt, idleSince } = useDaemonStatusTimes(
+    serverId,
+    idleAutoRestart?.enabled === true,
+  );
+  // 运行/空闲时长展示用本地时钟，30s 一跳与 watchdog tick 对齐。
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    if (!startedAt) return;
+    if (!startedAt && !idleSince) return;
     const timer = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(timer);
-  }, [startedAt]);
+  }, [startedAt, idleSince]);
   // AdaptiveTextInput 是非受控组件（value prop 会被丢弃），回显靠 initialValue + resetKey
   // 重挂载；sheetSession 在每次打开时递增（先例：project-edit-sheet 的 urlResetKey）。
   const [sheetSession, setSheetSession] = useState(0);
@@ -145,6 +148,11 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
                   time: formatMessageTimestamp(startedAt),
                   uptime: formatDuration(Math.max(0, nowMs - startedAt.getTime())),
                 })}
+                {idleSince
+                  ? ` · ${t("settings.host.daemon.idleAutoRestart.idleFor", {
+                      duration: formatDuration(Math.max(0, nowMs - idleSince.getTime())),
+                    })}`
+                  : null}
               </Text>
             ) : null}
           </View>

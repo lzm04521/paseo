@@ -48,6 +48,7 @@ export interface DaemonSessionOptions {
   listWorkspaces: () => Promise<PersistedWorkspaceRecord[]>;
   listProviderAvailability: () => Promise<ProviderAvailability[]>;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
   logger: pino.Logger;
   hubRelationships?: HubRelationshipManagement;
 }
@@ -71,6 +72,7 @@ export class DaemonSession {
   private readonly listWorkspaces: () => Promise<PersistedWorkspaceRecord[]>;
   private readonly listProviderAvailability: () => Promise<ProviderAvailability[]>;
   private readonly getWebSocketRuntimeMetrics: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  private readonly getIdleRestartIdleSince: () => number | null;
   private readonly logger: pino.Logger;
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
@@ -87,6 +89,7 @@ export class DaemonSession {
     this.listWorkspaces = options.listWorkspaces;
     this.listProviderAvailability = options.listProviderAvailability;
     this.getWebSocketRuntimeMetrics = options.getWebSocketRuntimeMetrics ?? (() => null);
+    this.getIdleRestartIdleSince = options.getIdleRestartIdleSince ?? (() => null);
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
     this.selfUpdate = new DaemonSelfUpdateSessionController({
@@ -159,6 +162,7 @@ export class DaemonSession {
         available: p.available,
         error: p.error ?? null,
       }));
+      const idleSinceMs = this.getIdleRestartIdleSince();
       this.host.emit({
         type: "daemon.get_status.response",
         payload: {
@@ -168,6 +172,7 @@ export class DaemonSession {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: pidInfo?.startedAt ?? null,
+          idleSince: idleSinceMs === null ? null : new Date(idleSinceMs).toISOString(),
           listen: this.daemonRuntimeConfig?.listen ?? null,
           relay: this.daemonRuntimeConfig?.getRelayConfig() ?? null,
           providers,
@@ -184,6 +189,7 @@ export class DaemonSession {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: null,
           relay: null,
           providers: [],

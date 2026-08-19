@@ -498,6 +498,7 @@ export interface SessionOptions {
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
 }
 
 export type SessionLifecycleIntent =
@@ -729,6 +730,7 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
     } = options;
     this.clientId = clientId;
     this.scopes = [...scopes];
@@ -885,6 +887,7 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
       listProviderAvailability: () => this.agentManager.listProviderAvailability(),
       listAgents: () => this.agentManager.listAgents(),
       listProjects: () => this.projectRegistry.list(),

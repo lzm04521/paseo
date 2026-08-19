@@ -2594,6 +2594,7 @@ export const fr: TranslationResources = {
           title: "Redémarrage auto en cas d'inactivité",
           hint: "Redémarre automatiquement le daemon après une longue durée de fonctionnement sans tâches en cours. Les sessions inactives sont interrompues puis restaurées après le redémarrage.",
           startedAtLine: "Démarré à {{time}} · en ligne depuis {{uptime}}",
+          idleFor: "inactif depuis {{duration}}",
           settings: "Paramètres",
           sheetTitle: "Redémarrage auto en cas d'inactivité",
           uptimeLabel: "Minutes de fonctionnement",

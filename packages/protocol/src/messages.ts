@@ -4161,6 +4161,7 @@ export const DaemonGetStatusResponseSchema = z.object({
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),
+      idleSince: z.string().nullable().optional(),
       listen: z.string().nullable(),
       relay: z
         .object({

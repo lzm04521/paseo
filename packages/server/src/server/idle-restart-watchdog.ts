@@ -82,7 +82,7 @@ export function startIdleRestartWatchdog(deps: {
   now: () => number;
   onTrigger: (info: IdleRestartTriggerInfo) => void;
   tickMs?: number;
-}): { stop(): void } {
+}): { stop(): void; getIdleSince(): number | null } {
   let state = createIdleRestartWatchdogState(deps.now());
   const tickMs = deps.tickMs ?? IDLE_RESTART_TICK_MS;
   const timer = setInterval(() => {
@@ -101,5 +101,9 @@ export function startIdleRestartWatchdog(deps: {
     deps.onTrigger({ uptimeMinutes, idleMinutes, thresholds: outcome.resolved });
   }, tickMs);
   timer.unref();
-  return { stop: () => clearInterval(timer) };
+  return {
+    stop: () => clearInterval(timer),
+    // 供 daemon.get_status 暴露当前连续空闲起点（与触发判定同源）；配置禁用或忙碌时为 null。
+    getIdleSince: () => state.idleSince,
+  };
 }

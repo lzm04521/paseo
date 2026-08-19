@@ -7,13 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Alert } from "react-native";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { configState, patchConfigMock, startedAtState } = vi.hoisted(() => ({
+const { configState, patchConfigMock, timesState } = vi.hoisted(() => ({
   configState: {
     config: null as MutableDaemonConfig | null,
   },
   patchConfigMock: vi.fn(async () => undefined),
-  startedAtState: {
-    value: null as Date | null,
+  timesState: {
+    startedAt: null as Date | null,
+    idleSince: null as Date | null,
   },
 }));
 
@@ -22,6 +23,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: Record<string, unknown>) => {
       if (key === "settings.host.daemon.idleAutoRestart.startedAtLine") {
         return `Started ${options?.time} · running for ${options?.uptime}`;
+      }
+      if (key === "settings.host.daemon.idleAutoRestart.idleFor") {
+        return `idle for ${options?.duration}`;
       }
       return (
         {
@@ -153,9 +157,11 @@ vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
 }));
 
-vi.mock("@/hooks/use-daemon-started-at", () => ({
-  useDaemonStartedAt: (_serverId: string, enabled: boolean) =>
-    enabled ? startedAtState.value : null,
+vi.mock("@/hooks/use-daemon-status-times", () => ({
+  useDaemonStatusTimes: (_serverId: string, enabled: boolean) =>
+    enabled
+      ? { startedAt: timesState.startedAt, idleSince: timesState.idleSince }
+      : { startedAt: null, idleSince: null },
 }));
 
 import { IdleAutoRestartCard } from "./idle-auto-restart-card";
@@ -192,7 +198,8 @@ describe("IdleAutoRestartCard", () => {
     root = createRoot(container);
 
     configState.config = null;
-    startedAtState.value = null;
+    timesState.startedAt = null;
+    timesState.idleSince = null;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     alertSpy.mockClear();
@@ -303,26 +310,39 @@ describe("IdleAutoRestartCard", () => {
     expect(requireElement('[data-testid="host-page-idle-auto-restart-sheet"]')).not.toBeNull();
   });
 
-  it("shows the daemon start time and uptime when enabled", () => {
+  it("shows the daemon start time, uptime and idle time when enabled", () => {
     configState.config = makeConfig(true);
-    startedAtState.value = new Date(Date.now() - 60 * 60 * 1000);
+    timesState.startedAt = new Date(Date.now() - 60 * 60 * 1000);
+    timesState.idleSince = new Date(Date.now() - 5 * 60 * 1000);
     render();
 
     const line = requireElement('[data-testid="host-page-idle-auto-restart-started-at"]');
-    // 1 小时整的运行时长经 formatDuration 是稳定的 "1h"（分钟级渲染误差不影响前缀）。
+    // 1 小时/5 分钟整的时长经 formatDuration 是稳定的 "1h"/"5m"（分钟级渲染误差不影响前缀）。
     expect(line.textContent).toContain("running for 1h");
+    expect(line.textContent).toContain("idle for 5m");
+  });
+
+  it("omits the idle segment while a task is running (idleSince is null)", () => {
+    configState.config = makeConfig(true);
+    timesState.startedAt = new Date(Date.now() - 60 * 60 * 1000);
+    timesState.idleSince = null;
+    render();
+
+    const line = requireElement('[data-testid="host-page-idle-auto-restart-started-at"]');
+    expect(line.textContent).toContain("running for 1h");
+    expect(line.textContent).not.toContain("idle for");
   });
 
   it("hides the start time line while the switch is off or before the status loads", () => {
     configState.config = makeConfig(true);
-    startedAtState.value = null;
+    timesState.startedAt = null;
     render();
     expect(
       container?.querySelector('[data-testid="host-page-idle-auto-restart-started-at"]'),
     ).toBeNull();
 
     configState.config = makeConfig(false);
-    startedAtState.value = new Date(Date.now() - 60 * 60 * 1000);
+    timesState.startedAt = new Date(Date.now() - 60 * 60 * 1000);
     render();
     expect(
       container?.querySelector('[data-testid="host-page-idle-auto-restart-started-at"]'),

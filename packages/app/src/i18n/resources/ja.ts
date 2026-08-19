@@ -2558,6 +2558,7 @@ export const ja: TranslationResources = {
           title: "アイドル時自動再起動",
           hint: "長時間稼働していて実行中のタスクがない場合、デーモンを自動で再起動します。アイドル状態のセッションは中断され、再起動後に復元されます。",
           startedAtLine: "起動: {{time}} · 稼働時間 {{uptime}}",
+          idleFor: "アイドル {{duration}}",
           settings: "設定",
           sheetTitle: "アイドル時自動再起動",
           uptimeLabel: "稼働時間（分）",
