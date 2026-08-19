@@ -2546,6 +2546,7 @@ export const en = {
         idleAutoRestart: {
           title: "Idle auto-restart",
           hint: "Restarts the daemon automatically after long uptime with no running tasks. Idle sessions are interrupted and restored after the restart.",
+          startedAtLine: "Started {{time}} · running for {{uptime}}",
           settings: "Settings",
           sheetTitle: "Idle auto-restart",
           uptimeLabel: "Minutes of uptime",

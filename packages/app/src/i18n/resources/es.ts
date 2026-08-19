@@ -2587,6 +2587,7 @@ export const es: TranslationResources = {
         idleAutoRestart: {
           title: "Reinicio automático por inactividad",
           hint: "Reinicia el daemon automáticamente tras un tiempo prolongado de ejecución sin tareas activas. Las sesiones inactivas se interrumpen y se restauran tras el reinicio.",
+          startedAtLine: "Iniciado el {{time}} · en ejecución durante {{uptime}}",
           settings: "Ajustes",
           sheetTitle: "Reinicio automático por inactividad",
           uptimeLabel: "Minutos de ejecución",

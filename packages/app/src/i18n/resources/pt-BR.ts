@@ -2572,6 +2572,7 @@ export const ptBR: TranslationResources = {
         idleAutoRestart: {
           title: "Reinício automático por inatividade",
           hint: "Reinicia o daemon automaticamente após longo tempo de execução sem tarefas ativas. Sessões ociosas são interrompidas e restauradas após o reinício.",
+          startedAtLine: "Iniciado em {{time}} · em execução há {{uptime}}",
           settings: "Configurações",
           sheetTitle: "Reinício automático por inatividade",
           uptimeLabel: "Minutos de execução",

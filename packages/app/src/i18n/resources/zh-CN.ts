@@ -2502,6 +2502,7 @@ export const zhCN: TranslationResources = {
         idleAutoRestart: {
           title: "空闲自动重启",
           hint: "运行较久且长时间无执行中任务时自动重启 daemon。空闲会话会被中断并在重启后恢复。",
+          startedAtLine: "本次启动于 {{time}} · 已运行 {{uptime}}",
           settings: "设置",
           sheetTitle: "空闲自动重启",
           uptimeLabel: "运行时长（分钟）",

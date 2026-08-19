@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useDaemonStartedAt } from "@/hooks/use-daemon-started-at";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
+import { formatDuration, formatMessageTimestamp } from "@/utils/time";
 
 const UPTIME_MIN = 1;
 const UPTIME_MAX = 10080;
@@ -45,6 +47,14 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
   const [idleDraft, setIdleDraft] = useState(String(persistedIdle));
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const startedAt = useDaemonStartedAt(serverId, idleAutoRestart?.enabled === true);
+  // 运行时长展示用本地时钟，30s 一跳与 watchdog tick 对齐。
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!startedAt) return;
+    const timer = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
   // AdaptiveTextInput 是非受控组件（value prop 会被丢弃），回显靠 initialValue + resetKey
   // 重挂载；sheetSession 在每次打开时递增（先例：project-edit-sheet 的 urlResetKey）。
   const [sheetSession, setSheetSession] = useState(0);
@@ -129,6 +139,14 @@ export function IdleAutoRestartCard({ serverId }: { serverId: string }) {
             <Text style={settingsStyles.rowHint}>
               {t("settings.host.daemon.idleAutoRestart.hint")}
             </Text>
+            {startedAt ? (
+              <Text style={settingsStyles.rowHint} testID="host-page-idle-auto-restart-started-at">
+                {t("settings.host.daemon.idleAutoRestart.startedAtLine", {
+                  time: formatMessageTimestamp(startedAt),
+                  uptime: formatDuration(Math.max(0, nowMs - startedAt.getTime())),
+                })}
+              </Text>
+            ) : null}
           </View>
           {/* 尾部控件组：gap 隔开 Switch 与按钮，避免按钮 focus outline 压到 Switch */}
           <View style={styles.rowControls}>

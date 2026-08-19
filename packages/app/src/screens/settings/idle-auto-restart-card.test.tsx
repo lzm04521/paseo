@@ -7,31 +7,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Alert } from "react-native";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const { configState, patchConfigMock } = vi.hoisted(() => ({
+const { configState, patchConfigMock, startedAtState } = vi.hoisted(() => ({
   configState: {
     config: null as MutableDaemonConfig | null,
   },
   patchConfigMock: vi.fn(async () => undefined),
+  startedAtState: {
+    value: null as Date | null,
+  },
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        "settings.host.daemon.idleAutoRestart.title": "Idle auto-restart",
-        "settings.host.daemon.idleAutoRestart.settings": "Settings",
-        "settings.host.daemon.idleAutoRestart.sheetTitle": "Idle auto-restart",
-        "settings.host.daemon.idleAutoRestart.uptimeLabel": "Minutes of uptime",
-        "settings.host.daemon.idleAutoRestart.idleLabel": "Minutes without running tasks",
-        "settings.host.daemon.idleAutoRestart.uptimeHint": "uptime hint",
-        "settings.host.daemon.idleAutoRestart.idleHint": "idle hint",
-        "settings.host.daemon.idleAutoRestart.invalidInteger": "Enter a whole number",
-        "settings.host.daemon.idleAutoRestart.invalidRange":
-          "Enter a value between {{min}} and {{max}}",
-        "settings.host.daemon.idleAutoRestart.save": "Save",
-        "settings.host.daemon.idleAutoRestart.cancel": "Cancel",
-        "settings.host.daemon.idleAutoRestart.errorTitle": "Unable to update",
-      })[key] ?? key,
+    t: (key: string, options?: Record<string, unknown>) => {
+      if (key === "settings.host.daemon.idleAutoRestart.startedAtLine") {
+        return `Started ${options?.time} · running for ${options?.uptime}`;
+      }
+      return (
+        {
+          "settings.host.daemon.idleAutoRestart.title": "Idle auto-restart",
+          "settings.host.daemon.idleAutoRestart.settings": "Settings",
+          "settings.host.daemon.idleAutoRestart.sheetTitle": "Idle auto-restart",
+          "settings.host.daemon.idleAutoRestart.uptimeLabel": "Minutes of uptime",
+          "settings.host.daemon.idleAutoRestart.idleLabel": "Minutes without running tasks",
+          "settings.host.daemon.idleAutoRestart.uptimeHint": "uptime hint",
+          "settings.host.daemon.idleAutoRestart.idleHint": "idle hint",
+          "settings.host.daemon.idleAutoRestart.invalidInteger": "Enter a whole number",
+          "settings.host.daemon.idleAutoRestart.invalidRange":
+            "Enter a value between {{min}} and {{max}}",
+          "settings.host.daemon.idleAutoRestart.save": "Save",
+          "settings.host.daemon.idleAutoRestart.cancel": "Cancel",
+          "settings.host.daemon.idleAutoRestart.errorTitle": "Unable to update",
+        }[key] ?? key
+      );
+    },
   }),
 }));
 
@@ -144,6 +153,11 @@ vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
 }));
 
+vi.mock("@/hooks/use-daemon-started-at", () => ({
+  useDaemonStartedAt: (_serverId: string, enabled: boolean) =>
+    enabled ? startedAtState.value : null,
+}));
+
 import { IdleAutoRestartCard } from "./idle-auto-restart-card";
 
 // react-native resolves to react-native-web under vitest; its Alert.alert is a
@@ -178,6 +192,7 @@ describe("IdleAutoRestartCard", () => {
     root = createRoot(container);
 
     configState.config = null;
+    startedAtState.value = null;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     alertSpy.mockClear();
@@ -286,5 +301,31 @@ describe("IdleAutoRestartCard", () => {
     });
     expect(alertSpy).toHaveBeenCalledWith("Unable to update", "daemon offline");
     expect(requireElement('[data-testid="host-page-idle-auto-restart-sheet"]')).not.toBeNull();
+  });
+
+  it("shows the daemon start time and uptime when enabled", () => {
+    configState.config = makeConfig(true);
+    startedAtState.value = new Date(Date.now() - 60 * 60 * 1000);
+    render();
+
+    const line = requireElement('[data-testid="host-page-idle-auto-restart-started-at"]');
+    // 1 小时整的运行时长经 formatDuration 是稳定的 "1h"（分钟级渲染误差不影响前缀）。
+    expect(line.textContent).toContain("running for 1h");
+  });
+
+  it("hides the start time line while the switch is off or before the status loads", () => {
+    configState.config = makeConfig(true);
+    startedAtState.value = null;
+    render();
+    expect(
+      container?.querySelector('[data-testid="host-page-idle-auto-restart-started-at"]'),
+    ).toBeNull();
+
+    configState.config = makeConfig(false);
+    startedAtState.value = new Date(Date.now() - 60 * 60 * 1000);
+    render();
+    expect(
+      container?.querySelector('[data-testid="host-page-idle-auto-restart-started-at"]'),
+    ).toBeNull();
   });
 });
