@@ -51,6 +51,7 @@
 - **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
 - **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
 - **Web 输入法（IME）候选词中断修复**：web / Electron 端微软拼音等 IME 每敲一个字符候选词就消失、无法连续选词——capture 阶段拦截 React change-event restore 修复（`use-ime-composition-guard` hook）。
+- **空闲自动重启（idle auto-restart）**：daemon「连续运行 ≥ 运行阈值 且 空闲 ≥ 空闲阈值」双条件同时满足时自动重启（默认 120 / 20 分钟），开关与阈值在 Settings → Host → Daemon 配置、即改即生效（watchdog 每 30s tick 动态读配置）；设置卡片显示「本次启动于 · 已运行 · 已空闲」，与触发判定同源，每次自动重启后如实归零。
 - **schedules / add-project flow 中文化**。
 - **全局禁止右键菜单**（desktop + web）。
 
