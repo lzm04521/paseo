@@ -37,9 +37,9 @@ function dopusCommands(runtime: EditorTargetRuntime): string[] {
 type ResolvedOpusRuntime =
   /**
    * `dopusrt.exe` talks to the running Opus (starting it if needed) and opens the path as a
-   * new tab in the most recently active lister. `/acmd` (not `/cmd`) so that with no active
-   * lister Opus opens a new window — `/cmd` targets the source lister and does nothing
-   * visible when that window is minimized, on another desktop, or absent.
+   * new front tab in the most recently active lister. `/acmd` (not `/cmd`) so that with no
+   * active lister Opus opens a new window — `/cmd` targets the source lister and does
+   * nothing visible when that window is minimized, on another desktop, or absent.
    */
   | { kind: "runtime"; command: string }
   /**
@@ -73,7 +73,7 @@ export async function tryLaunchOpus(
   if (resolved.kind === "runtime") {
     await runtime.spawnDetached({
       command: resolved.command,
-      args: ["/acmd", "Go", targetPath, "NEWTAB"],
+      args: ["/acmd", "Go", targetPath, "NEWTAB=tofront"],
     });
     return true;
   }
