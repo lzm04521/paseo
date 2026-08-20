@@ -525,6 +525,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly daemonVersion: string;
   private readonly daemonRuntimeConfig: DaemonRuntimeConfig | undefined;
   private readonly getIdleRestartIdleSince: (() => number | null) | null;
+  private readonly getIdleRestartStartedAt: (() => number | null) | null;
   private readonly agentManager: AgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
@@ -623,6 +624,7 @@ export class VoiceAssistantWebSocketServer {
     hubRelationships?: HubRelationshipManagement | null,
     workspaceSetupRuntime: WorkspaceSetupRuntime = new WorkspaceSetupRuntime(),
     getIdleRestartIdleSince?: () => number | null,
+    getIdleRestartStartedAt?: () => number | null,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -635,6 +637,7 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.getIdleRestartIdleSince = getIdleRestartIdleSince ?? null;
+    this.getIdleRestartStartedAt = getIdleRestartStartedAt ?? null;
     this.browserToolsBroker = browserToolsBroker ?? null;
     this.hubRelationships = hubRelationships ?? null;
     this.agentManager = agentManager;
@@ -1402,6 +1405,7 @@ export class VoiceAssistantWebSocketServer {
       daemonRuntimeConfig: this.daemonRuntimeConfig,
       getWebSocketRuntimeMetrics: () => this.lastRuntimeMetricsSnapshot,
       getIdleRestartIdleSince: this.getIdleRestartIdleSince ?? undefined,
+      getIdleRestartStartedAt: this.getIdleRestartStartedAt ?? undefined,
     });
   }
 

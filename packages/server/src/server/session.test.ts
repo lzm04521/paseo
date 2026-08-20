@@ -1569,6 +1569,7 @@ describe("daemon status + pairing RPC", () => {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: "127.0.0.1:6767",
           relay: null,
           providers: [
@@ -1608,6 +1609,7 @@ describe("daemon status + pairing RPC", () => {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: null,
           relay: null,
           providers: [],

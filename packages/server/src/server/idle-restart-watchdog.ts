@@ -82,7 +82,7 @@ export function startIdleRestartWatchdog(deps: {
   now: () => number;
   onTrigger: (info: IdleRestartTriggerInfo) => void;
   tickMs?: number;
-}): { stop(): void; getIdleSince(): number | null } {
+}): { stop(): void; getIdleSince(): number | null; getStartedAt(): number } {
   let state = createIdleRestartWatchdogState(deps.now());
   const tickMs = deps.tickMs ?? IDLE_RESTART_TICK_MS;
   const timer = setInterval(() => {
@@ -105,5 +105,8 @@ export function startIdleRestartWatchdog(deps: {
     stop: () => clearInterval(timer),
     // 供 daemon.get_status 暴露当前连续空闲起点（与触发判定同源）；配置禁用或忙碌时为 null。
     getIdleSince: () => state.idleSince,
+    // 供 daemon.get_status 暴露 uptime 判定基线（worker bootstrap 时刻，重启即归零）。
+    // 勿改用 pid 锁的 supervisor 启动时间：空闲重启只换 worker，那会让"本次启动于"不随重启变化。
+    getStartedAt: () => state.startedAtMs,
   };
 }

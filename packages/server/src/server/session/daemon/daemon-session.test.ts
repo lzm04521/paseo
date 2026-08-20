@@ -42,6 +42,7 @@ function makeSubsystem(overrides: {
   listProviderAvailability?: () => Promise<ProviderAvailability[]>;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   getIdleRestartIdleSince?: () => number | null;
+  getIdleRestartStartedAt?: () => number | null;
   hubRelationships?: HubRelationshipManagement;
 }) {
   const emitted: SessionOutboundMessage[] = [];
@@ -64,6 +65,7 @@ function makeSubsystem(overrides: {
     listProviderAvailability: overrides.listProviderAvailability ?? (async () => []),
     getWebSocketRuntimeMetrics: overrides.getWebSocketRuntimeMetrics,
     getIdleRestartIdleSince: overrides.getIdleRestartIdleSince,
+    getIdleRestartStartedAt: overrides.getIdleRestartStartedAt,
     hubRelationships: overrides.hubRelationships,
     logger: pino({ level: "silent" }),
   });
@@ -220,6 +222,67 @@ describe("DaemonSession", () => {
         },
       },
     ]);
+  });
+
+  test("status reports the idle-restart startedAt as an ISO timestamp when provided", async () => {
+    const startedAtMs = Date.parse("2026-08-19T10:00:00.000Z");
+    const { subsystem, emitted } = makeSubsystem({
+      serverId: "srv-1",
+      daemonVersion: "1.2.3",
+      daemonRuntimeConfig: { listen: "127.0.0.1:6767", getRelayConfig: () => null },
+      getIdleRestartStartedAt: () => startedAtMs,
+      listProviderAvailability: async () => [],
+    });
+
+    await subsystem.handleGetStatusRequest({ type: "daemon.get_status.request", requestId: "s-4" });
+
+    expect(emitted).toEqual([
+      {
+        type: "daemon.get_status.response",
+        payload: {
+          requestId: "s-4",
+          serverId: "srv-1",
+          version: "1.2.3",
+          pid: process.pid,
+          nodePath: process.execPath,
+          startedAt: "2026-08-19T10:00:00.000Z",
+          idleSince: null,
+          listen: "127.0.0.1:6767",
+          relay: null,
+          providers: [],
+        },
+      },
+    ]);
+  });
+
+  test("status falls back to the pid-lock startedAt when no watchdog getter is injected", async () => {
+    // worker 重启后 pid 锁仍是 supervisor 时间，所以正常注入链下不会走到这个 fallback；
+    // 这里锁定的行为是：getter 缺席（旧调用方/测试 stub）时保持 pid 锁口径，不返回 null 掩盖。
+    const { subsystem, emitted, paseoHome } = makeSubsystem({
+      serverId: "srv-1",
+      daemonVersion: "1.2.3",
+      daemonRuntimeConfig: { listen: "127.0.0.1:6767", getRelayConfig: () => null },
+      listProviderAvailability: async () => [],
+    });
+    writeFileSync(
+      join(paseoHome, "paseo.pid"),
+      `${JSON.stringify({
+        pid: process.pid,
+        startedAt: "2026-08-19T00:38:00.000Z",
+        hostname: "test",
+        uid: 0,
+        listen: null,
+        heartbeat: true,
+      })}\n`,
+    );
+
+    await subsystem.handleGetStatusRequest({ type: "daemon.get_status.request", requestId: "s-5" });
+
+    const response = emitted[0];
+    if (response?.type !== "daemon.get_status.response") {
+      throw new Error("expected a daemon.get_status.response");
+    }
+    expect(response.payload.startedAt).toBe("2026-08-19T00:38:00.000Z");
   });
 
   test("pairing offer is empty when relay is disabled", async () => {

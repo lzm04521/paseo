@@ -1608,6 +1608,7 @@ export async function createPaseoDaemon(
               hubRelationships,
               workspaceSetupRuntime,
               () => idleRestartWatchdog.getIdleSince(),
+              () => idleRestartWatchdog.getStartedAt(),
             );
             relayRuntime = createRelayRuntime({
               config: {

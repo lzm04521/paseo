@@ -3,6 +3,7 @@ import {
   agentCountsAsBusy,
   createIdleRestartWatchdogState,
   evaluateTick,
+  startIdleRestartWatchdog,
 } from "./idle-restart-watchdog.js";
 
 const MIN = 60_000;
@@ -144,6 +145,27 @@ describe("idle-restart-watchdog evaluateTick", () => {
     // 阈值从 240 热改为 5：uptime 12min ≥ 5、idle 11min ≥ 10 → 立即触发
     const outcome = evaluateTick(state, { ...config, uptimeThresholdMinutes: 5 }, false, 12 * MIN);
     expect(outcome.shouldRestart).toBe(true);
+  });
+});
+
+describe("startIdleRestartWatchdog handle", () => {
+  it("exposes the bootstrap-time startedAtMs and keeps it stable across ticks", async () => {
+    let nowMs = 1_000;
+    const watchdog = startIdleRestartWatchdog({
+      getConfig: () => ({ enabled: true, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 }),
+      isBusy: () => false,
+      now: () => (nowMs += 1_000),
+      onTrigger: () => {},
+      tickMs: 1,
+    });
+    // startedAtMs 在创建时由首次 now() 定格，不随 tick 变化（worker 重启才会归零）
+    const initial = watchdog.getStartedAt();
+    expect(initial).toBe(2_000);
+    expect(watchdog.getIdleSince()).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(watchdog.getStartedAt()).toBe(initial);
+    expect(watchdog.getIdleSince()).toBe(initial + 1_000);
+    watchdog.stop();
   });
 });
 
