@@ -285,8 +285,8 @@ describe("editor target registry", () => {
     );
 
     expect(runtime.launches).toEqual([
-      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo"] },
-      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo/src"] },
+      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo", "NEWTAB"] },
+      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo/src", "NEWTAB"] },
     ]);
     expect(runtime.openedPaths).toEqual([]);
     expect(runtime.revealedPaths).toEqual([]);
