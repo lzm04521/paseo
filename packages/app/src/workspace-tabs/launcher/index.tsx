@@ -34,6 +34,8 @@ export interface NewTabLauncher {
   showChanges: boolean;
   showPullRequest: boolean;
   showBrowser: boolean;
+  /** One file navigation panel per workspace: hidden from the launcher while open. */
+  showFileNav: boolean;
   terminalDisabled: boolean;
   launch: (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => void;
 }
@@ -139,6 +141,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
         label: t("workspace.tabs.actions.fileNav"),
         Icon: FolderOpen,
         disabled: false,
+        hidden: !launcher.showFileNav,
         launch: launchSelection(BUILT_IN_SELECTIONS.fileNav),
       },
       browser: {

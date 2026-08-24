@@ -3763,16 +3763,24 @@ function WorkspaceScreenContent({
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
   const showCreateBrowserTab = getIsElectron();
+  // The file navigation panel is a singleton surface: while one is open (in any
+  // pane), its launcher entry disappears instead of stacking a second copy.
+  const hasOpenFileNavTab = useMemo(
+    () => uiTabs.some((tab) => tab.target.kind === "file_nav"),
+    [uiTabs],
+  );
   const newTabLauncher = useMemo<NewTabLauncher>(
     () => ({
       showChanges: isGitCheckout,
       showPullRequest: hasPullRequest,
       showBrowser: showCreateBrowserTab,
+      showFileNav: !hasOpenFileNavTab,
       terminalDisabled: createTerminalDisabled,
       launch: launchWorkspaceTab,
     }),
     [
       createTerminalDisabled,
+      hasOpenFileNavTab,
       hasPullRequest,
       isGitCheckout,
       launchWorkspaceTab,
