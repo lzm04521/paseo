@@ -22,10 +22,13 @@ interface SupportedMutableConfigPatch {
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
-  metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
+  metadataGeneration?: Partial<MutableDaemonConfig["metadataGeneration"]>;
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  claudeImageDowngrade?: MutableDaemonConfig["claudeImageDowngrade"];
+  idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
+  fileSearch?: MutableDaemonConfig["fileSearch"];
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   skills?: MutableDaemonConfig["skills"];
@@ -260,8 +263,8 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.providers !== undefined ? { providers: patch.providers } : {}),
     ...(patch.removeProviders !== undefined ? { removeProviders: patch.removeProviders } : {}),
-    ...(patch.metadataGeneration?.providers !== undefined
-      ? { metadataGeneration: { providers: patch.metadataGeneration.providers } }
+    ...(patch.metadataGeneration !== undefined
+      ? { metadataGeneration: pickMetadataGenerationPatchFields(patch.metadataGeneration) }
       : {}),
     ...(patch.autoArchiveAfterMerge !== undefined
       ? { autoArchiveAfterMerge: patch.autoArchiveAfterMerge }
@@ -272,11 +275,30 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
       : {}),
+    ...(patch.claudeImageDowngrade !== undefined
+      ? { claudeImageDowngrade: patch.claudeImageDowngrade }
+      : {}),
+    ...(patch.idleAutoRestart !== undefined ? { idleAutoRestart: patch.idleAutoRestart } : {}),
+    ...(patch.fileSearch !== undefined ? { fileSearch: patch.fileSearch } : {}),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
   };
+}
+
+// The upstream metadataGeneration patch only carries providers; fork patches may
+// also carry per-key instruction overrides, so forward every declared key.
+function pickMetadataGenerationPatchFields(
+  node: NonNullable<MutableDaemonConfigPatch["metadataGeneration"]>,
+): Partial<MutableDaemonConfig["metadataGeneration"]> {
+  const result: Record<string, unknown> = {};
+  if (node.providers !== undefined) result.providers = node.providers;
+  for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+    const entry = node[key];
+    if (isRecord(entry)) result[key] = entry;
+  }
+  return result as Partial<MutableDaemonConfig["metadataGeneration"]>;
 }
 
 export function applyMutableProviderConfigToOverrides(
@@ -609,15 +631,35 @@ function mergeMutableAgentPatch(
   if (providerOverrides) next["providers"] = providerOverrides;
   else delete next["providers"];
 
-  if (patch.metadataGeneration?.providers !== undefined) {
-    next["metadataGeneration"] = { providers: patch.metadataGeneration.providers };
-  } else if (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers) {
-    const removed = new Set(removeProviders);
-    next["metadataGeneration"] = {
-      providers: persistedAgents.metadataGeneration.providers.filter(
-        (entry) => !removed.has(entry.provider),
-      ),
-    };
+  if (
+    patch.metadataGeneration !== undefined ||
+    (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers)
+  ) {
+    // Persisted metadataGeneration is the base; a patch overrides only the keys it
+    // declares (providers and/or instruction keys), so a providers-only patch keeps
+    // daemon-level instructions and an instructions-only patch keeps providers.
+    const previous = isRecord(persistedAgents?.metadataGeneration)
+      ? (persistedAgents.metadataGeneration as Record<string, unknown>)
+      : {};
+    const { providers: previousProviders, ...previousInstructions } = previous;
+    const merged: Record<string, unknown> = { ...previousInstructions };
+    if (patch.metadataGeneration !== undefined) {
+      for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+        if (isRecord(patch.metadataGeneration[key])) {
+          delete merged[key];
+        }
+      }
+      Object.assign(merged, readMetadataGenerationInstructions(patch.metadataGeneration));
+    }
+    const providers =
+      patch.metadataGeneration?.providers ??
+      (removeProviders.length > 0
+        ? (Array.isArray(previousProviders) ? previousProviders : []).filter(
+            (entry) => !new Set(removeProviders).has((entry as { provider: string }).provider),
+          )
+        : previousProviders);
+    if (providers !== undefined) merged.providers = providers;
+    next["metadataGeneration"] = merged;
   }
 
   if (patch.skills?.selection !== undefined) {
@@ -649,7 +691,43 @@ function mergeMutableDaemonPatch(
     next.enableTerminalAgentHooks = patch.enableTerminalAgentHooks;
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
+  if (patch.claudeImageDowngrade !== undefined) {
+    next.claudeImageDowngrade = patch.claudeImageDowngrade;
+  }
+  if (patch.idleAutoRestart !== undefined) next.idleAutoRestart = patch.idleAutoRestart;
+  if (patch.fileSearch !== undefined) next.fileSearch = patch.fileSearch;
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+const METADATA_GENERATION_INSTRUCTION_KEYS = [
+  "title",
+  "branchName",
+  "commitMessage",
+  "pullRequest",
+] as const;
+
+// Extracts the daemon-level metadataGeneration instructions (the global default
+// fallback) from the mutable config, dropping empty/whitespace-only entries so
+// the persisted file only carries intentional overrides. Mirrors the per-key
+// { instructions } shape used by paseo.json's metadataGeneration.
+function readMetadataGenerationInstructions(
+  metadataGeneration: unknown,
+): Record<string, { instructions: string }> {
+  if (!isRecord(metadataGeneration)) {
+    return {};
+  }
+  const result: Record<string, { instructions: string }> = {};
+  for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+    const entry = metadataGeneration[key];
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const instructions = entry["instructions"];
+    if (typeof instructions === "string" && instructions.trim().length > 0) {
+      result[key] = { instructions };
+    }
+  }
+  return result;
 }

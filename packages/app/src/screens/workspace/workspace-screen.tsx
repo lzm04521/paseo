@@ -168,6 +168,7 @@ import {
   type BulkCloseConfirmationLabels,
   classifyBulkClosableTabs,
   closeBulkWorkspaceTabs,
+  protectLastAgentTab,
 } from "@/screens/workspace/workspace-bulk-close";
 import { resolveCloseAgentTabPolicy } from "@/subagents";
 import {
@@ -2437,6 +2438,14 @@ function WorkspaceScreenContent({
   const handleCloseAgentTab = useCallback(
     async (input: { tabId: string; agentId: string }) => {
       const { tabId, agentId } = input;
+      const closingTab = allTabDescriptorsById.get(tabId);
+      if (closingTab) {
+        const { protectedAgentTabId } = protectLastAgentTab(uiTabs, [closingTab]);
+        if (protectedAgentTabId) {
+          toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+          return;
+        }
+      }
       await closeTab(tabId, async () => {
         if (!normalizedServerId) {
           return;
@@ -2498,6 +2507,7 @@ function WorkspaceScreenContent({
       });
     },
     [
+      allTabDescriptorsById,
       archiveAgent,
       closeTab,
       closeWorkspaceTabWithCleanup,
@@ -2505,6 +2515,7 @@ function WorkspaceScreenContent({
       persistenceKey,
       t,
       toast,
+      uiTabs,
     ],
   );
 
@@ -2725,7 +2736,15 @@ function WorkspaceScreenContent({
       title: string;
       logLabel: string;
     }): Promise<boolean> => {
-      const { tabsToClose, title, logLabel } = input;
+      const { title, logLabel } = input;
+      const { remainingTabsToClose: tabsToClose, protectedAgentTabId } = protectLastAgentTab(
+        uiTabs,
+        input.tabsToClose,
+      );
+      if (protectedAgentTabId && tabsToClose.length === 0) {
+        toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+        return false;
+      }
       if (tabsToClose.length === 0) {
         return true;
       }
@@ -2801,6 +2820,8 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       persistenceKey,
       t,
+      toast,
+      uiTabs,
     ],
   );
 

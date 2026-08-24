@@ -55,6 +55,7 @@ import type {
 } from "@/stores/session-store";
 import { useSessionStore } from "@/stores/session-store";
 import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 import { ContextMenu, ContextMenuTrigger, useContextMenu } from "@/components/ui/context-menu";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
@@ -131,6 +132,7 @@ interface TreeRowItemProps {
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
+  onOpenInVSCodeEntry?: (entry: ExplorerEntry) => void;
   testID?: string;
 }
 
@@ -261,6 +263,7 @@ function TreeRowItem({
   onRenameEntry,
   onDuplicateEntry,
   onDeleteEntry,
+  onOpenInVSCodeEntry,
   testID,
 }: TreeRowItemProps) {
   const { t } = useTranslation();
@@ -308,6 +311,10 @@ function TreeRowItem({
   const handleReveal = useCallback(() => {
     onRevealEntry?.(entry);
   }, [onRevealEntry, entry]);
+
+  const handleOpenInVSCode = useCallback(() => {
+    onOpenInVSCodeEntry?.(entry);
+  }, [onOpenInVSCodeEntry, entry]);
 
   const handleDownload = useCallback(() => {
     onDownloadEntry(entry);
@@ -405,6 +412,7 @@ function TreeRowItem({
         onCopyRelativePath={handleCopyRelativePath}
         onReveal={onRevealEntry ? handleReveal : undefined}
         revealTargetName={revealTargetName}
+        onOpenInVSCode={onOpenInVSCodeEntry ? handleOpenInVSCode : undefined}
         onDownload={handleDownload}
         onAddToChat={onAddToChat ? handleAddToChat : undefined}
         onNewFile={onNewEntry ? handleNewFile : undefined}
@@ -472,6 +480,9 @@ export function FileExplorerPane({
     isLocalExecution: isLocalDaemon,
   });
   const fileManagerTarget = desktopOpenTargets.find((target) => target.kind === "file-manager");
+  const openInVSCode = useOpenInVSCode();
+  const canOpenInVSCode = openInVSCode.isAvailable;
+  const openInVSCodeAction = openInVSCode.open;
   // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.
   const fsEntryOpsEnabled = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.fsEntryOps === true,
@@ -639,6 +650,24 @@ export function FileExplorerPane({
       }
     },
     [fileManagerTarget, normalizedWorkspaceRoot, t, toast],
+  );
+
+  const handleOpenInVSCodeEntry = useCallback(
+    (entry: ExplorerEntry) => {
+      if (!normalizedWorkspaceRoot) return;
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
+      });
+      if (entry.kind === "directory") {
+        // Open the selected directory itself as the VS Code workspace root.
+        openInVSCodeAction({ workspacePath: absoluteEntryPath });
+        return;
+      }
+      // Open the selected file inside the workspace.
+      openInVSCodeAction({ workspacePath: normalizedWorkspaceRoot, filePath: absoluteEntryPath });
+    },
+    [normalizedWorkspaceRoot, openInVSCodeAction],
   );
 
   const handleDownloadEntry = useCallback(
@@ -994,6 +1023,7 @@ export function FileExplorerPane({
           onCopyRelativePath={handleCopyRelativePath}
           onRevealEntry={fileManagerTarget ? handleRevealEntry : undefined}
           revealTargetName={fileManagerTarget?.label}
+          onOpenInVSCodeEntry={canOpenInVSCode ? handleOpenInVSCodeEntry : undefined}
           onDownloadEntry={handleDownloadEntry}
           onAddToChat={onAddToChat}
           onNewEntry={fsEntryOpsEnabled ? handleNewEntry : undefined}
@@ -1021,6 +1051,8 @@ export function FileExplorerPane({
       handleRenameCommit,
       handleRenameEntry,
       handleRevealEntry,
+      canOpenInVSCode,
+      handleOpenInVSCodeEntry,
       handleSelectEntry,
       isDirectoryLoading,
       fileManagerTarget,
@@ -1484,6 +1516,7 @@ function TreeRowDispatcher({
   onRenameEntry,
   onDuplicateEntry,
   onDeleteEntry,
+  onOpenInVSCodeEntry,
 }: {
   serverId: string;
   workspaceId?: string | null;
@@ -1505,6 +1538,7 @@ function TreeRowDispatcher({
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
+  onOpenInVSCodeEntry?: (entry: ExplorerEntry) => void;
 }) {
   const entry = row.entry;
   const depth = row.depth;
@@ -1528,6 +1562,7 @@ function TreeRowDispatcher({
       onCopyRelativePath={onCopyRelativePath}
       onRevealEntry={onRevealEntry}
       revealTargetName={revealTargetName}
+      onOpenInVSCodeEntry={onOpenInVSCodeEntry}
       onDownloadEntry={onDownloadEntry}
       onAddToChat={onAddToChat}
       onNewEntry={onNewEntry}

@@ -1,7 +1,6 @@
 import {
   app,
   BrowserWindow,
-  Menu,
   type MenuItemConstructorOptions,
   type WebContents,
   clipboard,
@@ -448,13 +447,6 @@ export function buildStandardContextMenuItems(
   }
 
   return items;
-}
-
-export function setupDefaultContextMenu(win: BrowserWindow): void {
-  win.webContents.on("context-menu", (_event, params) => {
-    const menu = Menu.buildFromTemplate(buildStandardContextMenuItems(win.webContents, params));
-    menu.popup({ window: win });
-  });
 }
 
 /**

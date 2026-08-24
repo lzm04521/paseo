@@ -9,6 +9,8 @@ const { autoUpdaterMock } = vi.hoisted(() => {
   return {
     autoUpdaterMock: {
       handlers,
+      allowPrerelease: false as boolean,
+      channel: "latest" as string,
       logger: {
         debug: vi.fn(),
         error: vi.fn((message: unknown) => console.error(message)),
@@ -46,6 +48,19 @@ import {
 } from "./auto-updater";
 
 describe("checkForAppUpdate", () => {
+  it("pins the updater to the fork channel regardless of the app-side release setting", async () => {
+    autoUpdaterMock.checkForUpdates.mockImplementationOnce(async () => ({
+      isUpdateAvailable: false,
+      updateInfo: { version: "1.2.3" },
+    }));
+
+    for (const releaseChannel of ["stable", "beta"] as const) {
+      await checkForAppUpdate({ currentVersion: "1.2.3", releaseChannel, intent: "manual" });
+      expect(autoUpdaterMock.channel).toBe("local");
+      expect(autoUpdaterMock.allowPrerelease).toBe(true);
+    }
+  });
+
   it("treats an unpublished channel manifest as an unavailable update", async () => {
     const error = Object.assign(new Error("Cannot find latest-mac.yml"), {
       code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",

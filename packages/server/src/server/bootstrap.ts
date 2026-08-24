@@ -138,6 +138,7 @@ import {
 } from "./agent/tools/paseo-tools.js";
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import { migrateLegacyImageDowngrade } from "./agent/providers/claude/image-downgrade.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -178,6 +179,8 @@ import type {
   PluginSource,
   TerminalProfile,
 } from "@getpaseo/protocol/messages";
+import { DEFAULT_IDLE_AUTO_RESTART_CONFIG } from "@getpaseo/protocol/messages";
+import { agentCountsAsBusy, startIdleRestartWatchdog } from "./idle-restart-watchdog.js";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
@@ -406,6 +409,8 @@ export interface PaseoDaemonConfig {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  claudeImageDowngrade?: "off" | "on";
+  idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
@@ -447,6 +452,10 @@ export interface PaseoDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    title?: { instructions?: string };
+    branchName?: { instructions?: string };
+    commitMessage?: { instructions?: string };
+    pullRequest?: { instructions?: string };
   };
   providerOverrides?: Record<string, ProviderOverride>;
   log?: PersistedConfig["log"];
@@ -483,6 +492,10 @@ export interface PaseoDaemonDependencies {
   serverFeatureOverrides?: {
     daemonStatusRpc?: boolean;
     relayConfig?: boolean;
+  };
+  idleRestartWatchdog?: {
+    tickMs?: number;
+    now?: () => number;
   };
 }
 
@@ -547,6 +560,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
     metadataGeneration: {
+      ...config.metadataGeneration,
       providers: config.metadataGeneration?.providers ?? [],
     },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
@@ -555,6 +569,8 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
+    claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
+    idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -607,6 +623,10 @@ export async function createPaseoDaemon(
   void orchestrationSkills.autoUpdate().catch((error) => {
     logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
   });
+  const legacyDowngradeMode = migrateLegacyImageDowngrade(config.paseoHome, logger);
+  if (legacyDowngradeMode === "on") {
+    daemonConfigStore.patch({ claudeImageDowngrade: "on" });
+  }
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
   const pluginRuntime = new PluginService(logger, daemonConfigStore);
@@ -895,6 +915,7 @@ export async function createPaseoDaemon(
     managedProcesses,
     isDev: config.isDev === true,
     extraClients: config.agentClients,
+    getDaemonConfig: () => daemonConfigStore.get(),
   });
   daemonConfigStore.onFieldChange("catalogRefreshTimeoutMs", (value) => {
     providerSnapshotManager.setRefreshTimeoutMs(typeof value === "number" ? value : undefined);
@@ -918,6 +939,32 @@ export async function createPaseoDaemon(
     },
     mcpAuthToken: agentMcpAuthToken,
     logger,
+  });
+
+  const idleRestartWatchdogOptions = dependencies.idleRestartWatchdog ?? {};
+  const idleRestartWatchdog = startIdleRestartWatchdog({
+    getConfig: () => daemonConfigStore.get().idleAutoRestart,
+    isBusy: () => agentManager.listAgents().some(agentCountsAsBusy),
+    now: idleRestartWatchdogOptions.now ?? Date.now,
+    tickMs: idleRestartWatchdogOptions.tickMs,
+    onTrigger: (info) => {
+      logger.warn(
+        {
+          reason: "idle_auto_restart",
+          uptimeMinutes: info.uptimeMinutes,
+          idleMinutes: info.idleMinutes,
+          agentsByLifecycle: agentManager.getMetricsSnapshot().byLifecycle,
+          configuredThresholds: info.thresholds,
+        },
+        "Idle auto-restart triggered",
+      );
+      config.onLifecycleIntent?.({
+        type: "restart",
+        clientId: "idle-auto-restart-watchdog",
+        requestId: randomUUID(),
+        reason: "idle_auto_restart",
+      });
+    },
   });
 
   const detachAgentStoragePersistence = attachAgentStoragePersistence(
@@ -1654,6 +1701,8 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              () => idleRestartWatchdog.getIdleSince(),
+              () => idleRestartWatchdog.getStartedAt(),
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -1711,6 +1760,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    idleRestartWatchdog.stop();
     await pluginRuntime.stopAllPlugins();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();

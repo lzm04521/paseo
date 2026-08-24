@@ -1,4 +1,5 @@
-const versionPattern = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$/;
+// Fork addition: `-local.N` release-iteration suffix rides the same slots as beta.
+const versionPattern = /^(\d+)\.(\d+)\.(\d+)(?:-(?:beta|local)\.(\d+))?$/;
 const stableIosBuildSlot = 999;
 
 function getNativeReleaseVersion(version) {

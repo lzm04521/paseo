@@ -19,6 +19,8 @@ import type {
 } from "./agent/provider-launch-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
+import { DEFAULT_IDLE_AUTO_RESTART_CONFIG } from "@getpaseo/protocol/messages";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
@@ -507,6 +509,23 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
+function resolveClaudeImageDowngrade(
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): MutableDaemonConfig["claudeImageDowngrade"] {
+  return persisted.daemon?.claudeImageDowngrade ?? "off";
+}
+
+function resolveIdleAutoRestart(persisted: ReturnType<typeof loadPersistedConfig>) {
+  const node = persisted.daemon?.idleAutoRestart;
+  return {
+    enabled: node?.enabled ?? DEFAULT_IDLE_AUTO_RESTART_CONFIG.enabled,
+    uptimeThresholdMinutes:
+      node?.uptimeThresholdMinutes ?? DEFAULT_IDLE_AUTO_RESTART_CONFIG.uptimeThresholdMinutes,
+    idleThresholdMinutes:
+      node?.idleThresholdMinutes ?? DEFAULT_IDLE_AUTO_RESTART_CONFIG.idleThresholdMinutes,
+  };
+}
+
 /**
  * Both profile lists stay `undefined` when absent rather than defaulting to an
  * empty array: for terminal profiles that is what selects the built-in
@@ -532,6 +551,8 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     ...resolveProfileLists(persisted),
+    claudeImageDowngrade: resolveClaudeImageDowngrade(persisted),
+    idleAutoRestart: resolveIdleAutoRestart(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
       parseHostnamesEnv(env.PASEO_HOSTNAMES ?? env.PASEO_ALLOWED_HOSTS),
@@ -566,6 +587,8 @@ export function resolveConfigFromPersisted(
     browserToolsEnabled,
     autoArchiveAfterMerge,
     appendSystemPrompt,
+    claudeImageDowngrade,
+    idleAutoRestart,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -611,6 +634,8 @@ export function resolveConfigFromPersisted(
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
+    claudeImageDowngrade,
+    idleAutoRestart,
     terminalProfiles,
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,
