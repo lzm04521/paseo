@@ -79,6 +79,8 @@ export interface PanelState {
   // File panel's tree rail. The changes panel keeps its own flag in
   // `useChangesPreferences`; the two rails open and close independently.
   fileTreeVisible: boolean;
+  // New Workspace screen's desktop file-navigation column.
+  newWorkspaceFileNavOpen: boolean;
 
   // Actions
   toggleFocusMode: () => void;
@@ -107,6 +109,7 @@ export interface PanelState {
   toggleExplorerShowHiddenFiles: () => void;
   setTreeRailWidth: (width: number) => void;
   toggleFileTreeVisible: () => void;
+  toggleNewWorkspaceFileNav: () => void;
 }
 
 const DEFAULT_DESKTOP_OPEN = isWeb;
@@ -142,6 +145,7 @@ export const usePanelStore = create<PanelState>()(
       explorerShowHiddenFiles: true,
       treeRailWidth: DEFAULT_TREE_RAIL_WIDTH,
       fileTreeVisible: true,
+      newWorkspaceFileNavOpen: true,
 
       toggleFocusMode: () =>
         set((state) => ({
@@ -284,6 +288,8 @@ export const usePanelStore = create<PanelState>()(
         set((state) => ({ explorerShowHiddenFiles: !state.explorerShowHiddenFiles })),
       setTreeRailWidth: (width) => set({ treeRailWidth: clampTreeRailWidth(width) }),
       toggleFileTreeVisible: () => set((state) => ({ fileTreeVisible: !state.fileTreeVisible })),
+      toggleNewWorkspaceFileNav: () =>
+        set((state) => ({ newWorkspaceFileNavOpen: !state.newWorkspaceFileNavOpen })),
     }),
     {
       name: "panel-state",
@@ -302,6 +308,7 @@ export const usePanelStore = create<PanelState>()(
         explorerShowHiddenFiles: state.explorerShowHiddenFiles,
         treeRailWidth: state.treeRailWidth,
         fileTreeVisible: state.fileTreeVisible,
+        newWorkspaceFileNavOpen: state.newWorkspaceFileNavOpen,
       }),
     },
   ),

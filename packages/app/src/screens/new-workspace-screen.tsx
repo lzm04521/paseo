@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Folder, FolderPlus, GitBranch, GitPullRequest } from "lucide-react-native";
 import { Composer } from "@/composer";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
+import { FileExplorerPane } from "@/components/file-explorer-pane";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
@@ -34,6 +35,7 @@ import { useForgeSearchQuery } from "@/git/use-forge-search-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
 import { ensureCheckoutStatus } from "@/git/checkout-status-cache";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { resolveTerminalProfiles } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { LaunchControl } from "@/new-workspace-launch/launch-control";
@@ -70,6 +72,7 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { generateMessageId } from "@/types/stream";
 import { toErrorMessage } from "@/utils/error-messages";
+import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
   getHostProjectSourceDirectory,
@@ -91,6 +94,7 @@ import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messag
 import type { CreatePaseoWorktreeInput } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
+import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
   getWorkspaceNamingAttachments,
@@ -207,6 +211,7 @@ const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pi
 // Height of a single picker-trigger badge. The Base-row spacer reserves exactly
 // this so toggling Isolation to Local hides the row without shifting the form.
 const BADGE_HEIGHT = 28;
+const FILE_NAV_WIDTH = 300;
 
 function RefPickerBadgeContent({
   selectedItem,
@@ -1705,6 +1710,41 @@ export function NewWorkspaceScreen({
     cwd: selectedSourceDirectory ?? "",
   });
 
+  // Desktop-only navigation column for the directory being configured. Without
+  // a workspaceId the pane keys its explorer state by `root:<dir>`, so switching
+  // projects re-keys the tree and it re-initializes on its own.
+  const isLocalDaemon = useIsLocalDaemon(selectedServerId);
+  const { targets: navOpenTargets } = useDesktopOpenTargets({
+    isLocalExecution: isLocalDaemon,
+  });
+  const showNavPanel = !isCompact && hasSelectedSourceDirectory;
+  const handleOpenNavFile = useCallback(
+    async (entryPath: string) => {
+      if (!selectedSourceDirectory) {
+        return;
+      }
+      const target =
+        navOpenTargets.find((option) => option.kind === "editor") ??
+        navOpenTargets.find((option) => option.kind === "file-manager");
+      if (!target) {
+        return;
+      }
+      try {
+        await openDesktopTarget({
+          editorId: target.id,
+          workspacePath: selectedSourceDirectory,
+          filePath: buildAbsoluteExplorerPath({
+            workspaceRoot: selectedSourceDirectory,
+            entryPath,
+          }),
+        });
+      } catch (cause) {
+        toast.error(toErrorMessage(cause));
+      }
+    },
+    [navOpenTargets, selectedSourceDirectory, toast],
+  );
+
   const worktreeSupport = selectedProject
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
@@ -2169,10 +2209,10 @@ export function NewWorkspaceScreen({
     ],
   );
 
-  const contentStyle = useMemo(
-    () => getContentStyle({ isCompact, insetBottom: insets.bottom }),
-    [isCompact, insets.bottom],
-  );
+  const contentStyle = useMemo(() => {
+    const base = getContentStyle({ isCompact, insetBottom: insets.bottom });
+    return showNavPanel ? [...base, styles.contentWithNav] : base;
+  }, [isCompact, insets.bottom, showNavPanel]);
 
   const { style: composerKeyboardStyle } = useKeyboardShiftStyle({
     mode: "translate",
@@ -2333,6 +2373,17 @@ export function NewWorkspaceScreen({
           )}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </ReanimatedAnimated.View>
+        {showNavPanel ? (
+          <View style={styles.fileNavPanel}>
+            <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
+            <FileExplorerPane
+              serverId={selectedServerId}
+              workspaceId={null}
+              workspaceRoot={selectedSourceDirectory ?? ""}
+              onOpenFile={handleOpenNavFile}
+            />
+          </View>
+        ) : null}
       </View>
     </FileDropZone>
   );
@@ -2362,6 +2413,27 @@ const styles = StyleSheet.create((theme) => ({
   },
   contentCompact: {
     justifyContent: "flex-end",
+  },
+  // Reserves room for the absolute-positioned nav column so the centered form
+  // keeps clearing it instead of centering underneath.
+  contentWithNav: {
+    paddingRight: FILE_NAV_WIDTH,
+  },
+  fileNavPanel: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: FILE_NAV_WIDTH,
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
+  },
+  fileNavHeader: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foregroundMuted,
   },
   composerTitleContainer: {
     marginBottom: theme.spacing[8],

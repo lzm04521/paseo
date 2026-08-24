@@ -152,6 +152,7 @@ export const PanelPersistedStateSchema = z.strictObject({
   explorerFilesSplitRatio: z.number().optional(),
   treeRailWidth: z.number().optional(),
   fileTreeVisible: z.boolean().optional(),
+  newWorkspaceFileNavOpen: z.boolean().optional(),
 });
 
 type MigratablePanelState = z.infer<typeof PanelPersistedStateSchema>;
@@ -253,6 +254,9 @@ export function migratePanelState(persistedState: unknown, version: number): Mig
   migrateTreeRailWidth(state, version);
   if (typeof state.fileTreeVisible !== "boolean") {
     state.fileTreeVisible = true;
+  }
+  if (typeof state.newWorkspaceFileNavOpen !== "boolean") {
+    state.newWorkspaceFileNavOpen = true;
   }
   if (version < 12) {
     // Compact panel position is transient UI state. Cold starts always begin

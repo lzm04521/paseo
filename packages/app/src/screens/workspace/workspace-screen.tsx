@@ -4007,6 +4007,9 @@ function WorkspaceScreenContent({
       {shouldRenderDesktopPaneFallback ? (
         <WorkspaceDesktopTabsRow
           paneId={focusedPaneIdOrUndefined}
+          isSidePanel={
+            focusedPaneIdOrUndefined !== undefined && focusedPaneIdOrUndefined === sidePanelPaneId
+          }
           isFocused={isRouteFocused}
           tabs={desktopTabRowItems}
           normalizedServerId={normalizedServerId}

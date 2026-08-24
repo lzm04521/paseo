@@ -1178,6 +1178,7 @@ function SplitPaneView({
           <TitlebarDragRegion />
           <WorkspaceDesktopTabsRow
             paneId={pane.id}
+            isSidePanel={pane.id === sidePanelPaneId}
             isFocused={isFocused && isWorkspaceFocused}
             tabs={desktopTabRowItems}
             normalizedServerId={normalizedServerId}
