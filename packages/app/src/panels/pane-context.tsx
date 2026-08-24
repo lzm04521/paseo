@@ -18,6 +18,8 @@ export interface PaneContextValue {
   retargetCurrentTab: (target: WorkspaceTabTarget) => void;
   setCurrentTabState: (state: JsonValue) => void;
   openFileInWorkspace: (request: WorkspaceFileOpenRequest) => void;
+  /** Opens a file as a "file" tab in the main window, outside the Side panel. */
+  openFileInMainPane: (path: string) => void;
   openImportSheet: () => void;
 }
 

@@ -725,6 +725,7 @@ export const zhCN: TranslationResources = {
         splitDown: "向下拆分窗格",
         changes: "更改",
         files: "文件",
+        fileNav: "文件导航",
         pullRequest: "拉取请求",
         terminalProfilesMenu: "终端配置",
         editTerminalProfiles: "编辑配置…",
@@ -1919,6 +1920,11 @@ export const zhCN: TranslationResources = {
       subtitle: "工作区文件",
       tooltip: "浏览工作区文件",
       chooseFile: "选择文件",
+    },
+    fileNav: {
+      label: "文件导航",
+      subtitle: "浏览工作区文件",
+      tooltip: "点击文件在主窗口打开",
     },
     pullRequest: {
       label: "拉取请求",

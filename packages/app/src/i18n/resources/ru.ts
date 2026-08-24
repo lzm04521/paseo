@@ -730,6 +730,7 @@ export const ru: TranslationResources = {
         splitDown: "Разделить панель снизу",
         changes: "Изменения",
         files: "Файлы",
+        fileNav: "Проводник",
         pullRequest: "PR",
         terminalProfilesMenu: "Профили терминала",
         editTerminalProfiles: "Изменить профили",
@@ -1971,6 +1972,11 @@ export const ru: TranslationResources = {
       subtitle: "Файлы рабочего пространства",
       tooltip: "Просмотр файлов рабочего пространства",
       chooseFile: "Выберите файл",
+    },
+    fileNav: {
+      label: "Проводник",
+      subtitle: "Навигация по файлам рабочего пространства",
+      tooltip: "Открывает файлы в главном окне",
     },
     pullRequest: {
       label: "PR",

@@ -725,6 +725,7 @@ export const ar: TranslationResources = {
         splitDown: "تقسيم الجزء لأسفل",
         changes: "التغييرات",
         files: "الملفات",
+        fileNav: "المستكشف",
         pullRequest: "طلب السحب",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
@@ -1940,6 +1941,11 @@ export const ar: TranslationResources = {
       subtitle: "ملفات مساحة العمل",
       tooltip: "تصفح ملفات مساحة العمل",
       chooseFile: "اختر ملفًا",
+    },
+    fileNav: {
+      label: "المستكشف",
+      subtitle: "التنقل في ملفات مساحة العمل",
+      tooltip: "افتح الملفات في النافذة الرئيسية",
     },
     pullRequest: {
       label: "طلب السحب",

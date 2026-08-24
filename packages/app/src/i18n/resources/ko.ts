@@ -607,6 +607,7 @@ export const ko: TranslationResources = {
         splitDown: "창을 아래로 분할",
         changes: "변경 사항",
         files: "파일",
+        fileNav: "탐색기",
         pullRequest: "풀 리퀘스트",
         terminalProfilesMenu: "터미널 프로필",
         editTerminalProfiles: "프로필 편집",
@@ -1765,6 +1766,11 @@ export const ko: TranslationResources = {
       subtitle: "워크스페이스 파일",
       tooltip: "워크스페이스 파일 탐색",
       chooseFile: "파일 선택",
+    },
+    fileNav: {
+      label: "탐색기",
+      subtitle: "워크스페이스 파일 탐색",
+      tooltip: "메인 창에서 파일 열기",
     },
     pullRequest: {
       label: "풀 리퀘스트",

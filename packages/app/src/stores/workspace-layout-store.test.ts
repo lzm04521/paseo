@@ -905,6 +905,29 @@ describe("workspace-layout-store actions", () => {
     expect(state.sidePanelPaneIdByWorkspace[workspaceKey]).toBe(sidePanelPaneId);
   });
 
+  it("persists a file navigation tab through rehydration", async () => {
+    await AsyncStorage.removeItem("workspace-layout-state");
+    const workspaceKey = createWorkspaceKey();
+    const source = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await source.persist.rehydrate();
+
+    source
+      .getState()
+      .openTab({ workspaceKey: workspaceKey, target: { kind: "file_nav" }, intent: "reveal" });
+
+    await vi.waitFor(async () => {
+      expect(await AsyncStorage.getItem("workspace-layout-state")).not.toBeNull();
+    });
+
+    const restored = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await restored.persist.rehydrate();
+    const layout = restored.getState().layoutByWorkspace[workspaceKey];
+    const restoredKinds = collectAllTabs(layout.root)
+      .filter((tab) => tab.target.kind !== "new_tab")
+      .map((tab) => tab.target.kind);
+    expect(restoredKinds).toEqual(["file_nav"]);
+  });
+
   it("persists and rehydrates independent Changes state through validated storage", async () => {
     await AsyncStorage.removeItem("workspace-layout-state");
     const workspaceKey = createWorkspaceKey();

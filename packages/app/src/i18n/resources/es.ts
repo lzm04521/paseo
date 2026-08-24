@@ -730,6 +730,7 @@ export const es: TranslationResources = {
         splitDown: "Dividir panel hacia abajo",
         changes: "Cambios",
         files: "Archivos",
+        fileNav: "Explorador",
         pullRequest: "Solicitud de extracción",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
@@ -1986,6 +1987,11 @@ export const es: TranslationResources = {
       subtitle: "Archivos del espacio de trabajo",
       tooltip: "Explorar archivos del espacio de trabajo",
       chooseFile: "Elige un archivo",
+    },
+    fileNav: {
+      label: "Explorador",
+      subtitle: "Navegar por los archivos del espacio de trabajo",
+      tooltip: "Abre los archivos en la ventana principal",
     },
     pullRequest: {
       label: "Solicitud de extracción",

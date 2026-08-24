@@ -723,6 +723,7 @@ export const en = {
         splitDown: "Split pane down",
         changes: "Changes",
         files: "Files",
+        fileNav: "Explorer",
         pullRequest: "Pull request",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
@@ -1950,6 +1951,11 @@ export const en = {
       subtitle: "Workspace files",
       tooltip: "Browse workspace files",
       chooseFile: "Choose a file",
+    },
+    fileNav: {
+      label: "Explorer",
+      subtitle: "Navigate workspace files",
+      tooltip: "Open files in the main window",
     },
     pullRequest: {
       label: "Pull request",

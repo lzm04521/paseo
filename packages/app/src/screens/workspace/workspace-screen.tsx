@@ -59,6 +59,7 @@ import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   canDismissPaneInLayout,
+  collectAllPanes,
   collectAllTabs,
   DEFAULT_PANE_ID,
   findPaneById,
@@ -308,6 +309,7 @@ function getFallbackTabOptionLabel(
     agent: string;
     changes: string;
     files: string;
+    fileNav: string;
     pullRequest: string;
   },
 ): string {
@@ -335,6 +337,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "files") {
     return labels.files;
   }
+  if (tab.target.kind === "file_nav") {
+    return labels.fileNav;
+  }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
   }
@@ -355,6 +360,7 @@ function getFallbackTabOptionDescription(
     browser: string;
     changes: string;
     files: string;
+    fileNav: string;
     pullRequest: string;
   },
 ): string {
@@ -387,6 +393,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "files") {
     return labels.files;
+  }
+  if (tab.target.kind === "file_nav") {
+    return labels.fileNav;
   }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
@@ -592,6 +601,7 @@ function MobileWorkspaceTabOption({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      fileNav: t("panels.fileNav.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -1368,6 +1378,26 @@ function paneLocalPlacement(paneId: string | null | undefined): WorkspaceTabPlac
   return paneId ? { mode: "pane", paneId } : FOCUSED_PANE_PLACEMENT;
 }
 
+/**
+ * Where the file navigation panel's opens land: beside it, in the main window.
+ * The default pane when it exists, any visible non-side-panel pane otherwise.
+ * Undefined lets the store fall back to the focused pane, like every other
+ * open without an opinion. Mirrors the fallback chain in resolvePlacementPane.
+ */
+function buildMainPanePlacement(input: {
+  layout: WorkspaceLayout | undefined;
+  sidePanelPaneId: string | null;
+}): WorkspaceTabPlacement | undefined {
+  if (!input.layout) {
+    return undefined;
+  }
+  const panes = collectAllPanes(input.layout.root);
+  const pane =
+    panes.find((candidate) => candidate.id === DEFAULT_PANE_ID) ??
+    panes.find((candidate) => candidate.id !== input.sidePanelPaneId);
+  return pane ? { mode: "pane", paneId: pane.id } : undefined;
+}
+
 function canDetectPullRequest(
   isRouteFocused: boolean,
   isGitCheckout: boolean,
@@ -2126,6 +2156,31 @@ function WorkspaceScreenContent({
     ],
   );
 
+  // The Side panel's file navigation opens files beside itself, in the main
+  // window. No state is seeded, so the opened tab keeps the default file state
+  // with its folder tree hidden; an already-open path is revealed in place.
+  const handleOpenFileFromNavigation = useCallback(
+    (path: string) => {
+      const location = normalizeWorkspaceFileLocation({ path });
+      if (!location || !persistenceKey) {
+        return;
+      }
+      const store = useWorkspaceLayoutStore.getState();
+      const tabId = openWorkspaceTabFocused(
+        persistenceKey,
+        createWorkspaceFileTabTarget(location),
+        buildMainPanePlacement({
+          layout: store.layoutByWorkspace[persistenceKey],
+          sidePanelPaneId: selectSidePanelPaneId(store, persistenceKey),
+        }),
+      );
+      if (tabId) {
+        navigateToTabId(tabId);
+      }
+    },
+    [navigateToTabId, openWorkspaceTabFocused, persistenceKey],
+  );
+
   const handleOpenAssistantFileInSidePanel = useCallback(
     (input: { location: WorkspaceFileLocation; parentTabId?: string | null }) => {
       const location = normalizeWorkspaceFileLocation(input.location);
@@ -2259,6 +2314,7 @@ function WorkspaceScreenContent({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      fileNav: t("panels.fileNav.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -3444,11 +3500,13 @@ function WorkspaceScreenContent({
             focusPaneBeforeOpen: input.focusPaneBeforeOpen,
           });
         },
+        onOpenFileInMainPane: handleOpenFileFromNavigation,
         onOpenImportSheet: openImportSheet,
       }),
     [
       handleCloseTabById,
       fileNavigationRevisionByTabId,
+      handleOpenFileFromNavigation,
       handleOpenWorkspaceFileFromPane,
       navigateToTabId,
       normalizedServerId,

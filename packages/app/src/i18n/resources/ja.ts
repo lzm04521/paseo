@@ -730,6 +730,7 @@ export const ja: TranslationResources = {
         splitDown: "下にペインを分割",
         changes: "変更",
         files: "ファイル",
+        fileNav: "エクスプローラー",
         pullRequest: "プルリクエスト",
         terminalProfilesMenu: "ターミナルプロファイル",
         editTerminalProfiles: "プロファイルを編集",
@@ -1957,6 +1958,11 @@ export const ja: TranslationResources = {
       subtitle: "ワークスペースのファイル",
       tooltip: "ワークスペースのファイルを参照",
       chooseFile: "ファイルを選択",
+    },
+    fileNav: {
+      label: "エクスプローラー",
+      subtitle: "ワークスペースのファイルをナビゲート",
+      tooltip: "ファイルをメインウィンドウで開く",
     },
     pullRequest: {
       label: "プルリクエスト",

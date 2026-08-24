@@ -729,6 +729,7 @@ export const ptBR: TranslationResources = {
         splitDown: "Dividir painel abaixo",
         changes: "Alterações",
         files: "Arquivos",
+        fileNav: "Explorador",
         pullRequest: "Pull request",
         terminalProfilesMenu: "Perfis de terminal",
         editTerminalProfiles: "Editar perfis",
@@ -1972,6 +1973,11 @@ export const ptBR: TranslationResources = {
       subtitle: "Arquivos do espaço de trabalho",
       tooltip: "Explorar arquivos do espaço de trabalho",
       chooseFile: "Escolha um arquivo",
+    },
+    fileNav: {
+      label: "Explorador",
+      subtitle: "Navegar pelos arquivos do espaço de trabalho",
+      tooltip: "Abre os arquivos na janela principal",
     },
     pullRequest: {
       label: "Pull request",

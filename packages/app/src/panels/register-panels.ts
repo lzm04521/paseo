@@ -3,6 +3,7 @@ import { browserPanelRegistration } from "@/desktop/browser/panel";
 import { commitDiffPanelRegistration, workingDiffPanelRegistration } from "@/panels/diff-panel";
 import { draftPanelRegistration } from "@/panels/draft-panel";
 import { filePanelRegistration } from "@/panels/file-panel";
+import { fileNavPanelRegistration } from "@/panels/file-nav-panel";
 import { filesPanelRegistration } from "@/panels/files-panel";
 import { registerPanel } from "@/panels/panel-registry";
 import { setupPanelRegistration } from "@/panels/setup-panel";
@@ -27,6 +28,7 @@ export function ensurePanelsRegistered(): void {
   registerPanel(browserPanelRegistration);
   registerPanel(filePanelRegistration);
   registerPanel(filesPanelRegistration);
+  registerPanel(fileNavPanelRegistration);
   registerPanel(pullRequestPanelRegistration);
   registerPanel(commitDiffPanelRegistration);
   registerPanel(workingDiffPanelRegistration);

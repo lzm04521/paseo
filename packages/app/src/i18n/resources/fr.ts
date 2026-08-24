@@ -730,6 +730,7 @@ export const fr: TranslationResources = {
         splitDown: "Diviser le volet vers le bas",
         changes: "Modifications",
         files: "Fichiers",
+        fileNav: "Explorateur",
         pullRequest: "Demande de fusion",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
@@ -1990,6 +1991,11 @@ export const fr: TranslationResources = {
       subtitle: "Fichiers de l’espace de travail",
       tooltip: "Parcourir les fichiers de l’espace de travail",
       chooseFile: "Choisissez un fichier",
+    },
+    fileNav: {
+      label: "Explorateur",
+      subtitle: "Parcourir les fichiers de l’espace de travail",
+      tooltip: "Ouvre les fichiers dans la fenêtre principale",
     },
     pullRequest: {
       label: "Demande de fusion",
