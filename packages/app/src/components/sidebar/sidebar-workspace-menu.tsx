@@ -174,6 +174,16 @@ function SidebarWorkspaceMenuItems({
           {t("sidebar.workspace.actions.copyBranchName")}
         </WorkspaceMenuItem>
       ) : null}
+      <OpenInFileManagerMenuItem
+        surface={surface}
+        path={openInFileManagerPath}
+        testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
+      />
+      <OpenInVSCodeMenuItem
+        surface={surface}
+        path={openInFileManagerPath}
+        testID={`sidebar-workspace-menu-open-vscode-${workspaceKey}`}
+      />
       {onRename ? (
         <WorkspaceMenuItem
           surface={surface}
@@ -191,7 +201,7 @@ function SidebarWorkspaceMenuItems({
           leading={markAsReadLeadingIcon}
           onSelect={onMarkAsRead}
         >
-          Mark as read
+          {t("sidebar.workspace.actions.markAsRead")}
         </WorkspaceMenuItem>
       ) : null}
       {onTogglePin ? (
@@ -213,16 +223,6 @@ function SidebarWorkspaceMenuItems({
           {t("workspaceLabels.title")}
         </DropdownMenuSubTrigger>
       ) : null}
-      <OpenInFileManagerMenuItem
-        surface={surface}
-        path={openInFileManagerPath}
-        testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
-      />
-      <OpenInVSCodeMenuItem
-        surface={surface}
-        path={openInFileManagerPath}
-        testID={`sidebar-workspace-menu-open-vscode-${workspaceKey}`}
-      />
       {onArchive ? (
         <WorkspaceMenuItem
           surface={surface}
