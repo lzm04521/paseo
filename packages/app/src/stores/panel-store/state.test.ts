@@ -156,6 +156,16 @@ describe("panel-store migration", () => {
     );
   });
 
+  it("defaults the new-workspace file nav width and clamps a persisted outlier", () => {
+    expect(migratePanelState({}, 16).newWorkspaceFileNavWidth).toBe(300);
+    expect(migratePanelState({ newWorkspaceFileNavWidth: 5000 }, 16).newWorkspaceFileNavWidth).toBe(
+      720,
+    );
+    expect(migratePanelState({ newWorkspaceFileNavWidth: 10 }, 16).newWorkspaceFileNavWidth).toBe(
+      220,
+    );
+  });
+
   it("drops persisted compact panel state so cold starts return to content", () => {
     const state = migratePanelState(
       { mobileView: "agent-list", mobilePanel: { target: "file-explorer", revision: 42 } },

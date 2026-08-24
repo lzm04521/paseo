@@ -2,9 +2,21 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type { ReactElement, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Pressable, StyleSheet as RNStyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet as RNStyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import type { PressableStateCallbackType } from "react-native";
-import ReanimatedAnimated from "react-native-reanimated";
+import ReanimatedAnimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { Gesture } from "react-native-gesture-handler";
+import { scheduleOnRN } from "react-native-worklets";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createNameId } from "mnemonic-id";
@@ -64,7 +76,12 @@ import {
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
-import { usePanelStore } from "@/stores/panel-store";
+import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
+import {
+  SIDEBAR_RESIZE_ACTIVATION_OFFSET,
+  SIDEBAR_RESIZE_FAIL_OFFSET,
+} from "@/components/sidebar-resize-handle-layout";
+import { usePanelStore, MIN_FILE_NAV_WIDTH, MAX_FILE_NAV_WIDTH } from "@/stores/panel-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -229,7 +246,18 @@ const FILE_NAV_TOGGLE_KEYS: ShortcutKey[] = ["mod", "E"];
 // Height of a single picker-trigger badge. The Base-row spacer reserves exactly
 // this so toggling Isolation to Local hides the row without shifting the form.
 const BADGE_HEIGHT = 28;
-const FILE_NAV_WIDTH = 300;
+// Leaves at least this much room for the centered form when clamping the nav
+// column's drag width on narrow windows.
+const FILE_NAV_FORM_RESERVE_WIDTH = 520;
+
+// Worklet: clamps the nav column's drag width, keeping the centered form usable.
+function resolveFileNavWidth(requestedWidth: number, viewportWidth: number): number {
+  "worklet";
+  return Math.max(
+    MIN_FILE_NAV_WIDTH,
+    Math.min(MAX_FILE_NAV_WIDTH, requestedWidth, viewportWidth - FILE_NAV_FORM_RESERVE_WIDTH),
+  );
+}
 
 function RefPickerBadgeContent({
   selectedItem,
@@ -1737,7 +1765,69 @@ export function NewWorkspaceScreen({
   });
   const fileNavOpen = usePanelStore((state) => state.newWorkspaceFileNavOpen);
   const toggleNewWorkspaceFileNav = usePanelStore((state) => state.toggleNewWorkspaceFileNav);
+  const fileNavWidth = usePanelStore((state) => state.newWorkspaceFileNavWidth);
+  const setNewWorkspaceFileNavWidth = usePanelStore((state) => state.setNewWorkspaceFileNavWidth);
   const showNavPanel = !isCompact && hasSelectedSourceDirectory && fileNavOpen;
+  const { width: viewportWidth } = useWindowDimensions();
+  const visibleFileNavWidth = resolveFileNavWidth(fileNavWidth, viewportWidth);
+
+  const fileNavStartWidthRef = useRef(visibleFileNavWidth);
+  const fileNavResizeWidth = useSharedValue(visibleFileNavWidth);
+  const [fileNavResizePressed, setFileNavResizePressed] = useState(false);
+  const showFileNavGrip = useCallback(() => setFileNavResizePressed(true), []);
+  const hideFileNavGrip = useCallback(() => setFileNavResizePressed(false), []);
+
+  useEffect(() => {
+    fileNavResizeWidth.value = visibleFileNavWidth;
+  }, [fileNavResizeWidth, visibleFileNavWidth]);
+
+  // Mirror of the left sidebar's gesture: the handle sits on the column's LEFT
+  // edge, so dragging left (negative translationX) widens it — the anchor is
+  // offset accordingly. Width persists to panel-store on release.
+  const fileNavResizeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .hitSlop({ left: 8, right: 8, top: 0, bottom: 0 })
+        .onBegin(() => {
+          scheduleOnRN(showFileNavGrip);
+        })
+        .activeOffsetX([-SIDEBAR_RESIZE_ACTIVATION_OFFSET, SIDEBAR_RESIZE_ACTIVATION_OFFSET])
+        .failOffsetY([-SIDEBAR_RESIZE_FAIL_OFFSET, SIDEBAR_RESIZE_FAIL_OFFSET])
+        .onStart((event) => {
+          fileNavStartWidthRef.current = visibleFileNavWidth + event.translationX;
+          fileNavResizeWidth.value = visibleFileNavWidth;
+        })
+        .onUpdate((event) => {
+          fileNavResizeWidth.value = resolveFileNavWidth(
+            fileNavStartWidthRef.current - event.translationX,
+            viewportWidth,
+          );
+        })
+        .onEnd(() => {
+          runOnJS(setNewWorkspaceFileNavWidth)(fileNavResizeWidth.value);
+        })
+        .onFinalize(() => {
+          scheduleOnRN(hideFileNavGrip);
+        }),
+    [
+      fileNavResizeWidth,
+      hideFileNavGrip,
+      setNewWorkspaceFileNavWidth,
+      showFileNavGrip,
+      viewportWidth,
+      visibleFileNavWidth,
+    ],
+  );
+
+  const fileNavPanelStyle = useAnimatedStyle(() => ({
+    width: fileNavResizeWidth.value,
+  }));
+  const contentNavPadStyle = useAnimatedStyle(
+    () => ({
+      paddingRight: showNavPanel ? fileNavResizeWidth.value : 0,
+    }),
+    [showNavPanel],
+  );
   const handleOpenNavFile = useCallback(
     async (entryPath: string) => {
       if (!selectedSourceDirectory) {
@@ -2243,10 +2333,10 @@ export function NewWorkspaceScreen({
     ],
   );
 
-  const contentStyle = useMemo(() => {
-    const base = getContentStyle({ isCompact, insetBottom: insets.bottom });
-    return showNavPanel ? [...base, styles.contentWithNav] : base;
-  }, [isCompact, insets.bottom, showNavPanel]);
+  const contentStyle = useMemo(
+    () => getContentStyle({ isCompact, insetBottom: insets.bottom }),
+    [isCompact, insets.bottom],
+  );
 
   const { style: composerKeyboardStyle } = useKeyboardShiftStyle({
     mode: "translate",
@@ -2367,7 +2457,7 @@ export function NewWorkspaceScreen({
   return (
     <FileDropZone style={styles.container}>
       <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
-      <View style={contentStyle}>
+      <ReanimatedAnimated.View style={[...contentStyle, contentNavPadStyle]}>
         <TitlebarDragRegion />
         <ReanimatedAnimated.View style={centeredStyle}>
           <View style={styles.composerTitleContainer}>
@@ -2435,7 +2525,7 @@ export function NewWorkspaceScreen({
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </ReanimatedAnimated.View>
         {showNavPanel ? (
-          <View style={styles.fileNavPanel}>
+          <ReanimatedAnimated.View style={[styles.fileNavPanel, fileNavPanelStyle]}>
             <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
             <FileExplorerPane
               serverId={selectedServerId}
@@ -2443,9 +2533,15 @@ export function NewWorkspaceScreen({
               workspaceRoot={selectedSourceDirectory ?? ""}
               onOpenFile={handleOpenNavFile}
             />
-          </View>
+            <SidebarResizeHandle
+              edge="left"
+              gesture={fileNavResizeGesture}
+              pressed={fileNavResizePressed}
+              testID="new-workspace-file-nav-resize-handle"
+            />
+          </ReanimatedAnimated.View>
         ) : null}
-      </View>
+      </ReanimatedAnimated.View>
     </FileDropZone>
   );
 }
@@ -2475,17 +2571,13 @@ const styles = StyleSheet.create((theme) => ({
   contentCompact: {
     justifyContent: "flex-end",
   },
-  // Reserves room for the absolute-positioned nav column so the centered form
-  // keeps clearing it instead of centering underneath.
-  contentWithNav: {
-    paddingRight: FILE_NAV_WIDTH,
-  },
+  // Absolute-positioned nav column; its width (and the content's matching
+  // paddingRight) come from the animated resize style, not a static value.
   fileNavPanel: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
-    width: FILE_NAV_WIDTH,
     borderLeftWidth: 1,
     borderLeftColor: theme.colors.border,
   },
