@@ -23,6 +23,7 @@ import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
+  ChevronLeft,
   Folder,
   FolderPlus,
   GitBranch,
@@ -32,6 +33,7 @@ import {
 import { Composer } from "@/composer";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { FileExplorerPane } from "@/components/file-explorer-pane";
+import { FilePane } from "@/file-pane/pane";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
@@ -55,7 +57,6 @@ import { useForgeSearchQuery } from "@/git/use-forge-search-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
 import { ensureCheckoutStatus } from "@/git/checkout-status-cache";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
-import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { resolveTerminalProfiles } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { LaunchControl } from "@/new-workspace-launch/launch-control";
@@ -98,7 +99,6 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { generateMessageId } from "@/types/stream";
 import { toErrorMessage } from "@/utils/error-messages";
-import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
@@ -121,7 +121,6 @@ import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messag
 import type { CreatePaseoWorktreeInput } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
-import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
   getWorkspaceNamingAttachments,
@@ -152,6 +151,7 @@ import { useNewWorkspaceProjectPicker } from "./new-workspace/project-picker";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
 const ThemedPanelRight = withUnistyles(PanelRight);
+const ThemedChevronLeft = withUnistyles(ChevronLeft);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundExtraMutedColorMapping = (theme: Theme) => ({
@@ -1759,10 +1759,6 @@ export function NewWorkspaceScreen({
   // Desktop-only navigation column for the directory being configured. Without
   // a workspaceId the pane keys its explorer state by `root:<dir>`, so switching
   // projects re-keys the tree and it re-initializes on its own.
-  const isLocalDaemon = useIsLocalDaemon(selectedServerId);
-  const { targets: navOpenTargets } = useDesktopOpenTargets({
-    isLocalExecution: isLocalDaemon,
-  });
   const fileNavOpen = usePanelStore((state) => state.newWorkspaceFileNavOpen);
   const toggleNewWorkspaceFileNav = usePanelStore((state) => state.toggleNewWorkspaceFileNav);
   const fileNavWidth = usePanelStore((state) => state.newWorkspaceFileNavWidth);
@@ -1770,6 +1766,14 @@ export function NewWorkspaceScreen({
   const showNavPanel = !isCompact && hasSelectedSourceDirectory && fileNavOpen;
   const { width: viewportWidth } = useWindowDimensions();
   const visibleFileNavWidth = resolveFileNavWidth(fileNavWidth, viewportWidth);
+
+  // Clicking a file previews it inside the column (push/pop over the tree, tree
+  // expansion state survives). Any project switch resets to the tree.
+  const [navPreviewPath, setNavPreviewPath] = useState<string | null>(null);
+  useEffect(() => {
+    setNavPreviewPath(null);
+  }, [selectedSourceDirectory]);
+  const closeNavPreview = useCallback(() => setNavPreviewPath(null), []);
 
   const fileNavStartWidthRef = useRef(visibleFileNavWidth);
   const fileNavResizeWidth = useSharedValue(visibleFileNavWidth);
@@ -1827,32 +1831,6 @@ export function NewWorkspaceScreen({
       paddingRight: showNavPanel ? fileNavResizeWidth.value : 0,
     }),
     [showNavPanel],
-  );
-  const handleOpenNavFile = useCallback(
-    async (entryPath: string) => {
-      if (!selectedSourceDirectory) {
-        return;
-      }
-      const target =
-        navOpenTargets.find((option) => option.kind === "editor") ??
-        navOpenTargets.find((option) => option.kind === "file-manager");
-      if (!target) {
-        return;
-      }
-      try {
-        await openDesktopTarget({
-          editorId: target.id,
-          workspacePath: selectedSourceDirectory,
-          filePath: buildAbsoluteExplorerPath({
-            workspaceRoot: selectedSourceDirectory,
-            entryPath,
-          }),
-        });
-      } catch (cause) {
-        toast.error(toErrorMessage(cause));
-      }
-    },
-    [navOpenTargets, selectedSourceDirectory, toast],
   );
 
   const worktreeSupport = selectedProject
@@ -2526,13 +2504,41 @@ export function NewWorkspaceScreen({
         </ReanimatedAnimated.View>
         {showNavPanel ? (
           <ReanimatedAnimated.View style={[styles.fileNavPanel, fileNavPanelStyle]}>
-            <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
-            <FileExplorerPane
-              serverId={selectedServerId}
-              workspaceId={null}
-              workspaceRoot={selectedSourceDirectory ?? ""}
-              onOpenFile={handleOpenNavFile}
-            />
+            {navPreviewPath ? (
+              <>
+                <View style={styles.fileNavPreviewHeader}>
+                  <Pressable
+                    onPress={closeNavPreview}
+                    testID="new-workspace-file-nav-back"
+                    accessibilityRole="button"
+                    accessibilityLabel={t("common.actions.back")}
+                    style={styles.fileNavBackButton}
+                  >
+                    <ThemedChevronLeft size={16} uniProps={foregroundMutedColorMapping} />
+                  </Pressable>
+                  <Text style={styles.fileNavPreviewTitle} numberOfLines={1}>
+                    {navPreviewPath.split("/").findLast(Boolean) ?? navPreviewPath}
+                  </Text>
+                </View>
+                <FilePane
+                  serverId={selectedServerId}
+                  workspaceRoot={selectedSourceDirectory ?? ""}
+                  location={{ path: navPreviewPath }}
+                  navigationRevision={0}
+                  readOnly
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
+                <FileExplorerPane
+                  serverId={selectedServerId}
+                  workspaceId={null}
+                  workspaceRoot={selectedSourceDirectory ?? ""}
+                  onOpenFile={setNavPreviewPath}
+                />
+              </>
+            )}
             <SidebarResizeHandle
               edge="left"
               gesture={fileNavResizeGesture}
@@ -2587,6 +2593,25 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.foregroundMuted,
+  },
+  fileNavPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingLeft: theme.spacing[1],
+    paddingRight: theme.spacing[3],
+    minHeight: 32,
+  },
+  fileNavBackButton: {
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+  },
+  fileNavPreviewTitle: {
+    flex: 1,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
   },
   composerTitleContainer: {
     marginBottom: theme.spacing[8],
