@@ -192,6 +192,7 @@ git push --force-with-lease=main:<旧 main sha> origin main
 
 ## 当前已知本地独有功能清单（**参考起点，非最终方案**——以 `git log local/*` + git diff 为唯一权威）
 
+> **已核对 local/v0.5.1（截至 2026-08-24，HEAD `70003a898`，base = v0.5.1 `f51749359`；merge 快速合并，冲突 25 文件）**：**E（web IME guard）已丢弃**——上游 0.5.0 #3517 EditingTextInput 架构原生修复（use-ime-composition-guard 三件套 + 两处接入全部删除，取上游版）；A1/A2/A3/A4/B1/B2/B4/C/D/F/G（idle 重启）全保留。上游 v0.5.1 的 metadata schema 仍只有 providers（A1 仍独有）。顺手修复：B4 fileSearch 持久化缺失（v0.4.0 设置重启即丢，补全 6 处注入链）；死 key pinTarget/unpinTarget 删除。上游把 store persist 重构为 patch 驱动（pickSupportedPatchFields 白名单 + mergeMutableDaemonPatch/AgentPatch），本地字段须加 6 处（接口/pick/持久化/persisted schema/config resolve/bootstrap 初始）。详见 `handoff/20260824-handoff-port-to-v0.5.1.md`。
 > **已核对 local/v0.4.0（截至 2026-08-14，HEAD `c5c813d62` = port `ac23bc870` + 清理 commit，base = v0.4.0 `b44bb63cf`）**：A/C/D/E/F 全保留；A1 与上游 #3215（metadata **模型**选择页）正交共存于同一 schema；B1/B2 零冲突；B3 **部分丢弃**（copyRelativePath + reveal 上游 #3027 已实现，revealIn 走 desktopOpenTargets→editor-targets bridge，Opus 兼容自动生效；「在 VSCode 打开」保留并按上游新菜单结构重插）；F 适配上游抽 helper 模式。冲突 15 文件（9 语种 + 6 代码），详见 `handoff/20260814-handoff-port-to-v0.4.0.md`。
 > 跟进新版本时**仍必须按步骤 2 重新核对**（git log/diff 为准），**有疑问提出**，不照抄此清单。
 >
@@ -239,7 +240,9 @@ git push --force-with-lease=main:<旧 main sha> origin main
 4. **`auto-updater.ts` channel 写死 fork 渠道**（0.4.x 工作线起，随 `68106d503` 进）：`packages/desktop/src/features/auto-updater.ts` 的 `configure()` 里 `allowPrerelease = true; channel = "local"`（上游原值按 releaseChannel 选 latest/beta）。fork 版本是 `-local.N` prerelease，updater 必须查 `local.yml`（workflow 从 latest.yml 复制，见 D2）；app 内 stable/beta 渠道设置只属上游发版体系（其 rollout 准入逻辑照旧生效，无害）。上游 merge 时保留此改动；上游若重构 configure/channel，按"channel 写死 local"重新套。`auto-updater.test.ts` 的 `pins the updater to the fork channel` 断言防回退。
 5. **`README.md` 是 fork 自定义版**（fork 说明 + 仅 win x64 + 改动清单 + 指向官方；顶部 HTML 注释有提示）：**曾两次被冲掉**——v0.4.0 port 时（2026-08-12 的 revert"fork 用 zh-CN README"从未落地，fork 版悬空）+ main reset 到新 tag 基底时（README commit 不在 cherry-pick 列表）。且 v0.4.0 重写本 skill 时本项曾丢失（教训：skill 重写也要逐项核对清单）。三个保留点：**起新分支后**立即 `grep -q lzm04521 README.md || git checkout main -- README.md`（步骤 1）；**merge/port 冲突**保本地版 `git checkout --theirs README.md && git add README.md`（theirs=被 merge 的旧分支=本地版）；**main 更新 reset 后** `git checkout local/v<新版本> -- README.md`（步骤 6②）。**CI 硬兜底**：release-local workflow 的 "Guard: README 必须是 fork 版" 步骤 grep `lzm04521`，tag commit 的 README 是上游版时直接 fail 发版。不用 `.gitattributes merge=ours`（fork merge 流程 ours=新 tag=上游版，语义反）。其他 `README.zh-CN/ja/ko.md` 保留上游原版。
 
-### E. Web IME 候选词中断修复（v0.3.1 工作线，2026-08-12 会话签入）
+### E. ~~Web IME 候选词中断修复~~（**已于 v0.5.1 跟进时丢弃——上游 0.5.0 #3517 EditingTextInput 架构原生修复**，2026-08-24）
+
+> v0.3.1 工作线签入的本地修复，v0.5.1 起不再存在：use-ime-composition-guard 三件套已删、adaptive-modal-sheet/settings-textarea 取上游版。上游 CHANGELOG「Fixed CJK IME composition being cancelled」（#2811/#3343/#3391/#3462/#3517）。仅当上游回退 IME 修复时才需要从 `local/v0.4.0`（`git show local/v0.4.0:packages/app/src/hooks/use-ime-composition-guard.web.ts`）找回。以下诊断知识仍有效（exe web bundle 位置等）：
 
 web/Electron 端 RNW `TextInput`（含 `AdaptiveTextInput` → `FormTextInput` 链路 + 独立 `SettingsTextArea`）在 IME composition 期间，每次 `input` event 触发 React 19 change-event restore 路径（`restoreStateOfTarget` → `updateInput`/`updateTextarea`），无条件重写 `element.type` / `defaultValue`。**Chromium 对 input `type` 属性的任何写入（set 跟 removeAttribute 一样）都取消 composition** —— 反直觉，set 同值也打断。
 
@@ -293,6 +296,9 @@ Claude 图片降级（给 Claude 的图片附件降级为 `图片：<路径>` �
 11. **bash cwd 跨调用漂移**：连续 Bash 调用的 cwd 会延续（曾停在 `packages/app` 导致 `cd packages/app` 失败短路、后续命令在错误目录跑）。多步命令用绝对路径 `/d/GitHub/paseo.me` 起手，或每条命令自带 `cd` 并校验。
 12. **tag push 可能被 auto classifier 拦**（v0.4.0 实测）：`git push origin local-v*` 触发发版，Stage 2 classifier 瞬时故障会连续拦截（分支 push 正常）。重试数分钟内可过；用户明确授权后继续重试即可。
 13. **release tag 必须是合法 semver，prerelease 首组件 = channel**（0.4.0-local.2 实测）：`auto-updater.ts` pin `allowPrerelease=true` + `channel="local"` 后，electron-updater GitHubProvider 不再走 `releases/latest` API，而是遍历 releases.atom 按 `semver.prerelease(tag)[0] === "local"` 匹配。旧 `local-v<版本>-l<N>` tag 非法 semver（`semver.valid()=null`）→ 匹配不到任何 release → 客户端报 `No published versions on GitHub`。修复即 tag 方案变更：tag = 包版本本身（`0.4.0-local.3`）。教训：pin 非 alpha/beta 自定义 channel 时，tag 形态是 updater 的隐性契约。
+14. **v0.5.1 起新增 daemon config 字段须注入 6 处**（上游把 store persist 重构为 patch 驱动白名单）：① `SupportedMutableConfigPatch` 接口（daemon-config-store.ts，partial 字段用 `Partial<NonNullable<...>>`）② `pickSupportedPatchFields` 透传（**白名单，漏了 patch 直接被丢**——A1 的 instructions-only patch 曾在此被吞）③ `mergeMutableDaemonPatch` 持久化（要全量语义的字段如 idleAutoRestart 用 `persistConfig` 传入的 mergedMutable，partial patch 不得缩水 config.json）④ `persisted-config.ts` daemon schema ⑤ `config.ts` resolve helper + 两处接入 ⑥ `bootstrap.ts` PaseoDaemonConfig 接口 + createInitialMutableDaemonConfig（抽 `resolveForkDaemonDefaults` helper 控复杂度）。fileSearch 在 v0.4.0 只做了 ①⑤⑥ 一半，设置重启即丢，v0.5.1 补全。
+15. **oxlint complexity 计入参数默认值**（v0.5.1 实测）：constructor 参数 `= null` 各计 +1；多参数合并为单对象默认值（如 websocket-server 的 `idleRestartClock = { getIdleSince: () => null, getStartedAt: () => null }`）只计 1。complexity 超标时优先合并参数而非 `??` 挪挪。
+16. **浅克隆下 `git grep <pattern> <tag>` 偶发空结果**（v0.5.1 实测，markAsRead 核查时误导过一次）：结论性判断用 `git show <tag>:<file> | grep` 或 checkout 后文件系统 grep 复核，不要单信 git grep。
 
 ## 不适用本项目（避免误触发）
 
