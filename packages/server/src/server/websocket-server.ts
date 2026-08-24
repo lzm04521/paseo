@@ -507,6 +507,11 @@ const WS_CLOSE_SERVER_SHUTDOWN = 1001;
 const WS_PROTOCOL_VERSION = 1;
 const WS_RUNTIME_METRICS_FLUSH_MS = 30_000;
 
+export interface IdleRestartClock {
+  getIdleSince: () => number | null;
+  getStartedAt: () => number | null;
+}
+
 export class MissingDaemonVersionError extends Error {
   constructor() {
     super("VoiceAssistantWebSocketServer requires a non-empty daemonVersion.");
@@ -548,8 +553,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly serverId: string;
   private readonly daemonVersion: string;
   private readonly daemonRuntimeConfig: DaemonRuntimeConfig | undefined;
-  private readonly getIdleRestartIdleSince: (() => number | null) | null;
-  private readonly getIdleRestartStartedAt: (() => number | null) | null;
+  private readonly idleRestartClock: IdleRestartClock;
   private readonly agentManager: AgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly projectRegistry: ProjectRegistry;
@@ -654,8 +658,7 @@ export class VoiceAssistantWebSocketServer {
     pluginRuntime?: SessionOptions["pluginRuntime"],
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
-    getIdleRestartIdleSince?: () => number | null,
-    getIdleRestartStartedAt?: () => number | null,
+    idleRestartClock: IdleRestartClock = { getIdleSince: () => null, getStartedAt: () => null },
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -668,8 +671,7 @@ export class VoiceAssistantWebSocketServer {
     }
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
-    this.getIdleRestartIdleSince = getIdleRestartIdleSince ?? null;
-    this.getIdleRestartStartedAt = getIdleRestartStartedAt ?? null;
+    this.idleRestartClock = idleRestartClock;
     this.browserToolsBroker = browserToolsBroker ?? null;
     this.hubRelationships = hubRelationships ?? null;
     this.pluginRuntime = pluginRuntime;
@@ -1496,8 +1498,8 @@ export class VoiceAssistantWebSocketServer {
       daemonVersion: this.daemonVersion,
       daemonRuntimeConfig: this.daemonRuntimeConfig,
       getWebSocketRuntimeMetrics: () => this.lastRuntimeMetricsSnapshot,
-      getIdleRestartIdleSince: this.getIdleRestartIdleSince ?? undefined,
-      getIdleRestartStartedAt: this.getIdleRestartStartedAt ?? undefined,
+      getIdleRestartIdleSince: this.idleRestartClock.getIdleSince,
+      getIdleRestartStartedAt: this.idleRestartClock.getStartedAt,
     });
   }
 

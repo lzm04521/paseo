@@ -3,11 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
-import {
-  DaemonConfigStore,
-  applyMutableProviderConfigToOverrides,
-  type MutableDaemonConfig,
-} from "./daemon-config-store.js";
+import { DaemonConfigStore, applyMutableProviderConfigToOverrides } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import type { PersistedConfig } from "./persisted-config.js";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";

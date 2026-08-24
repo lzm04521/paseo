@@ -411,6 +411,7 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   claudeImageDowngrade?: "off" | "on";
   idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
+  fileSearch?: MutableDaemonConfig["fileSearch"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
@@ -540,6 +541,30 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
+// Fork daemon-config defaults (image downgrade, idle auto-restart, file search)
+// kept in one helper so the initial-config literal stays under the lint
+// complexity budget as upstream keeps adding fields.
+function resolveForkDaemonDefaults(config: PaseoDaemonConfig) {
+  return {
+    claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
+    idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
+    fileSearch: config.fileSearch,
+  };
+}
+
+// Fork feature: fold the pre-settings-era claude-image-downgrade.json into the
+// daemon config store once, then delete the legacy file.
+function migrateLegacyImageDowngradeIntoStore(
+  daemonConfigStore: DaemonConfigStore,
+  paseoHome: string,
+  logger: Logger,
+): void {
+  const legacyDowngradeMode = migrateLegacyImageDowngrade(paseoHome, logger);
+  if (legacyDowngradeMode === "on") {
+    daemonConfigStore.patch({ claudeImageDowngrade: "on" });
+  }
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -569,8 +594,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
-    claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
-    idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
+    ...resolveForkDaemonDefaults(config),
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -623,10 +647,7 @@ export async function createPaseoDaemon(
   void orchestrationSkills.autoUpdate().catch((error) => {
     logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
   });
-  const legacyDowngradeMode = migrateLegacyImageDowngrade(config.paseoHome, logger);
-  if (legacyDowngradeMode === "on") {
-    daemonConfigStore.patch({ claudeImageDowngrade: "on" });
-  }
+  migrateLegacyImageDowngradeIntoStore(daemonConfigStore, config.paseoHome, logger);
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
   const pluginRuntime = new PluginService(logger, daemonConfigStore);
@@ -1701,8 +1722,10 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
-              () => idleRestartWatchdog.getIdleSince(),
-              () => idleRestartWatchdog.getStartedAt(),
+              {
+                getIdleSince: () => idleRestartWatchdog.getIdleSince(),
+                getStartedAt: () => idleRestartWatchdog.getStartedAt(),
+              },
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

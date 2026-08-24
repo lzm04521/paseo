@@ -14,15 +14,13 @@ interface ClaudeImageDowngradeTestSession {
   toSdkUserMessage(prompt: AgentPromptInput): SDKUserMessage;
 }
 
-async function createSession(
-  downgrade?: "off" | "on",
-): Promise<ClaudeImageDowngradeTestSession> {
+async function createSession(downgrade?: "off" | "on"): Promise<ClaudeImageDowngradeTestSession> {
   const client = new ClaudeAgentClient({
     logger: createTestLogger(),
     resolveBinary: async () => "/test/claude/bin",
     // Omit the accessor entirely to exercise the "no injection → default off" path.
     ...(downgrade !== undefined
-      ? { getDaemonConfig: () => ({ claudeImageDowngrade: downgrade } as MutableDaemonConfig) }
+      ? { getDaemonConfig: () => ({ claudeImageDowngrade: downgrade }) as MutableDaemonConfig }
       : {}),
   });
   const session = await client.createSession({ provider: "claude", cwd: process.cwd() });

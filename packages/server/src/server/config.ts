@@ -515,6 +515,18 @@ function resolveClaudeImageDowngrade(
   return persisted.daemon?.claudeImageDowngrade ?? "off";
 }
 
+// Fork feature: daemon-level @ file-search gitignore overrides. Persisted shape
+// mirrors MutableFileSearchConfigSchema; absent node means schema defaults apply.
+function resolveFileSearch(
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): MutableDaemonConfig["fileSearch"] {
+  const node = persisted.daemon?.fileSearch;
+  if (!node?.gitIgnoreOverrides) {
+    return undefined;
+  }
+  return { gitIgnoreOverrides: node.gitIgnoreOverrides };
+}
+
 function resolveIdleAutoRestart(persisted: ReturnType<typeof loadPersistedConfig>) {
   const node = persisted.daemon?.idleAutoRestart;
   return {
@@ -553,6 +565,7 @@ function resolveStaticLoadConfigSettings(
     ...resolveProfileLists(persisted),
     claudeImageDowngrade: resolveClaudeImageDowngrade(persisted),
     idleAutoRestart: resolveIdleAutoRestart(persisted),
+    fileSearch: resolveFileSearch(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
       parseHostnamesEnv(env.PASEO_HOSTNAMES ?? env.PASEO_ALLOWED_HOSTS),
@@ -589,6 +602,7 @@ export function resolveConfigFromPersisted(
     appendSystemPrompt,
     claudeImageDowngrade,
     idleAutoRestart,
+    fileSearch,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -636,6 +650,7 @@ export function resolveConfigFromPersisted(
     appendSystemPrompt,
     claudeImageDowngrade,
     idleAutoRestart,
+    fileSearch,
     terminalProfiles,
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,

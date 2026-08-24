@@ -728,8 +728,6 @@ export const zhCN: TranslationResources = {
         pullRequest: "拉取请求",
         terminalProfilesMenu: "终端配置",
         editTerminalProfiles: "编辑配置…",
-        pinTarget: "固定",
-        unpinTarget: "取消固定",
       },
       sidePanel: {
         open: "打开侧边面板",

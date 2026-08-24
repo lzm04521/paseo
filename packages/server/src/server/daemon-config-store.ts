@@ -27,7 +27,7 @@ interface SupportedMutableConfigPatch {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   claudeImageDowngrade?: MutableDaemonConfig["claudeImageDowngrade"];
-  idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
+  idleAutoRestart?: Partial<NonNullable<MutableDaemonConfig["idleAutoRestart"]>>;
   fileSearch?: MutableDaemonConfig["fileSearch"];
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
@@ -396,6 +396,9 @@ export class DaemonConfigStore {
     const { previous: persistedBeforePatch, knownNext } = this.persistConfig(
       configPatch,
       removedProviders,
+      // Fork fields persist their full merged state (deep-merged with defaults),
+      // matching the pre-0.5.1 fork semantics the settings cards rely on.
+      next,
     );
     if (!configChanged) {
       this.lastKnownPersisted = knownNext;
@@ -571,6 +574,7 @@ export class DaemonConfigStore {
   private persistConfig(
     patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
     removeProviders: readonly string[],
+    merged?: MutableDaemonConfig,
   ): { previous: PersistedConfig; knownNext: PersistedConfig } {
     const persisted = loadPersistedConfig(this.paseoHome, this.logger);
     const merge = (source: PersistedConfig) =>
@@ -579,6 +583,7 @@ export class DaemonConfigStore {
         patch,
         removeProviders,
         persistRelayEnabled: this.relayEnabledMutable,
+        mergedMutable: merged,
       });
     const nextPersisted = merge(persisted);
     const knownNext = merge(this.lastKnownPersisted);
@@ -592,9 +597,15 @@ function mergeMutablePatchIntoPersistedConfig(params: {
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">;
   removeProviders: readonly string[];
   persistRelayEnabled: boolean;
+  mergedMutable?: MutableDaemonConfig;
 }): PersistedConfig {
-  const { persisted, patch, removeProviders, persistRelayEnabled } = params;
-  const daemon = mergeMutableDaemonPatch(persisted.daemon, patch, persistRelayEnabled);
+  const { persisted, patch, removeProviders, persistRelayEnabled, mergedMutable } = params;
+  const daemon = mergeMutableDaemonPatch(
+    persisted.daemon,
+    patch,
+    persistRelayEnabled,
+    mergedMutable,
+  );
   const agents = mergeMutableAgentPatch(persisted.agents, patch, removeProviders);
   return {
     ...persisted,
@@ -635,31 +646,11 @@ function mergeMutableAgentPatch(
     patch.metadataGeneration !== undefined ||
     (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers)
   ) {
-    // Persisted metadataGeneration is the base; a patch overrides only the keys it
-    // declares (providers and/or instruction keys), so a providers-only patch keeps
-    // daemon-level instructions and an instructions-only patch keeps providers.
-    const previous = isRecord(persistedAgents?.metadataGeneration)
-      ? (persistedAgents.metadataGeneration as Record<string, unknown>)
-      : {};
-    const { providers: previousProviders, ...previousInstructions } = previous;
-    const merged: Record<string, unknown> = { ...previousInstructions };
-    if (patch.metadataGeneration !== undefined) {
-      for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
-        if (isRecord(patch.metadataGeneration[key])) {
-          delete merged[key];
-        }
-      }
-      Object.assign(merged, readMetadataGenerationInstructions(patch.metadataGeneration));
-    }
-    const providers =
-      patch.metadataGeneration?.providers ??
-      (removeProviders.length > 0
-        ? (Array.isArray(previousProviders) ? previousProviders : []).filter(
-            (entry) => !new Set(removeProviders).has((entry as { provider: string }).provider),
-          )
-        : previousProviders);
-    if (providers !== undefined) merged.providers = providers;
-    next["metadataGeneration"] = merged;
+    next["metadataGeneration"] = mergePersistedMetadataGeneration(
+      persistedAgents?.metadataGeneration,
+      patch.metadataGeneration,
+      removeProviders,
+    );
   }
 
   if (patch.skills?.selection !== undefined) {
@@ -669,10 +660,43 @@ function mergeMutableAgentPatch(
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }
 
+// Persisted metadataGeneration is the base; a patch overrides only the keys it
+// declares (providers and/or instruction keys), so a providers-only patch keeps
+// daemon-level instructions and an instructions-only patch keeps providers.
+function mergePersistedMetadataGeneration(
+  persistedMetadataGeneration: unknown,
+  patchMetadataGeneration: Partial<MutableDaemonConfig["metadataGeneration"]> | undefined,
+  removeProviders: readonly string[],
+): Record<string, unknown> {
+  const previous = isRecord(persistedMetadataGeneration)
+    ? (persistedMetadataGeneration as Record<string, unknown>)
+    : {};
+  const { providers: previousProviders, ...previousInstructions } = previous;
+  const merged: Record<string, unknown> = { ...previousInstructions };
+  if (patchMetadataGeneration !== undefined) {
+    for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+      if (isRecord(patchMetadataGeneration[key])) {
+        delete merged[key];
+      }
+    }
+    Object.assign(merged, readMetadataGenerationInstructions(patchMetadataGeneration));
+  }
+  const providers =
+    patchMetadataGeneration?.providers ??
+    (removeProviders.length > 0
+      ? (Array.isArray(previousProviders) ? previousProviders : []).filter(
+          (entry) => !new Set(removeProviders).has((entry as { provider: string }).provider),
+        )
+      : previousProviders);
+  if (providers !== undefined) merged.providers = providers;
+  return merged;
+}
+
 function mergeMutableDaemonPatch(
   persistedDaemon: PersistedConfig["daemon"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
   persistRelayEnabled: boolean,
+  mergedMutable?: MutableDaemonConfig,
 ): PersistedConfig["daemon"] {
   const next = { ...persistedDaemon } as NonNullable<PersistedConfig["daemon"]>;
   if (persistRelayEnabled && patch.relay?.enabled !== undefined) {
@@ -694,7 +718,11 @@ function mergeMutableDaemonPatch(
   if (patch.claudeImageDowngrade !== undefined) {
     next.claudeImageDowngrade = patch.claudeImageDowngrade;
   }
-  if (patch.idleAutoRestart !== undefined) next.idleAutoRestart = patch.idleAutoRestart;
+  if (patch.idleAutoRestart !== undefined) {
+    // Persist the full merged state (defaults filled in), not just the patch —
+    // partial patches must not shrink what config.json remembers.
+    next.idleAutoRestart = mergedMutable?.idleAutoRestart ?? patch.idleAutoRestart;
+  }
   if (patch.fileSearch !== undefined) next.fileSearch = patch.fileSearch;
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;

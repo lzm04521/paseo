@@ -312,6 +312,12 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
+        fileSearch: z
+          .object({
+            gitIgnoreOverrides: z.array(z.string().min(1)).optional(),
+          })
+          .strict()
+          .optional(),
         auth: DaemonAuthSchema.optional(),
       })
       .strict()

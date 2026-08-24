@@ -14,10 +14,7 @@ const ImageDowngradeConfigSchema = z.object({
  * Reads it, deletes it, returns the mode ("on") or null (absent/invalid → keep default "off").
  * Never throws on read/parse failures.
  */
-export function migrateLegacyImageDowngrade(
-  paseoHome: string,
-  logger: Logger,
-): "on" | null {
+export function migrateLegacyImageDowngrade(paseoHome: string, logger: Logger): "on" | null {
   const file = path.join(paseoHome, CONFIG_FILENAME);
 
   let raw: string;
@@ -38,10 +35,7 @@ export function migrateLegacyImageDowngrade(
   try {
     parsedJson = JSON.parse(raw);
   } catch (error) {
-    logger.warn(
-      { file, err: error },
-      "Legacy image-downgrade config is not valid JSON; ignoring",
-    );
+    logger.warn({ file, err: error }, "Legacy image-downgrade config is not valid JSON; ignoring");
     return null;
   }
 
