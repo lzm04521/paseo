@@ -51,6 +51,7 @@ import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
+import { isWeb } from "@/constants/platform";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
@@ -2586,6 +2587,10 @@ const styles = StyleSheet.create((theme) => ({
     bottom: 0,
     borderLeftWidth: 1,
     borderLeftColor: theme.colors.border,
+    // The titlebar drag overlay covers the whole content area; the nav column
+    // must opt out so file previews scroll and their text stays selectable.
+    ...(isWeb ? { WebkitAppRegion: "no-drag" } : null),
+    userSelect: "text",
   },
   fileNavHeader: {
     paddingVertical: theme.spacing[2],
