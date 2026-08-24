@@ -2248,6 +2248,11 @@ export const zhCN: TranslationResources = {
           hint: "侧边栏占工作区的宽度比例，每次打开侧边栏时应用",
           accessibilityLabel: "侧边栏占比",
         },
+        autoOpen: {
+          title: "打开工作区时自动打开侧边栏",
+          description:
+            "进入工作区时若侧边栏未显示则自动显示，并遵循上方的默认打开设置；仅桌面布局生效",
+        },
         fileOpen: {
           title: "文件打开位置",
           hint: "对话中的文件链接与文件导航打开文件的位置",

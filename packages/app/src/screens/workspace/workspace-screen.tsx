@@ -48,6 +48,7 @@ import { getOrCreateClientId } from "@/utils/client-id";
 import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
 import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar-toggle";
 import {
+  autoRevealSidePanelForWorkspace,
   isSidePanelOpen,
   openSupportingTab,
   openTabInSidePanel,
@@ -1817,6 +1818,9 @@ function WorkspaceScreenContent({
   const sidePanelDefaultViews = useSettings((settings) => settings.sidePanelDefaultViews);
   const sidePanelWidthPercent = useSettings((settings) => settings.sidePanelWidthPercent);
   const fileOpenDisposition = useSettings((settings) => settings.fileOpenDisposition);
+  const openSidePanelOnWorkspaceOpen = useSettings(
+    (settings) => settings.openSidePanelOnWorkspaceOpen,
+  );
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const unpinWorkspaceAgent = useWorkspaceLayoutStore((state) => state.unpinAgent);
@@ -1838,6 +1842,40 @@ function WorkspaceScreenContent({
   }, [
     activeExplorerCheckout,
     isMobile,
+    persistenceKey,
+    sidePanelDefaultViews,
+    sidePanelWidthPercent,
+  ]);
+  // The "auto-open the side panel" preference fires once per workspace entry,
+  // after the persisted layout has hydrated — closing the panel by hand stays
+  // closed until the workspace is entered again.
+  const autoRevealSidePanelDoneForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !openSidePanelOnWorkspaceOpen ||
+      isMobile ||
+      !persistenceKey ||
+      !hasHydratedWorkspaceLayoutStore
+    ) {
+      return;
+    }
+    if (autoRevealSidePanelDoneForRef.current === persistenceKey) {
+      return;
+    }
+    autoRevealSidePanelDoneForRef.current = persistenceKey;
+    autoRevealSidePanelForWorkspace({
+      isCompact: isMobile,
+      workspaceKey: persistenceKey,
+      checkout: activeExplorerCheckout,
+      defaultViews: sidePanelDefaultViews,
+      defaultWidthPercent: sidePanelWidthPercent,
+    });
+    // The ref guard makes reruns no-ops; the deps only gate when the reveal happens.
+  }, [
+    activeExplorerCheckout,
+    hasHydratedWorkspaceLayoutStore,
+    isMobile,
+    openSidePanelOnWorkspaceOpen,
     persistenceKey,
     sidePanelDefaultViews,
     sidePanelWidthPercent,

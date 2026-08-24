@@ -2099,6 +2099,11 @@ export const ko: TranslationResources = {
           hint: "워크스페이스에서 사이드 패널이 차지하는 비율. 패널을 열 때마다 적용됩니다",
           accessibilityLabel: "사이드 패널 크기",
         },
+        autoOpen: {
+          title: "워크스페이스를 열 때 사이드 패널 열기",
+          description:
+            "사이드 패널이 표시되지 않은 경우 자동으로 표시하고 위에서 선택한 기본 패널을 적용합니다(데스크톱 레이아웃만)",
+        },
         fileOpen: {
           title: "파일 열기 위치",
           hint: "채팅 파일 링크와 파일 탐색이 파일을 여는 위치",

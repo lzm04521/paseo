@@ -2323,6 +2323,11 @@ export const es: TranslationResources = {
           hint: "Porción del espacio de trabajo que ocupa el panel lateral, aplicada cada vez que se abre",
           accessibilityLabel: "Tamaño del panel lateral",
         },
+        autoOpen: {
+          title: "Abrir el panel lateral al abrir un espacio de trabajo",
+          description:
+            "Muestra el panel automáticamente y aplica los paneles predeterminados elegidos arriba; solo en diseños de escritorio",
+        },
         fileOpen: {
           title: "Abrir archivos en",
           hint: "Dónde abren los archivos los enlaces del chat y la navegación de archivos",

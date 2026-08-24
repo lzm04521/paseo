@@ -2327,6 +2327,11 @@ export const fr: TranslationResources = {
           hint: "Part de l’espace de travail occupée par le panneau latéral, appliquée à chaque ouverture",
           accessibilityLabel: "Taille du panneau latéral",
         },
+        autoOpen: {
+          title: "Ouvrir le panneau latéral à l’ouverture d’un espace de travail",
+          description:
+            "Affiche le panneau automatiquement et applique les panneaux par défaut choisis ci-dessus ; uniquement pour les dispositions de bureau",
+        },
         fileOpen: {
           title: "Ouvrir les fichiers dans",
           hint: "Où les liens de fichiers du chat et la navigation ouvrent les fichiers",

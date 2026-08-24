@@ -25,6 +25,7 @@ import {
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import {
+  autoRevealSidePanelForWorkspace,
   hideSidePanel,
   isSidePanelOpen,
   openSidePanelView,
@@ -110,6 +111,16 @@ describe("compact surface", () => {
     expect(isSidePanelOpen({ isCompact: true, workspaceKey: WORKSPACE_KEY })).toBe(false);
     toggleSidePanel(compact);
     expect(isSidePanelOpen({ isCompact: true, workspaceKey: WORKSPACE_KEY })).toBe(true);
+  });
+
+  it("never auto-reveals the overlay", () => {
+    autoRevealSidePanelForWorkspace({
+      ...compact,
+      defaultViews: { changes: true, fileNav: true },
+    });
+
+    expect(usePanelStore.getState().mobilePanel.target).toBe("agent");
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY]).toBeUndefined();
   });
 });
 
@@ -318,6 +329,34 @@ describe("non-compact with splits", () => {
     expect(sizes[0]).toBeCloseTo(0.3);
     expect(sizes[1]).toBeCloseTo(0.7);
   });
+
+  it("auto-reveals with the default panels and width when the panel is hidden", () => {
+    autoRevealSidePanelForWorkspace({
+      ...wide,
+      defaultViews: { changes: true, fileNav: true },
+      defaultWidthPercent: 30,
+    });
+
+    expect(isSidePanelOpen(wide)).toBe(true);
+    expect(tabKinds()).toContain("working_diff");
+    expect(tabKinds()).toContain("file_nav");
+    const sizes = sidePanelSplitSizes();
+    expect(sizes[0]).toBeCloseTo(0.7);
+    expect(sizes[1]).toBeCloseTo(0.3);
+  });
+
+  it("leaves an already-showing panel alone on auto-reveal", () => {
+    openSidePanelView({ ...wide, view: "changes" });
+    const before = tabKinds();
+
+    autoRevealSidePanelForWorkspace({
+      ...wide,
+      defaultViews: { changes: true, fileNav: true },
+    });
+
+    expect(tabKinds()).toEqual(before);
+    expect(useWorkspaceLayoutStore.getState().splitSizesByWorkspace[WORKSPACE_KEY]).toBeUndefined();
+  });
 });
 
 describe("non-compact without splits", () => {
@@ -380,5 +419,14 @@ describe("non-compact without splits", () => {
 
     expect(focusedPaneTabKinds()).toContain("files");
     expect(focusedPaneTabKinds()).not.toContain("working_diff");
+  });
+
+  it("never auto-reveals a tab on its own", () => {
+    autoRevealSidePanelForWorkspace({
+      ...tablet,
+      defaultViews: { changes: true, fileNav: true },
+    });
+
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY]).toBeUndefined();
   });
 });

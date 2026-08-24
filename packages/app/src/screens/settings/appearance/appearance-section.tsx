@@ -323,6 +323,25 @@ function SidePanelDefaultViewRow({
   );
 }
 
+interface SidePanelAutoOpenRowProps {
+  title: string;
+  hint: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function SidePanelAutoOpenRow({ title, hint, value, onChange }: SidePanelAutoOpenRowProps) {
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={title} />
+    </View>
+  );
+}
+
 interface SidePanelWidthRowProps {
   title: string;
   hint: string;
@@ -331,7 +350,6 @@ interface SidePanelWidthRowProps {
   onChangeDraft: (value: string) => void;
   onCommit: () => void;
 }
-
 function SidePanelWidthRow({
   title,
   hint,
@@ -786,6 +804,13 @@ export function AppearanceSection() {
     [updateSettings],
   );
 
+  const handleSidePanelAutoOpenChange = useCallback(
+    (openSidePanelOnWorkspaceOpen: boolean) => {
+      void updateSettings({ openSidePanelOnWorkspaceOpen });
+    },
+    [updateSettings],
+  );
+
   const commitUiFontFamily = useCallback(
     (value: string) => {
       const sanitized = sanitizeFontFamily(value);
@@ -924,6 +949,12 @@ export function AppearanceSection() {
             accessibilityLabel={t("settings.appearance.sidePanel.defaults.fileNav")}
             value={settings.sidePanelDefaultViews.fileNav}
             onChange={(value) => handleSidePanelDefaultViewChange("fileNav", value)}
+          />
+          <SidePanelAutoOpenRow
+            title={t("settings.appearance.sidePanel.autoOpen.title")}
+            hint={t("settings.appearance.sidePanel.autoOpen.description")}
+            value={settings.openSidePanelOnWorkspaceOpen}
+            onChange={handleSidePanelAutoOpenChange}
           />
           <SidePanelWidthRow
             title={t("settings.appearance.sidePanel.width.title")}

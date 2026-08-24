@@ -116,6 +116,8 @@ export interface AppSettings {
   sidePanelWidthPercent: number;
   /** Where chat file links and the file navigation panel open files. */
   fileOpenDisposition: OpenFileDisposition;
+  /** Reveal the Side panel automatically when a workspace opens. Desktop layouts only. */
+  openSidePanelOnWorkspaceOpen: boolean;
 }
 
 export interface Settings extends AppSettings {
@@ -169,6 +171,7 @@ const StoredAppSettingsSchema = z.strictObject({
   sidePanelDefaultViews: SidePanelDefaultViewsSchema.optional(),
   sidePanelWidthPercent: z.union([z.number(), z.string()]).optional(),
   fileOpenDisposition: z.enum(["main", "side"]).optional(),
+  openSidePanelOnWorkspaceOpen: z.boolean().optional(),
   // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.
   manageBuiltInDaemon: z.boolean().optional(),
   releaseChannel: z.enum(["stable", "beta"]).optional(),
@@ -204,6 +207,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   sidePanelDefaultViews: DEFAULT_SIDE_PANEL_DEFAULT_VIEWS,
   sidePanelWidthPercent: DEFAULT_SIDE_PANEL_WIDTH_PERCENT,
   fileOpenDisposition: DEFAULT_FILE_OPEN_DISPOSITION,
+  openSidePanelOnWorkspaceOpen: false,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -370,6 +374,9 @@ function pickBooleanAppSettings(stored: StoredAppSettings): Partial<AppSettings>
   }
   if (typeof stored.openSupportingTabsInSidePanel === "boolean") {
     result.openSupportingTabsInSidePanel = stored.openSupportingTabsInSidePanel;
+  }
+  if (typeof stored.openSidePanelOnWorkspaceOpen === "boolean") {
+    result.openSidePanelOnWorkspaceOpen = stored.openSidePanelOnWorkspaceOpen;
   }
   return result;
 }

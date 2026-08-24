@@ -313,6 +313,17 @@ export function toggleSidePanel(input: SidePanelInput): void {
     hideSidePanel(input);
     return;
   }
+  revealSidePanel(input);
+}
+
+/**
+ * Bring a hidden side panel on screen, seeding it with the reveal preferences
+ * (default panels + width). Shared by the toggle and the auto-reveal-on-open.
+ */
+function revealSidePanel(input: SidePanelInput): void {
+  if (!input.workspaceKey) {
+    return;
+  }
 
   const defaultTargets = sidePanelDefaultTargets(input.defaultViews, input.checkout);
 
@@ -340,6 +351,23 @@ export function toggleSidePanel(input: SidePanelInput): void {
     });
   }
   applySidePanelDefaultWidth(input);
+}
+
+/**
+ * The "open the side panel when a workspace opens" preference. Desktop splits
+ * layouts only: the compact overlay would cover the conversation out of
+ * nowhere, and on no-split surfaces "open" means dropping a tab into the
+ * focused pane — not something to do without the user asking. A panel that is
+ * already showing is left exactly as the previous session left it.
+ */
+export function autoRevealSidePanelForWorkspace(input: SidePanelInput): void {
+  if (input.isCompact || !input.workspaceKey || !canUseSidePanelPane(input)) {
+    return;
+  }
+  if (isSidePanelOpen(input)) {
+    return;
+  }
+  revealSidePanel(input);
 }
 
 /**

@@ -178,6 +178,25 @@ describe("loadAppSettingsFromStorage", () => {
     expect((await loadAppSettingsFromStorage(invalid)).fileOpenDisposition).toBe("side");
   });
 
+  it("defaults the workspace-open auto reveal off and keeps a stored toggle", async () => {
+    const deps = makeDeps();
+    expect((await loadAppSettingsFromStorage(deps)).openSidePanelOnWorkspaceOpen).toBe(false);
+
+    const stored = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ openSidePanelOnWorkspaceOpen: true }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(stored)).openSidePanelOnWorkspaceOpen).toBe(true);
+
+    const invalid = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ openSidePanelOnWorkspaceOpen: "yes" }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(invalid)).openSidePanelOnWorkspaceOpen).toBe(false);
+  });
+
   it.each(THEME_OPTIONS)("loads the persisted $name theme", async ({ name }) => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({

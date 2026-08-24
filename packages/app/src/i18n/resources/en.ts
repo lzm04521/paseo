@@ -2337,6 +2337,11 @@ export const en = {
           hint: "Side panel share of the workspace, applied each time the panel opens",
           accessibilityLabel: "Side panel size",
         },
+        autoOpen: {
+          title: "Open the side panel when a workspace opens",
+          description:
+            "Reveals the panel automatically and applies the default panels picked above; desktop layouts only",
+        },
         fileOpen: {
           title: "Open files in",
           hint: "Where chat file links and file navigation open files",

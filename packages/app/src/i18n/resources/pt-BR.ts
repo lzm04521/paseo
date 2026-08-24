@@ -2307,6 +2307,11 @@ export const ptBR: TranslationResources = {
           hint: "Fatia do espaço de trabalho ocupada pelo painel lateral, aplicada a cada abertura",
           accessibilityLabel: "Tamanho do painel lateral",
         },
+        autoOpen: {
+          title: "Abrir o painel lateral ao abrir um espaço de trabalho",
+          description:
+            "Revela o painel automaticamente e aplica os painéis padrão escolhidos acima; apenas em layouts de desktop",
+        },
         fileOpen: {
           title: "Abrir arquivos em",
           hint: "Onde os links de arquivos do chat e a navegação de arquivos abrem os arquivos",
