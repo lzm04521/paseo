@@ -170,6 +170,7 @@ describe("paseo daemon bootstrap", () => {
     config.staticDir = staticDir;
     config.agentClients = createTestAgentClients();
     config.agentStoragePath = path.join(paseoHome, "agents");
+    config.skillsHome = path.join(paseoHome, "skills-home");
     config.isDev = true;
     config.speech = {
       providers: {
@@ -445,6 +446,7 @@ describe("paseo daemon bootstrap", () => {
       mcpDebug: false,
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
+      skillsHome: path.join(paseoHome, "skills-home"),
       relayEnabled: false,
       appBaseUrl: "https://app.paseo.sh",
       openai: undefined,
@@ -555,6 +557,7 @@ describe("paseo daemon bootstrap", () => {
       mcpDebug: false,
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
+      skillsHome: path.join(paseoHome, "skills-home"),
       relayEnabled: false,
       relayEndpoint: "127.0.0.1:9",
       relayUseTls: false,
@@ -690,6 +693,7 @@ export default function contribute(plugin: unknown) {
       mcpDebug: false,
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
+      skillsHome: path.join(paseoHome, "skills-home"),
       relayEnabled: false,
       appBaseUrl: "https://app.paseo.sh",
       openai: undefined,
@@ -779,6 +783,7 @@ export default function contribute(plugin: unknown) {
       mcpDebug: false,
       agentClients: createTestAgentClients(),
       agentStoragePath: path.join(paseoHome, "agents"),
+      skillsHome: path.join(paseoHome, "skills-home"),
       relayEnabled: false,
       appBaseUrl: "https://app.paseo.sh",
       openai: undefined,
@@ -915,6 +920,7 @@ export default function contribute(plugin: unknown) {
         mcpDebug: false,
         agentClients: createTestAgentClients(),
         agentStoragePath: path.join(paseoHome, "agents"),
+        skillsHome: path.join(paseoHome, "skills-home"),
         relayEnabled: true,
         relayEndpoint: "127.0.0.1:9",
         relayPublicEndpoint: "127.0.0.1:9",
