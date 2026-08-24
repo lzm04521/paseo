@@ -31,7 +31,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.4.0-local.4-x64.exe`）安装。**仅支持 Windows x64**。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.5.1-local.5-x64.exe`）安装。**仅支持 Windows x64**。
 
 已安装旧版时，应用启动后自动检查 fork Release 并升级（electron-updater）。
 
@@ -47,6 +47,9 @@
 
 ### UI / 行为
 
+- **文件导航侧栏面板**：侧边栏（Side panel）新增「文件导航」（Explorer）面板，浏览工作区文件树，点击文件在主窗格以文件 Tab 打开（单例面板，已打开时启动器隐藏入口）。
+- **侧边栏设置**（Settings → 外观 → 侧边栏）：「打开侧边栏时默认打开」的面板（变更 / 文件导航，多选、可全不选，非 Git 项目不打开变更）；「打开时占比」（10–90%，每次打开侧边栏时应用）；「文件打开位置」（主窗口 / 侧边栏，作用于对话中的文件链接与文件导航面板）；「打开工作区时自动打开侧边栏」（未显示则自动显示并遵循上述默认打开设置，每次进入工作区只触发一次）。
+- **文件链接错误提示增强**：对话中点击文件链接未找到文件时，错误提示附带尝试打开的完整路径，便于分析。
 - **workspace tab 保护**：禁止关闭 workspace 内最后一个 agent（对话）tab，其他类型 tab 照常关闭。
 - **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
 - **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
