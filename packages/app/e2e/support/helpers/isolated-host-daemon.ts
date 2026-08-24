@@ -107,6 +107,11 @@ export async function startIsolatedHostDaemon(
 
   const paseoHome =
     options.paseoHome ?? (await mkdtemp(path.join(tmpdir(), "paseo-e2e-secondary-host-")));
+  // The daemon auto-installs its orchestration skills under the user's home
+  // (~/.claude/skills, ~/.codex/skills, ~/.agents/skills). Point HOME at a
+  // sandbox so e2e never pollutes the developer's directories; callers can
+  // still override HOME through `environment` (merged after these defaults).
+  const isolatedHome = await mkdtemp(path.join(tmpdir(), "paseo-e2e-home-"));
   let publishedPackageRoot: string | null = null;
   if (options.publishedVersion) {
     publishedPackageRoot = await mkdtemp(path.join(tmpdir(), "paseo-e2e-published-server-"));
@@ -161,6 +166,8 @@ export async function startIsolatedHostDaemon(
       cwd: serverDir,
       env: withDisabledE2ESpeechEnv({
         ...process.env,
+        HOME: isolatedHome,
+        USERPROFILE: isolatedHome,
         ...options.environment,
         PASEO_HOME: paseoHome,
         PASEO_SERVER_ID: serverId,
@@ -202,6 +209,7 @@ export async function startIsolatedHostDaemon(
     if (!options.preserveHome) {
       await rm(paseoHome, { recursive: true, force: true });
     }
+    await rm(isolatedHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     if (publishedPackageRoot) {
       await rm(publishedPackageRoot, { recursive: true, force: true });
     }
@@ -226,6 +234,7 @@ export async function startIsolatedHostDaemon(
       if (!options.preserveHome) {
         await rm(paseoHome, { recursive: true, force: true });
       }
+      await rm(isolatedHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       if (publishedPackageRoot) {
         await rm(publishedPackageRoot, { recursive: true, force: true });
       }

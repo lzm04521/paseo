@@ -48,6 +48,7 @@ import { getOrCreateClientId } from "@/utils/client-id";
 import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
 import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar-toggle";
 import {
+  autoRevealSidePanelForWorkspace,
   isSidePanelOpen,
   openSupportingTab,
   openTabInSidePanel,
@@ -59,6 +60,7 @@ import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   canDismissPaneInLayout,
+  collectAllPanes,
   collectAllTabs,
   DEFAULT_PANE_ID,
   findPaneById,
@@ -168,6 +170,7 @@ import {
   type BulkCloseConfirmationLabels,
   classifyBulkClosableTabs,
   closeBulkWorkspaceTabs,
+  protectLastAgentTab,
 } from "@/screens/workspace/workspace-bulk-close";
 import { resolveCloseAgentTabPolicy } from "@/subagents";
 import {
@@ -307,6 +310,7 @@ function getFallbackTabOptionLabel(
     agent: string;
     changes: string;
     files: string;
+    fileNav: string;
     pullRequest: string;
   },
 ): string {
@@ -334,6 +338,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "files") {
     return labels.files;
   }
+  if (tab.target.kind === "file_nav") {
+    return labels.fileNav;
+  }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
   }
@@ -354,6 +361,7 @@ function getFallbackTabOptionDescription(
     browser: string;
     changes: string;
     files: string;
+    fileNav: string;
     pullRequest: string;
   },
 ): string {
@@ -386,6 +394,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "files") {
     return labels.files;
+  }
+  if (tab.target.kind === "file_nav") {
+    return labels.fileNav;
   }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
@@ -591,6 +602,7 @@ function MobileWorkspaceTabOption({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      fileNav: t("panels.fileNav.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -1367,6 +1379,26 @@ function paneLocalPlacement(paneId: string | null | undefined): WorkspaceTabPlac
   return paneId ? { mode: "pane", paneId } : FOCUSED_PANE_PLACEMENT;
 }
 
+/**
+ * Where the file navigation panel's opens land: beside it, in the main window.
+ * The default pane when it exists, any visible non-side-panel pane otherwise.
+ * Undefined lets the store fall back to the focused pane, like every other
+ * open without an opinion. Mirrors the fallback chain in resolvePlacementPane.
+ */
+function buildMainPanePlacement(input: {
+  layout: WorkspaceLayout | undefined;
+  sidePanelPaneId: string | null;
+}): WorkspaceTabPlacement | undefined {
+  if (!input.layout) {
+    return undefined;
+  }
+  const panes = collectAllPanes(input.layout.root);
+  const pane =
+    panes.find((candidate) => candidate.id === DEFAULT_PANE_ID) ??
+    panes.find((candidate) => candidate.id !== input.sidePanelPaneId);
+  return pane ? { mode: "pane", paneId: pane.id } : undefined;
+}
+
 function canDetectPullRequest(
   isRouteFocused: boolean,
   isGitCheckout: boolean,
@@ -1783,6 +1815,12 @@ function WorkspaceScreenContent({
   const openInSidePanelByDefault = useSettings(
     (settings) => settings.openSupportingTabsInSidePanel,
   );
+  const sidePanelDefaultViews = useSettings((settings) => settings.sidePanelDefaultViews);
+  const sidePanelWidthPercent = useSettings((settings) => settings.sidePanelWidthPercent);
+  const fileOpenDisposition = useSettings((settings) => settings.fileOpenDisposition);
+  const openSidePanelOnWorkspaceOpen = useSettings(
+    (settings) => settings.openSidePanelOnWorkspaceOpen,
+  );
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const unpinWorkspaceAgent = useWorkspaceLayoutStore((state) => state.unpinAgent);
@@ -1798,8 +1836,50 @@ function WorkspaceScreenContent({
       isCompact: isMobile,
       workspaceKey: persistenceKey,
       checkout: activeExplorerCheckout,
+      defaultViews: sidePanelDefaultViews,
+      defaultWidthPercent: sidePanelWidthPercent,
     });
-  }, [activeExplorerCheckout, isMobile, persistenceKey]);
+  }, [
+    activeExplorerCheckout,
+    isMobile,
+    persistenceKey,
+    sidePanelDefaultViews,
+    sidePanelWidthPercent,
+  ]);
+  // The "auto-open the side panel" preference fires once per workspace entry,
+  // after the persisted layout has hydrated — closing the panel by hand stays
+  // closed until the workspace is entered again.
+  const autoRevealSidePanelDoneForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !openSidePanelOnWorkspaceOpen ||
+      isMobile ||
+      !persistenceKey ||
+      !hasHydratedWorkspaceLayoutStore
+    ) {
+      return;
+    }
+    if (autoRevealSidePanelDoneForRef.current === persistenceKey) {
+      return;
+    }
+    autoRevealSidePanelDoneForRef.current = persistenceKey;
+    autoRevealSidePanelForWorkspace({
+      isCompact: isMobile,
+      workspaceKey: persistenceKey,
+      checkout: activeExplorerCheckout,
+      defaultViews: sidePanelDefaultViews,
+      defaultWidthPercent: sidePanelWidthPercent,
+    });
+    // The ref guard makes reruns no-ops; the deps only gate when the reveal happens.
+  }, [
+    activeExplorerCheckout,
+    hasHydratedWorkspaceLayoutStore,
+    isMobile,
+    openSidePanelOnWorkspaceOpen,
+    persistenceKey,
+    sidePanelDefaultViews,
+    sidePanelWidthPercent,
+  ]);
   const paneFocusSuppressedRef = useRef(false);
   const resizeWorkspaceSplit = useWorkspaceLayoutStore((state) => state.resizeSplit);
   const reorderWorkspaceTabsInPane = useWorkspaceLayoutStore((state) => state.reorderTabsInPane);
@@ -2160,6 +2240,46 @@ function WorkspaceScreenContent({
     ],
   );
 
+  // The Side panel's file navigation follows the "open files in" preference:
+  // the side panel routes the file beside the conversation, the main window
+  // opens it beside the navigation itself. No state is seeded, so the opened
+  // tab keeps the default file state with its folder tree hidden; an
+  // already-open path is revealed in place.
+  const handleOpenFileFromNavigation = useCallback(
+    (path: string) => {
+      const location = normalizeWorkspaceFileLocation({ path });
+      if (!location) {
+        return;
+      }
+      if (fileOpenDisposition === "side") {
+        handleOpenAssistantFileInSidePanel({ location });
+        return;
+      }
+      if (!persistenceKey) {
+        return;
+      }
+      const store = useWorkspaceLayoutStore.getState();
+      const tabId = openWorkspaceTabFocused(
+        persistenceKey,
+        createWorkspaceFileTabTarget(location),
+        buildMainPanePlacement({
+          layout: store.layoutByWorkspace[persistenceKey],
+          sidePanelPaneId: selectSidePanelPaneId(store, persistenceKey),
+        }),
+      );
+      if (tabId) {
+        navigateToTabId(tabId);
+      }
+    },
+    [
+      fileOpenDisposition,
+      handleOpenAssistantFileInSidePanel,
+      navigateToTabId,
+      openWorkspaceTabFocused,
+      persistenceKey,
+    ],
+  );
+
   const handleOpenWorkspaceFileFromPane = useStableEvent(function handleOpenWorkspaceFileFromPane({
     request,
     paneId,
@@ -2258,6 +2378,7 @@ function WorkspaceScreenContent({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      fileNav: t("panels.fileNav.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -2437,6 +2558,14 @@ function WorkspaceScreenContent({
   const handleCloseAgentTab = useCallback(
     async (input: { tabId: string; agentId: string }) => {
       const { tabId, agentId } = input;
+      const closingTab = allTabDescriptorsById.get(tabId);
+      if (closingTab) {
+        const { protectedAgentTabId } = protectLastAgentTab(uiTabs, [closingTab]);
+        if (protectedAgentTabId) {
+          toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+          return;
+        }
+      }
       await closeTab(tabId, async () => {
         if (!normalizedServerId) {
           return;
@@ -2498,6 +2627,7 @@ function WorkspaceScreenContent({
       });
     },
     [
+      allTabDescriptorsById,
       archiveAgent,
       closeTab,
       closeWorkspaceTabWithCleanup,
@@ -2505,6 +2635,7 @@ function WorkspaceScreenContent({
       persistenceKey,
       t,
       toast,
+      uiTabs,
     ],
   );
 
@@ -2725,7 +2856,15 @@ function WorkspaceScreenContent({
       title: string;
       logLabel: string;
     }): Promise<boolean> => {
-      const { tabsToClose, title, logLabel } = input;
+      const { title, logLabel } = input;
+      const { remainingTabsToClose: tabsToClose, protectedAgentTabId } = protectLastAgentTab(
+        uiTabs,
+        input.tabsToClose,
+      );
+      if (protectedAgentTabId && tabsToClose.length === 0) {
+        toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+        return false;
+      }
       if (tabsToClose.length === 0) {
         return true;
       }
@@ -2801,6 +2940,8 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       persistenceKey,
       t,
+      toast,
+      uiTabs,
     ],
   );
 
@@ -3423,11 +3564,13 @@ function WorkspaceScreenContent({
             focusPaneBeforeOpen: input.focusPaneBeforeOpen,
           });
         },
+        onOpenFileInMainPane: handleOpenFileFromNavigation,
         onOpenImportSheet: openImportSheet,
       }),
     [
       handleCloseTabById,
       fileNavigationRevisionByTabId,
+      handleOpenFileFromNavigation,
       handleOpenWorkspaceFileFromPane,
       navigateToTabId,
       normalizedServerId,
@@ -3684,16 +3827,24 @@ function WorkspaceScreenContent({
     [createTerminalMutation.isPending, pendingTerminalCreateInput],
   );
   const showCreateBrowserTab = getIsElectron();
+  // The file navigation panel is a singleton surface: while one is open (in any
+  // pane), its launcher entry disappears instead of stacking a second copy.
+  const hasOpenFileNavTab = useMemo(
+    () => uiTabs.some((tab) => tab.target.kind === "file_nav"),
+    [uiTabs],
+  );
   const newTabLauncher = useMemo<NewTabLauncher>(
     () => ({
       showChanges: isGitCheckout,
       showPullRequest: hasPullRequest,
       showBrowser: showCreateBrowserTab,
+      showFileNav: !hasOpenFileNavTab,
       terminalDisabled: createTerminalDisabled,
       launch: launchWorkspaceTab,
     }),
     [
       createTerminalDisabled,
+      hasOpenFileNavTab,
       hasPullRequest,
       isGitCheckout,
       launchWorkspaceTab,
@@ -3862,6 +4013,9 @@ function WorkspaceScreenContent({
         <NewTabLauncherProvider value={newTabLauncher}>
           <WorkspaceDesktopTabsRow
             paneId={focusedPaneIdOrUndefined}
+            isSidePanel={
+              focusedPaneIdOrUndefined !== undefined && focusedPaneIdOrUndefined === sidePanelPaneId
+            }
             isFocused={isRouteFocused}
             tabs={desktopTabRowItems}
             normalizedServerId={normalizedServerId}

@@ -81,7 +81,6 @@ import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
-import { SIDE_PANEL_PANE_ID } from "@/stores/workspace-layout-actions";
 
 const DROPDOWN_WIDTH = 220;
 const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
@@ -222,6 +221,8 @@ function TabLabelMeasurement({
 interface WorkspaceNewTabButtonProps {
   serverId: string;
   paneId?: string;
+  /** The pane's launcher purpose: the side panel offers the supporting catalog (incl. file navigation). */
+  isSidePanel?: boolean;
   shortcutKeys: ShortcutKey[][] | null;
   onLayout: (event: LayoutChangeEvent) => void;
 }
@@ -229,6 +230,7 @@ interface WorkspaceNewTabButtonProps {
 function WorkspaceNewTabButton({
   serverId,
   paneId,
+  isSidePanel = false,
   shortcutKeys,
   onLayout,
 }: WorkspaceNewTabButtonProps) {
@@ -258,7 +260,7 @@ function WorkspaceNewTabButton({
         </Tooltip>
         <WorkspaceNewTabMenuContent
           serverId={serverId}
-          purpose={paneId === SIDE_PANEL_PANE_ID ? "supporting" : "primary"}
+          purpose={isSidePanel ? "supporting" : "primary"}
           paneId={paneId}
         />
       </DropdownMenu>
@@ -464,6 +466,13 @@ function sameWidths(left: number[], right: number[]): boolean {
 
 interface WorkspaceDesktopTabsRowProps {
   paneId?: string;
+  /**
+   * Whether this row belongs to the workspace's side panel pane. Resolved via
+   * `selectSidePanelPaneId`, never a literal pane-id compare: a rebuilt side
+   * panel pane (e.g. a layout migrated from a version without one) gets a
+   * generated id that no longer equals SIDE_PANEL_PANE_ID.
+   */
+  isSidePanel?: boolean;
   isFocused?: boolean;
   tabs: WorkspaceDesktopTabRowItem[];
   normalizedServerId: string;
@@ -549,6 +558,7 @@ function getFallbackTabLabel(
     agent: string;
     changes: string;
     files: string;
+    fileNav: string;
     pullRequest: string;
   },
 ): string {
@@ -572,6 +582,9 @@ function getFallbackTabLabel(
   }
   if (tab.target.kind === "files") {
     return labels.files;
+  }
+  if (tab.target.kind === "file_nav") {
+    return labels.fileNav;
   }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
@@ -949,6 +962,7 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
 
 function ResolvedWorkspaceDesktopTabsRow({
   paneId,
+  isSidePanel = false,
   isFocused = false,
   tabs,
   normalizedServerId,
@@ -1072,6 +1086,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      fileNav: t("panels.fileNav.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -1364,6 +1379,7 @@ function ResolvedWorkspaceDesktopTabsRow({
             <WorkspaceNewTabButton
               serverId={normalizedServerId}
               paneId={paneId}
+              isSidePanel={isSidePanel}
               shortcutKeys={newTabKeys}
               onLayout={handleInlineAddButtonLayout}
             />
@@ -1379,6 +1395,7 @@ function ResolvedWorkspaceDesktopTabsRow({
         <WorkspaceNewTabButton
           serverId={normalizedServerId}
           paneId={paneId}
+          isSidePanel={isSidePanel}
           shortcutKeys={newTabKeys}
           onLayout={handleInlineAddButtonLayout}
         />

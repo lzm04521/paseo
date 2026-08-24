@@ -1,6 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import {
+  DEFAULT_IDLE_AUTO_RESTART_CONFIG,
   FileExplorerRequestSchema,
+  MutableDaemonConfigPatchSchema,
+  MutableDaemonConfigSchema,
   PaseoWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
   SessionInboundMessageSchema,
@@ -502,6 +505,68 @@ describe("viewed timeline subscription messages", () => {
           requestId: "timeline-subscription-1",
         },
       },
+    });
+  });
+});
+
+describe("idleAutoRestart config schema", () => {
+  // `mcp` is the only field on MutableDaemonConfigSchema without a default;
+  // supply it so parse failures isolate the idleAutoRestart node.
+  const baseConfig = { mcp: { injectIntoAgents: false } };
+
+  it("accepts a full node on the mutable config", () => {
+    const parsed = MutableDaemonConfigSchema.parse({
+      ...baseConfig,
+      idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 },
+    });
+    expect(parsed.idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 240,
+      idleThresholdMinutes: 10,
+    });
+  });
+
+  it("rejects out-of-range thresholds", () => {
+    const base = { enabled: true, idleThresholdMinutes: 10 };
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { ...base, uptimeThresholdMinutes: 0 },
+      }),
+    ).toThrow();
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { ...base, uptimeThresholdMinutes: 10081 },
+      }),
+    ).toThrow();
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240, idleThresholdMinutes: 1441 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-integer thresholds", () => {
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240.5, idleThresholdMinutes: 10 },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts partial nodes on the patch schema", () => {
+    const patch = MutableDaemonConfigPatchSchema.parse({ idleAutoRestart: { enabled: true } });
+    expect(patch.idleAutoRestart).toEqual({ enabled: true });
+  });
+
+  it("exposes the default config constant", () => {
+    expect(DEFAULT_IDLE_AUTO_RESTART_CONFIG).toEqual({
+      enabled: false,
+      uptimeThresholdMinutes: 240,
+      idleThresholdMinutes: 10,
     });
   });
 });

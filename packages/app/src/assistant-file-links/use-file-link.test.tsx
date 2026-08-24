@@ -72,7 +72,12 @@ function createToast(): ToastApi {
   };
 }
 
-function createWrapper(input: { client: TestClient; openedFiles: OpenedFile[]; toast?: ToastApi }) {
+function createWrapper(input: {
+  client: TestClient;
+  openedFiles: OpenedFile[];
+  toast?: ToastApi;
+  defaultFileOpenDisposition?: OpenFileDisposition;
+}) {
   const queryClient = createQueryClient();
   return function Wrapper({ children }: { children: ReactNode }) {
     const openWorkspaceFile = useCallback(
@@ -89,6 +94,7 @@ function createWrapper(input: { client: TestClient; openedFiles: OpenedFile[]; t
           serverId="server-1"
           workspaceRoot="/Users/test/project"
           onOpenWorkspaceFile={openWorkspaceFile}
+          defaultFileOpenDisposition={input.defaultFileOpenDisposition}
           toast={input.toast}
         >
           {children}
@@ -99,6 +105,26 @@ function createWrapper(input: { client: TestClient; openedFiles: OpenedFile[]; t
 }
 
 describe("useFileLink", () => {
+  it("opens with the provider's default disposition, falling back to side", async () => {
+    const getDirectorySuggestions = vi
+      .fn()
+      .mockResolvedValue(resolvedSuggestions([{ path: "docs/dumm.md", kind: "file" }]));
+    const openedFiles: OpenedFile[] = [];
+    const { result } = renderHook(() => useFileLink(SOURCE), {
+      wrapper: createWrapper({
+        client: { getDirectorySuggestions },
+        openedFiles,
+        defaultFileOpenDisposition: "main",
+      }),
+    });
+
+    act(() => {
+      result.current.onPress();
+    });
+    await waitFor(() => {
+      expect(openedFiles[0]?.disposition).toBe("main");
+    });
+  });
   it("returns the same object across no-op parent rerenders", () => {
     const getDirectorySuggestions = vi.fn(async () => resolvedSuggestions([]));
     const queryClient = createQueryClient();
@@ -158,10 +184,13 @@ describe("useFileLink", () => {
       result.current.onPress();
     });
     await waitFor(() => {
-      expect(toast.show).toHaveBeenCalledWith("No file found for dumm.md", {
-        variant: "error",
-        testID: "assistant-file-link-not-found-toast",
-      });
+      expect(toast.show).toHaveBeenCalledWith(
+        "No file found for dumm.md\nTried path: /Users/test/project/dumm.md",
+        {
+          variant: "error",
+          testID: "assistant-file-link-not-found-toast",
+        },
+      );
     });
 
     act(() => {

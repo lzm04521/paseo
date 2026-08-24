@@ -13,6 +13,16 @@ import {
   type SidebarRowItems,
 } from "@/components/sidebar/display-preferences/row-items";
 import { isNative } from "@/constants/platform";
+import type { OpenFileDisposition } from "@/workspace/file-open";
+import {
+  DEFAULT_FILE_OPEN_DISPOSITION,
+  DEFAULT_SIDE_PANEL_DEFAULT_VIEWS,
+  DEFAULT_SIDE_PANEL_WIDTH_PERCENT,
+  MAX_SIDE_PANEL_WIDTH_PERCENT,
+  MIN_SIDE_PANEL_WIDTH_PERCENT,
+  SidePanelDefaultViewsSchema,
+  type SidePanelDefaultViews,
+} from "@/workspace-tabs/side-panel-defaults";
 import {
   FONT_SIZE,
   PLUGIN_THEME_PREFERENCE,
@@ -87,6 +97,14 @@ export interface AppSettings {
   vimKeybindings: boolean;
   /** Route implicitly opened supporting tabs into the Side panel. Desktop only. */
   openSupportingTabsInSidePanel: boolean;
+  /** Which panels the Side panel opens when the user reveals it. */
+  sidePanelDefaultViews: SidePanelDefaultViews;
+  /** Side panel share of the workspace when revealed, in percent (10–90). */
+  sidePanelWidthPercent: number;
+  /** Where chat file links and the file navigation panel open files. */
+  fileOpenDisposition: OpenFileDisposition;
+  /** Reveal the Side panel automatically when a workspace opens. Desktop layouts only. */
+  openSidePanelOnWorkspaceOpen: boolean;
 }
 
 export interface Settings extends AppSettings {
@@ -117,6 +135,10 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   chatOutlineEnabled: true,
   vimKeybindings: false,
   openSupportingTabsInSidePanel: true,
+  sidePanelDefaultViews: DEFAULT_SIDE_PANEL_DEFAULT_VIEWS,
+  sidePanelWidthPercent: DEFAULT_SIDE_PANEL_WIDTH_PERCENT,
+  fileOpenDisposition: DEFAULT_FILE_OPEN_DISPOSITION,
+  openSidePanelOnWorkspaceOpen: false,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -210,6 +232,19 @@ const StoredAppSettingsSchema = z
     chatOutlineEnabled: z.boolean().catch(true),
     vimKeybindings: z.boolean().catch(false),
     openSupportingTabsInSidePanel: z.boolean().catch(true),
+    sidePanelDefaultViews: SidePanelDefaultViewsSchema.transform(
+      (views) =>
+        ({
+          changes: views.changes ?? DEFAULT_SIDE_PANEL_DEFAULT_VIEWS.changes,
+          fileNav: views.fileNav ?? DEFAULT_SIDE_PANEL_DEFAULT_VIEWS.fileNav,
+        }) satisfies SidePanelDefaultViews,
+    ).catch(DEFAULT_SIDE_PANEL_DEFAULT_VIEWS),
+    sidePanelWidthPercent: clampedNumber(
+      MIN_SIDE_PANEL_WIDTH_PERCENT,
+      MAX_SIDE_PANEL_WIDTH_PERCENT,
+    ).catch(DEFAULT_SIDE_PANEL_WIDTH_PERCENT),
+    fileOpenDisposition: z.enum(["main", "side"]).catch(DEFAULT_FILE_OPEN_DISPOSITION),
+    openSidePanelOnWorkspaceOpen: z.boolean().catch(false),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.
     manageBuiltInDaemon: z.boolean().optional().catch(undefined),
     releaseChannel: z.enum(["stable", "beta"]).optional().catch(undefined),

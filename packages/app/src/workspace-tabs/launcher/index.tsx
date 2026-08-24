@@ -3,6 +3,7 @@ import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import {
   FileDiff,
+  FolderOpen,
   FolderTree,
   GitPullRequest,
   Globe,
@@ -33,6 +34,8 @@ export interface NewTabLauncher {
   showChanges: boolean;
   showPullRequest: boolean;
   showBrowser: boolean;
+  /** One file navigation panel per workspace: hidden from the launcher while open. */
+  showFileNav: boolean;
   terminalDisabled: boolean;
   launch: (selection: NewTabSelection, destination: WorkspaceTabLaunchDestination) => void;
 }
@@ -71,6 +74,7 @@ const BUILT_IN_SELECTIONS: Record<BuiltInLaunchItemId, NewTabSelection> = {
   terminal: { kind: "terminal" },
   changes: { kind: "target", target: { kind: "working_diff" } },
   files: { kind: "target", target: { kind: "files" } },
+  fileNav: { kind: "target", target: { kind: "file_nav" } },
   browser: { kind: "browser" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
 };
@@ -131,6 +135,14 @@ export function useWorkspaceTabLaunchCatalog(input: {
         shortcutActionId: "workspace-tab-target-files",
         disabled: false,
         launch: launchSelection(BUILT_IN_SELECTIONS.files),
+      },
+      fileNav: {
+        id: "fileNav",
+        label: t("workspace.tabs.actions.fileNav"),
+        Icon: FolderOpen,
+        disabled: false,
+        hidden: !launcher.showFileNav,
+        launch: launchSelection(BUILT_IN_SELECTIONS.fileNav),
       },
       browser: {
         id: "browser",

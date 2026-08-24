@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { z } from "zod";
 
 import type {
@@ -108,11 +109,12 @@ export interface BuildProviderRegistryOptions {
   managedProcesses?: ManagedProcessRegistry;
   isDev?: boolean;
   ompRuntime?: OmpRuntime;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 interface ProviderClientFactoryOptions extends Pick<
   BuildProviderRegistryOptions,
-  "workspaceGitService" | "managedProcesses" | "ompRuntime"
+  "workspaceGitService" | "managedProcesses" | "ompRuntime" | "getDaemonConfig"
 > {
   providerParams?: unknown;
   customProvider?: {
@@ -188,10 +190,11 @@ const HUB_E2E_PROVIDER_CONTRACT: ProviderContract = {
 };
 
 const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
-  claude: (logger, runtimeSettings) =>
+  claude: (logger, runtimeSettings, options) =>
     new ClaudeAgentClient({
       logger,
       runtimeSettings,
+      getDaemonConfig: options?.getDaemonConfig,
     }),
   codex: (logger, runtimeSettings, options) =>
     new CodexAppServerAgentClient(logger, runtimeSettings, {
@@ -700,7 +703,7 @@ function buildResolvedBuiltinProviders(
   runtimeSettings: AgentProviderRuntimeSettingsMap | undefined,
   options: Pick<
     BuildProviderRegistryOptions,
-    "workspaceGitService" | "managedProcesses" | "ompRuntime"
+    "workspaceGitService" | "managedProcesses" | "ompRuntime" | "getDaemonConfig"
   >,
   isDev: boolean,
 ): Map<string, ResolvedProvider> {
@@ -732,6 +735,7 @@ function buildResolvedBuiltinProviders(
           workspaceGitService: options.workspaceGitService,
           managedProcesses: options.managedProcesses,
           ompRuntime: options.ompRuntime,
+          getDaemonConfig: options.getDaemonConfig,
           providerParams: override?.params,
         }),
       contract: PROVIDER_CONTRACTS[definition.id] ?? UNSUPPORTED_PROVIDER_CONTRACT,
@@ -744,7 +748,7 @@ function buildResolvedBuiltinProviders(
 function addDerivedProviders(
   resolvedProviders: Map<string, ResolvedProvider>,
   providerOverrides: Record<string, ProviderOverride>,
-  options: Pick<BuildProviderRegistryOptions, "managedProcesses">,
+  options: Pick<BuildProviderRegistryOptions, "managedProcesses" | "getDaemonConfig">,
 ): void {
   for (const [providerId, override] of Object.entries(providerOverrides)) {
     if (resolvedProviders.has(providerId) || BUILTIN_PROVIDER_IDS.includes(providerId)) {
@@ -840,6 +844,7 @@ function addDerivedProviders(
       createBaseClient: (logger) =>
         baseFactory(logger, mergedRuntimeSettings, {
           managedProcesses: options.managedProcesses,
+          getDaemonConfig: options.getDaemonConfig,
           providerParams,
           customProvider: {
             id: providerId,
@@ -865,11 +870,13 @@ export function buildProviderRegistry(
       workspaceGitService: options?.workspaceGitService,
       managedProcesses: options?.managedProcesses,
       ompRuntime: options?.ompRuntime,
+      getDaemonConfig: options?.getDaemonConfig,
     },
     options?.isDev === true,
   );
   addDerivedProviders(resolvedProviders, providerOverrides, {
     managedProcesses: options?.managedProcesses,
+    getDaemonConfig: options?.getDaemonConfig,
   });
 
   return Object.fromEntries(

@@ -524,6 +524,8 @@ export interface SessionOptions {
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
+  getIdleRestartStartedAt?: () => number | null;
 }
 
 export type SessionLifecycleIntent =
@@ -793,6 +795,8 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
     } = options;
     this.clientId = clientId;
     this.scopes = [...scopes];
@@ -874,6 +878,7 @@ export class Session {
       checkoutDiffManager,
       gitMetadataGenerator: createGitMetadataGenerator({
         workspaceGitService: this.workspaceGitService,
+        readDaemonConfig: () => this.readStructuredGenerationDaemonConfig(),
         generation: createAgentStructuredTextGeneration({
           agentManager: this.agentManager,
           providerSnapshotManager,
@@ -954,6 +959,8 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
       listProviderAvailability: () => this.agentManager.listProviderAvailability(),
       listAgents: () => this.agentManager.listAgents(),
       listProjects: () => this.projectRegistry.list(),
@@ -4175,6 +4182,12 @@ export class Session {
     try {
       const workspaceCwd = cwd?.trim();
       const searchesWorkspace = Boolean(workspaceCwd);
+      // Daemon-level global default (`fileSearch.gitIgnoreOverrides` in $PASEO_HOME/config.json).
+      // An explicit array, including empty, fully replaces the built-in
+      // DEFAULT_GIT_IGNORE_PATH_OVERRIDES; undefined falls back to it.
+      const fileSearchOverrides = searchesWorkspace
+        ? this.daemonConfigStore.get().fileSearch?.gitIgnoreOverrides
+        : undefined;
       const entries = await searchDirectoryEntries({
         root: workspaceCwd ? expandTilde(workspaceCwd) : (process.env.HOME ?? homedir()),
         query,
@@ -4187,6 +4200,7 @@ export class Session {
           : [],
         confidentResultScanThreshold: searchesWorkspace ? undefined : 5_000,
         respectGitIgnore: searchesWorkspace,
+        gitIgnorePathOverrides: fileSearchOverrides,
         includeFiles,
         includeDirectories,
         matchMode,

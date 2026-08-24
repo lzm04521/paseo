@@ -30,6 +30,7 @@ export interface BuildWorkspacePaneContentModelInput {
   onRetargetCurrentTab: (target: WorkspaceTabDescriptor["target"]) => void;
   onSetCurrentTabState: (state: WorkspaceTabDescriptor["state"]) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
+  onOpenFileInMainPane: (path: string) => void;
   onOpenImportSheet: () => void;
 }
 
@@ -44,6 +45,7 @@ export function buildWorkspacePaneContentModel({
   onRetargetCurrentTab,
   onSetCurrentTabState,
   onOpenWorkspaceFile,
+  onOpenFileInMainPane,
   onOpenImportSheet,
 }: BuildWorkspacePaneContentModelInput): WorkspacePaneContentModel {
   ensurePanelsRegistered();
@@ -65,6 +67,7 @@ export function buildWorkspacePaneContentModel({
       retargetCurrentTab: onRetargetCurrentTab,
       setCurrentTabState: onSetCurrentTabState,
       openFileInWorkspace: onOpenWorkspaceFile,
+      openFileInMainPane: onOpenFileInMainPane,
       openImportSheet: onOpenImportSheet,
     },
   };
@@ -89,6 +92,7 @@ export function WorkspacePaneContent({
   const retargetCurrentTab = useStableEvent(paneContextValue.retargetCurrentTab);
   const setCurrentTabState = useStableEvent(paneContextValue.setCurrentTabState);
   const openFileInWorkspace = useStableEvent(paneContextValue.openFileInWorkspace);
+  const openFileInMainPane = useStableEvent(paneContextValue.openFileInMainPane);
   const openImportSheet = useStableEvent(paneContextValue.openImportSheet);
   const stablePaneContextValue = useMemo(
     () => ({
@@ -104,11 +108,13 @@ export function WorkspacePaneContent({
       retargetCurrentTab,
       setCurrentTabState,
       openFileInWorkspace,
+      openFileInMainPane,
       openImportSheet,
     }),
     [
       closeCurrentTab,
       openFileInWorkspace,
+      openFileInMainPane,
       openImportSheet,
       openTab,
       paneContextValue.serverId,

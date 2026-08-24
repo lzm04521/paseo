@@ -34,6 +34,10 @@ import {
   DEFAULT_THEME_PREFERENCE,
 } from "@/hooks/use-settings";
 import {
+  MAX_SIDE_PANEL_WIDTH_PERCENT,
+  MIN_SIDE_PANEL_WIDTH_PERCENT,
+} from "@/workspace-tabs/side-panel-defaults";
+import {
   DEFAULT_MONO_FONT_STACK,
   DEFAULT_UI_FONT_STACK,
   ICON_SIZE,
@@ -275,6 +279,180 @@ const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "detailed",
   "overview",
 ];
+
+// ---------------------------------------------------------------------------
+// Side panel defaults: which panels a reveal opens (multi-select, all optional)
+// ---------------------------------------------------------------------------
+
+interface SidePanelDefaultsHeaderRowProps {
+  title: string;
+  hint: string;
+}
+
+function SidePanelDefaultsHeaderRow({ title, hint }: SidePanelDefaultsHeaderRowProps) {
+  return (
+    <View style={settingsStyles.row}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
+      </View>
+    </View>
+  );
+}
+
+interface SidePanelDefaultViewRowProps {
+  title: string;
+  accessibilityLabel: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function SidePanelDefaultViewRow({
+  title,
+  accessibilityLabel,
+  value,
+  onChange,
+}: SidePanelDefaultViewRowProps) {
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={accessibilityLabel} />
+    </View>
+  );
+}
+
+interface SidePanelAutoOpenRowProps {
+  title: string;
+  hint: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function SidePanelAutoOpenRow({ title, hint, value, onChange }: SidePanelAutoOpenRowProps) {
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={title} />
+    </View>
+  );
+}
+
+interface SidePanelWidthRowProps {
+  title: string;
+  hint: string;
+  accessibilityLabel: string;
+  draft: string;
+  onChangeDraft: (value: string) => void;
+  onCommit: () => void;
+}
+function SidePanelWidthRow({
+  title,
+  hint,
+  accessibilityLabel,
+  draft,
+  onChangeDraft,
+  onCommit,
+}: SidePanelWidthRowProps) {
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
+      </View>
+      <View style={styles.sizeField}>
+        <TextInput
+          initialValue={draft}
+          onChangeText={onChangeDraft}
+          onBlur={onCommit}
+          onSubmitEditing={onCommit}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          selectTextOnFocus
+          style={styles.sizeInput}
+          accessibilityLabel={accessibilityLabel}
+        />
+        <Text style={styles.unit}>%</Text>
+      </View>
+    </View>
+  );
+}
+
+const FILE_OPEN_DISPOSITIONS: readonly AppSettings["fileOpenDisposition"][] = ["main", "side"];
+
+function getFileOpenDispositionLabel(
+  t: TFunction,
+  value: AppSettings["fileOpenDisposition"],
+): string {
+  return t(`settings.appearance.sidePanel.fileOpen.options.${value}`);
+}
+
+interface FileOpenDispositionMenuItemProps {
+  value: AppSettings["fileOpenDisposition"];
+  selected: boolean;
+  onChange: (value: AppSettings["fileOpenDisposition"]) => void;
+}
+
+function FileOpenDispositionMenuItem({
+  value,
+  selected,
+  onChange,
+}: FileOpenDispositionMenuItemProps) {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => onChange(value), [onChange, value]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={handleSelect}>
+      {getFileOpenDispositionLabel(t, value)}
+    </DropdownMenuItem>
+  );
+}
+
+interface FileOpenDispositionRowProps {
+  value: AppSettings["fileOpenDisposition"];
+  onChange: (value: AppSettings["fileOpenDisposition"]) => void;
+}
+
+function FileOpenDispositionRow({ value, onChange }: FileOpenDispositionRowProps) {
+  const { t } = useTranslation();
+  const selectedLabel = getFileOpenDispositionLabel(t, value);
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.appearance.sidePanel.fileOpen.title")}
+        </Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.appearance.sidePanel.fileOpen.hint")}
+        </Text>
+      </View>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          style={dropdownTriggerStyle}
+          accessibilityLabel={t("settings.appearance.sidePanel.fileOpen.accessibilityLabel", {
+            value: selectedLabel,
+          })}
+        >
+          <Text style={styles.triggerText}>{selectedLabel}</Text>
+          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="bottom" align="end" width={200}>
+          {FILE_OPEN_DISPOSITIONS.map((option) => (
+            <FileOpenDispositionMenuItem
+              key={option}
+              value={option}
+              selected={value === option}
+              onChange={onChange}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
+}
 
 function getToolCallDetailLevelLabel(
   t: TFunction,
@@ -534,6 +712,9 @@ export function AppearanceSection() {
   const [uiBaseSizeDraft, setUiBaseSizeDraft] = useState(String(settings.uiBaseFontSize));
   const [contentSizeDraft, setContentSizeDraft] = useState(String(settings.contentFontSize));
   const [codeSizeDraft, setCodeSizeDraft] = useState(String(settings.codeFontSize));
+  const [sidePanelWidthDraft, setSidePanelWidthDraft] = useState(
+    String(settings.sidePanelWidthPercent),
+  );
 
   // Resync numeric drafts when the committed value changes elsewhere.
   useEffect(() => {
@@ -545,6 +726,9 @@ export function AppearanceSection() {
   useEffect(() => {
     setCodeSizeDraft(String(settings.codeFontSize));
   }, [settings.codeFontSize]);
+  useEffect(() => {
+    setSidePanelWidthDraft(String(settings.sidePanelWidthPercent));
+  }, [settings.sidePanelWidthPercent]);
 
   const handleThemeChange = useCallback(
     (theme: BuiltInThemePreference) => {
@@ -584,6 +768,45 @@ export function AppearanceSection() {
   const handleChatOutlineChange = useCallback(
     (chatOutlineEnabled: boolean) => {
       void updateSettings({ chatOutlineEnabled });
+    },
+    [updateSettings],
+  );
+
+  const handleSidePanelDefaultViewChange = useCallback(
+    (view: "changes" | "fileNav", value: boolean) => {
+      void updateSettings({
+        sidePanelDefaultViews: { ...settings.sidePanelDefaultViews, [view]: value },
+      });
+    },
+    [settings.sidePanelDefaultViews, updateSettings],
+  );
+
+  const handleSidePanelWidthDraftChange = useCallback((value: string) => {
+    setSidePanelWidthDraft(value.replace(/[^\d]/g, ""));
+  }, []);
+
+  const commitSidePanelWidth = useCallback(() => {
+    const parsed = parseClampedFontSize(sidePanelWidthDraft, {
+      min: MIN_SIDE_PANEL_WIDTH_PERCENT,
+      max: MAX_SIDE_PANEL_WIDTH_PERCENT,
+    });
+    const next = parsed ?? settings.sidePanelWidthPercent;
+    setSidePanelWidthDraft(String(next));
+    if (next !== settings.sidePanelWidthPercent) {
+      void updateSettings({ sidePanelWidthPercent: next });
+    }
+  }, [settings.sidePanelWidthPercent, sidePanelWidthDraft, updateSettings]);
+
+  const handleFileOpenDispositionChange = useCallback(
+    (fileOpenDisposition: AppSettings["fileOpenDisposition"]) => {
+      void updateSettings({ fileOpenDisposition });
+    },
+    [updateSettings],
+  );
+
+  const handleSidePanelAutoOpenChange = useCallback(
+    (openSidePanelOnWorkspaceOpen: boolean) => {
+      void updateSettings({ openSidePanelOnWorkspaceOpen });
     },
     [updateSettings],
   );
@@ -707,6 +930,44 @@ export function AppearanceSection() {
               onChange={handleChatOutlineChange}
             />
           ) : null}
+        </View>
+      </SettingsSection>
+      <SettingsSection title={t("settings.appearance.sidePanel.title")}>
+        <View style={settingsStyles.card}>
+          <SidePanelDefaultsHeaderRow
+            title={t("settings.appearance.sidePanel.defaults.label")}
+            hint={t("settings.appearance.sidePanel.defaults.hint")}
+          />
+          <SidePanelDefaultViewRow
+            title={t("settings.appearance.sidePanel.defaults.changes")}
+            accessibilityLabel={t("settings.appearance.sidePanel.defaults.changes")}
+            value={settings.sidePanelDefaultViews.changes}
+            onChange={(value) => handleSidePanelDefaultViewChange("changes", value)}
+          />
+          <SidePanelDefaultViewRow
+            title={t("settings.appearance.sidePanel.defaults.fileNav")}
+            accessibilityLabel={t("settings.appearance.sidePanel.defaults.fileNav")}
+            value={settings.sidePanelDefaultViews.fileNav}
+            onChange={(value) => handleSidePanelDefaultViewChange("fileNav", value)}
+          />
+          <SidePanelAutoOpenRow
+            title={t("settings.appearance.sidePanel.autoOpen.title")}
+            hint={t("settings.appearance.sidePanel.autoOpen.description")}
+            value={settings.openSidePanelOnWorkspaceOpen}
+            onChange={handleSidePanelAutoOpenChange}
+          />
+          <SidePanelWidthRow
+            title={t("settings.appearance.sidePanel.width.title")}
+            hint={t("settings.appearance.sidePanel.width.hint")}
+            accessibilityLabel={t("settings.appearance.sidePanel.width.accessibilityLabel")}
+            draft={sidePanelWidthDraft}
+            onChangeDraft={handleSidePanelWidthDraftChange}
+            onCommit={commitSidePanelWidth}
+          />
+          <FileOpenDispositionRow
+            value={settings.fileOpenDisposition}
+            onChange={handleFileOpenDispositionChange}
+          />
         </View>
       </SettingsSection>
       <SettingsSection title={t("settings.appearance.fonts.title")}>

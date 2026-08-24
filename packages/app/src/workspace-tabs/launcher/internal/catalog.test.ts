@@ -13,14 +13,16 @@ describe("getBuiltInLaunchOrder", () => {
     ]);
   });
 
-  it("leads with companion tools in a supporting pane", () => {
+  it("offers the Side panel the file navigation pane after files", () => {
     expect(getBuiltInLaunchOrder("supporting")).toEqual([
       "changes",
       "files",
+      "fileNav",
       "terminal",
       "agent",
       "browser",
       "pullRequest",
     ]);
+    expect(getBuiltInLaunchOrder("primary")).not.toContain("fileNav");
   });
 });
