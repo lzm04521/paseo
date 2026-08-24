@@ -341,6 +341,7 @@ export function FilePane({
       location={location}
       navigationRevision={navigationRevision}
       imagePreviewUri={imagePreviewUri}
+      readOnly={readOnly}
     />
   );
 }
@@ -382,6 +383,7 @@ function FilePanePresentation({
   location,
   navigationRevision,
   imagePreviewUri,
+  readOnly,
 }: {
   serverId: string;
   client: DaemonClient | null;
@@ -403,6 +405,7 @@ function FilePanePresentation({
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  readOnly?: boolean;
 }) {
   if (!client && readTarget) {
     return (
@@ -464,6 +467,7 @@ function FilePanePresentation({
           lineCount={lineCount}
           mode={previewMode}
           onModeChange={onPreviewModeChange}
+          showTreeToggle={!readOnly}
         />
       ) : null}
       <FilePreviewBody
