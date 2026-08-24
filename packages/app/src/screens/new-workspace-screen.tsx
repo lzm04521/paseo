@@ -9,7 +9,14 @@ import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Folder, FolderPlus, GitBranch, GitPullRequest } from "lucide-react-native";
+import {
+  ChevronDown,
+  Folder,
+  FolderPlus,
+  GitBranch,
+  GitPullRequest,
+  PanelRight,
+} from "lucide-react-native";
 import { Composer } from "@/composer";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { FileExplorerPane } from "@/components/file-explorer-pane";
@@ -27,6 +34,7 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
+import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
@@ -56,6 +64,7 @@ import {
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
+import { usePanelStore } from "@/stores/panel-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -73,6 +82,7 @@ import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { generateMessageId } from "@/types/stream";
 import { toErrorMessage } from "@/utils/error-messages";
 import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
+import type { ShortcutKey } from "@/utils/format-shortcut";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
   getHostProjectSourceDirectory,
@@ -124,7 +134,12 @@ import { buildNewWorkspaceProjectIconTargets } from "./new-workspace/project-ico
 import { useNewWorkspaceProjectPicker } from "./new-workspace/project-picker";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedPanelRight = withUnistyles(PanelRight);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundExtraMutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundExtraMuted,
+});
 const addProjectIcon = (
   <ThemedFolderPlus size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
@@ -208,6 +223,9 @@ const metaChevron = <MetaChevron />;
 
 // Stable reference so the keyboard-action handler doesn't re-register each render.
 const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pick"];
+const NAV_TOGGLE_ACTIONS: readonly KeyboardActionId[] = ["sidebar.toggle.right"];
+// Mirrors the workspace side-panel toggle (Ctrl/Cmd+E), shown in the button tooltip.
+const FILE_NAV_TOGGLE_KEYS: ShortcutKey[] = ["mod", "E"];
 // Height of a single picker-trigger badge. The Base-row spacer reserves exactly
 // this so toggling Isolation to Local hides the row without shifting the form.
 const BADGE_HEIGHT = 28;
@@ -1717,7 +1735,9 @@ export function NewWorkspaceScreen({
   const { targets: navOpenTargets } = useDesktopOpenTargets({
     isLocalExecution: isLocalDaemon,
   });
-  const showNavPanel = !isCompact && hasSelectedSourceDirectory;
+  const fileNavOpen = usePanelStore((state) => state.newWorkspaceFileNavOpen);
+  const toggleNewWorkspaceFileNav = usePanelStore((state) => state.toggleNewWorkspaceFileNav);
+  const showNavPanel = !isCompact && hasSelectedSourceDirectory && fileNavOpen;
   const handleOpenNavFile = useCallback(
     async (entryPath: string) => {
       if (!selectedSourceDirectory) {
@@ -1899,6 +1919,20 @@ export function NewWorkspaceScreen({
     enabled: projectPickerOptions.length > 0,
     priority: 0,
     handle: handleProjectPick,
+  });
+
+  // Same binding as the workspace side panel (Ctrl/Cmd+E). The workspace screen
+  // registers its own handler while mounted; this screen's registration is
+  // newer, so the dispatcher reaches it first while /new is up.
+  useKeyboardActionHandler({
+    handlerId: "new-workspace-file-nav-toggle",
+    actions: NAV_TOGGLE_ACTIONS,
+    enabled: !isCompact,
+    priority: 0,
+    handle: () => {
+      toggleNewWorkspaceFileNav();
+      return true;
+    },
   });
 
   const openIsolationPicker = useCallback(() => {
@@ -2303,9 +2337,36 @@ export function NewWorkspaceScreen({
 
   const screenHeaderLeft = useMemo(() => <SidebarMenuToggle />, []);
 
+  const sidePanelToggleLabel = t("workspace.tabs.sidePanel.toggle");
+  const screenHeaderRight = useMemo(() => {
+    if (isCompact) {
+      return null;
+    }
+    return (
+      <HeaderToggleButton
+        testID="new-workspace-file-nav-toggle"
+        onPress={toggleNewWorkspaceFileNav}
+        tooltipLabel={sidePanelToggleLabel}
+        tooltipKeys={FILE_NAV_TOGGLE_KEYS}
+        tooltipSide="left"
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={sidePanelToggleLabel}
+        accessibilityState={{ expanded: showNavPanel }}
+      >
+        {({ hovered }) => (
+          <ThemedPanelRight
+            size={16}
+            uniProps={hovered ? foregroundColorMapping : foregroundExtraMutedColorMapping}
+          />
+        )}
+      </HeaderToggleButton>
+    );
+  }, [isCompact, showNavPanel, sidePanelToggleLabel, toggleNewWorkspaceFileNav]);
+
   return (
     <FileDropZone style={styles.container}>
-      <ScreenHeader left={screenHeaderLeft} borderless />
+      <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
       <View style={contentStyle}>
         <TitlebarDragRegion />
         <ReanimatedAnimated.View style={centeredStyle}>
