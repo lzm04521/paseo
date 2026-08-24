@@ -38,6 +38,7 @@ export const ru: TranslationResources = {
       daemonClientUnavailable: "Daemon клиента недоступен",
       daemonClientDisconnected: "Daemon клиента отключен",
       noFileFound: "Файл для {{token}} не найден",
+      noFileFoundAttemptedPath: "Попытка открыть: {{path}}",
       unexpectedDictationError: "При обработке диктовки произошла непредвиденная ошибка.",
     },
     connectionStatus: {
@@ -2294,6 +2295,29 @@ export const ru: TranslationResources = {
       chatOutline: {
         title: "Оглавление чата",
         description: "Показывать оглавление для перехода между запросами",
+      },
+      sidePanel: {
+        title: "Боковая панель",
+        defaults: {
+          label: "Открывать при показе боковой панели",
+          hint: "В проектах без Git раздел изменений не открывается",
+          changes: "Изменения",
+          fileNav: "Проводник",
+        },
+        width: {
+          title: "Размер при открытии",
+          hint: "Доля рабочей области, занимаемая боковой панелью; применяется при каждом открытии",
+          accessibilityLabel: "Размер боковой панели",
+        },
+        fileOpen: {
+          title: "Открывать файлы в",
+          hint: "Где открывают файлы ссылки в чате и панель навигации по файлам",
+          accessibilityLabel: "Открывать файлы в: {{value}}",
+          options: {
+            main: "Главное окно",
+            side: "Боковая панель",
+          },
+        },
       },
       fonts: {
         title: "Шрифты",

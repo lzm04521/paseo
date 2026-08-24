@@ -11,10 +11,13 @@ import {
   selectIsSidePanelVisible,
   selectSidePanelPaneId,
   useWorkspaceLayoutStore,
+  type SplitGroup,
+  type SplitNode,
   type WorkspaceTabPlacement,
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
+import { sidePanelDefaultTargets, type SidePanelDefaultViews } from "./side-panel-defaults";
 
 /**
  * The side panel is the companion surface beside the user's work — Changes, Files,
@@ -33,7 +36,7 @@ import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
  */
 
 /** Tab kinds that are side panel views rather than user content. */
-const SIDE_PANEL_TAB_KINDS = ["working_diff", "files", "pull_request"] as const;
+const SIDE_PANEL_TAB_KINDS = ["working_diff", "files", "pull_request", "file_nav"] as const;
 type SidePanelTabKind = (typeof SIDE_PANEL_TAB_KINDS)[number];
 
 const SIDE_PANEL_VIEW_TARGETS: Record<ExplorerTab, WorkspaceTabTarget> = {
@@ -51,6 +54,16 @@ export interface SidePanelQuery {
 
 export interface SidePanelInput extends SidePanelQuery {
   checkout: ExplorerCheckoutContext | null;
+  /**
+   * The Settings → Appearance "open when revealing" preference. Omitted by
+   * callers that reveal the panel without a default to seed it with.
+   */
+  defaultViews?: SidePanelDefaultViews;
+  /**
+   * The Settings → Appearance side panel share, in percent (10–90). Applied on
+   * every reveal; a divider drag holds only while the panel stays open.
+   */
+  defaultWidthPercent?: number;
 }
 
 type LayoutState = ReturnType<typeof useWorkspaceLayoutStore.getState>;
@@ -172,6 +185,9 @@ function explorerViewForTarget(target: SidePanelViewTarget): ExplorerTab {
       return "files";
     case "pull_request":
       return "pr";
+    // The compact explorer has no file navigation view; Files is the closest.
+    case "file_nav":
+      return "files";
   }
 }
 
@@ -298,16 +314,91 @@ export function toggleSidePanel(input: SidePanelInput): void {
     return;
   }
 
+  const defaultTargets = sidePanelDefaultTargets(input.defaultViews, input.checkout);
+
   // Without splits there is no pane to reveal, so the toggle has to produce a tab.
   if (!canUseSidePanelPane(input)) {
     useWorkspaceLayoutStore.getState().openTab({
       workspaceKey: input.workspaceKey,
-      target: SIDE_PANEL_VIEW_TARGETS.changes,
+      target: defaultTargets[0] ?? fallbackSidePanelTab(input.checkout),
       intent: "reveal",
     });
     return;
   }
-  showSidePanel(input);
+  if (defaultTargets.length === 0) {
+    showSidePanel(input);
+    applySidePanelDefaultWidth(input);
+    return;
+  }
+  for (const target of defaultTargets) {
+    openSupportingTab({
+      isCompact: input.isCompact,
+      workspaceKey: input.workspaceKey,
+      supportsPaneSplits: input.supportsPaneSplits,
+      target,
+      openInSidePanelByDefault: true,
+    });
+  }
+  applySidePanelDefaultWidth(input);
+}
+
+/**
+ * Sizes the side panel's split to the preference on reveal. Applied on every
+ * reveal, so a divider drag holds only while the panel stays open; the next
+ * open returns to the preference. That is the point of a "default width": the
+ * divider is a per-session adjustment, the setting is the durable one.
+ */
+function applySidePanelDefaultWidth(input: SidePanelInput): void {
+  const percent = input.defaultWidthPercent;
+  if (!input.workspaceKey || typeof percent !== "number" || !Number.isFinite(percent)) {
+    return;
+  }
+  const store = useWorkspaceLayoutStore.getState();
+  const layout = store.layoutByWorkspace[input.workspaceKey];
+  const paneId = selectSidePanelPaneId(store, input.workspaceKey);
+  if (!layout || !paneId) {
+    return;
+  }
+  const group = findGroupContainingPane(layout.root, paneId);
+  if (!group || group.children.length < 2) {
+    return;
+  }
+  const fraction = Math.min(0.9, Math.max(0.1, percent / 100));
+  const other = (1 - fraction) / (group.children.length - 1);
+  store.resizeSplit(
+    input.workspaceKey,
+    group.id,
+    group.children.map((child) =>
+      child.kind === "pane" && child.pane.id === paneId ? fraction : other,
+    ),
+  );
+}
+
+function findGroupContainingPane(root: SplitNode, paneId: string): SplitGroup | null {
+  if (root.kind === "pane") {
+    return null;
+  }
+  for (const child of root.group.children) {
+    if (child.kind === "pane" && child.pane.id === paneId) {
+      return root.group;
+    }
+    const nested = findGroupContainingPane(child, paneId);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+/**
+ * The tab a no-preference reveal falls back to on surfaces without a side panel
+ * pane. Mirrors the compact explorer's coerceExplorerTabForCheckout: a checkout
+ * without Git has no Changes panel, so its fallback view is Files.
+ */
+function fallbackSidePanelTab(checkout: ExplorerCheckoutContext | null): WorkspaceTabTarget {
+  return checkout?.isGit === false
+    ? SIDE_PANEL_VIEW_TARGETS.files
+    : SIDE_PANEL_VIEW_TARGETS.changes;
 }
 
 /** Reactive "is the side panel showing" for the surface this layout uses. */

@@ -38,6 +38,7 @@ export const fr: TranslationResources = {
       daemonClientUnavailable: "ClientDaemonindisponible",
       daemonClientDisconnected: "Le clientDaemonest déconnecté",
       noFileFound: "Aucun fichier trouvé pour{{token}}",
+      noFileFoundAttemptedPath: "Chemin tenté : {{path}}",
       unexpectedDictationError:
         "Une erreur inattendue s'est produite lors du traitement de la dictée.",
     },
@@ -2312,6 +2313,29 @@ export const fr: TranslationResources = {
       chatOutline: {
         title: "Plan de la discussion",
         description: "Afficher un plan pour passer d’une requête à l’autre",
+      },
+      sidePanel: {
+        title: "Panneau latéral",
+        defaults: {
+          label: "Ouvrir à l’affichage du panneau latéral",
+          hint: "Les projets sans Git n’ouvrent pas Changements",
+          changes: "Changements",
+          fileNav: "Explorateur",
+        },
+        width: {
+          title: "Taille à l’ouverture",
+          hint: "Part de l’espace de travail occupée par le panneau latéral, appliquée à chaque ouverture",
+          accessibilityLabel: "Taille du panneau latéral",
+        },
+        fileOpen: {
+          title: "Ouvrir les fichiers dans",
+          hint: "Où les liens de fichiers du chat et la navigation ouvrent les fichiers",
+          accessibilityLabel: "Ouvrir les fichiers dans : {{value}}",
+          options: {
+            main: "Fenêtre principale",
+            side: "Panneau latéral",
+          },
+        },
       },
       fonts: {
         title: "Polices",

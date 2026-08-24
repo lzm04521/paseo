@@ -60,6 +60,13 @@ function sidePanelPaneId(): string | null {
   return selectSidePanelPaneId(useWorkspaceLayoutStore.getState(), WORKSPACE_KEY);
 }
 
+function sidePanelSplitSizes(): number[] {
+  const splits = useWorkspaceLayoutStore.getState().splitSizesByWorkspace[WORKSPACE_KEY];
+  const values = Object.values(splits ?? {});
+  expect(values).toHaveLength(1);
+  return values[0];
+}
+
 function paneIdHolding(tabId: string): string | undefined {
   return findPaneContainingTab(layout().root, tabId)?.id;
 }
@@ -239,6 +246,78 @@ describe("non-compact with splits", () => {
     expect(toggleSupportingTab(changes)).toBe(tabId);
     expect(isSidePanelOpen(wide)).toBe(true);
   });
+
+  it("opens the selected default views in the side panel on reveal", () => {
+    toggleSidePanel({ ...wide, defaultViews: { changes: true, fileNav: true } });
+
+    expect(isSidePanelOpen(wide)).toBe(true);
+    const tabs = collectAllTabs(layout().root);
+    const changesTabId = tabs.find((tab) => tab.target.kind === "working_diff")?.tabId;
+    const fileNavTabId = tabs.find((tab) => tab.target.kind === "file_nav")?.tabId;
+    expect(changesTabId).toBeTruthy();
+    expect(fileNavTabId).toBeTruthy();
+    expect(paneIdHolding(changesTabId as string)).toBe(sidePanelPaneId());
+    expect(paneIdHolding(fileNavTabId as string)).toBe(sidePanelPaneId());
+  });
+
+  it("skips a selected Changes default for a checkout without Git", () => {
+    toggleSidePanel({
+      ...wide,
+      checkout: { ...CHECKOUT, isGit: false },
+      defaultViews: { changes: true, fileNav: true },
+    });
+
+    expect(isSidePanelOpen(wide)).toBe(true);
+    expect(tabKinds()).not.toContain("working_diff");
+    expect(tabKinds()).toContain("file_nav");
+  });
+
+  it("reveals the pane without seeding tabs when no default is available", () => {
+    toggleSidePanel({
+      ...wide,
+      checkout: { ...CHECKOUT, isGit: false },
+      defaultViews: { changes: true, fileNav: false },
+    });
+
+    expect(isSidePanelOpen(wide)).toBe(true);
+    expect(tabKinds()).toEqual(["new_tab", "new_tab"]);
+  });
+
+  it("sizes the revealed panel to the preferred width", () => {
+    toggleSidePanel({ ...wide, defaultWidthPercent: 70 });
+
+    const sizes = sidePanelSplitSizes();
+    expect(sizes[0]).toBeCloseTo(0.3);
+    expect(sizes[1]).toBeCloseTo(0.7);
+  });
+
+  it("applies the preferred width when a default view opens the panel too", () => {
+    toggleSidePanel({
+      ...wide,
+      defaultViews: { changes: false, fileNav: true },
+      defaultWidthPercent: 25,
+    });
+
+    expect(isSidePanelOpen(wide)).toBe(true);
+    const sizes = sidePanelSplitSizes();
+    expect(sizes[0]).toBeCloseTo(0.75);
+    expect(sizes[1]).toBeCloseTo(0.25);
+  });
+
+  it("returns the split to the preferred width on the next reveal after a drag", () => {
+    toggleSidePanel({ ...wide, defaultWidthPercent: 70 });
+    const store = useWorkspaceLayoutStore.getState();
+    const groupId = Object.keys(store.splitSizesByWorkspace[WORKSPACE_KEY])[0];
+    store.resizeSplit(WORKSPACE_KEY, groupId, [0.5, 0.5]);
+    toggleSidePanel(wide);
+    expect(isSidePanelOpen(wide)).toBe(false);
+
+    toggleSidePanel({ ...wide, defaultWidthPercent: 70 });
+
+    const sizes = sidePanelSplitSizes();
+    expect(sizes[0]).toBeCloseTo(0.3);
+    expect(sizes[1]).toBeCloseTo(0.7);
+  });
 });
 
 describe("non-compact without splits", () => {
@@ -277,5 +356,29 @@ describe("non-compact without splits", () => {
     expect(tabId).not.toBeNull();
     expect(paneIdHolding(tabId as string)).toBe(layout().focusedPaneId);
     expect(collectAllPanes(layout().root)).toHaveLength(1);
+  });
+
+  it("opens and closes a selected File navigation default like a side panel tab", () => {
+    const input = { ...tablet, defaultViews: { changes: false, fileNav: true } };
+    toggleSidePanel(input);
+
+    expect(focusedPaneTabKinds()).toContain("file_nav");
+    expect(collectAllPanes(layout().root)).toHaveLength(1);
+    expect(isSidePanelOpen(input)).toBe(true);
+
+    toggleSidePanel(input);
+    expect(tabKinds()).not.toContain("file_nav");
+    expect(isSidePanelOpen(input)).toBe(false);
+  });
+
+  it("falls back to Files when the only default is Changes and the checkout has no Git", () => {
+    toggleSidePanel({
+      ...tablet,
+      checkout: { ...CHECKOUT, isGit: false },
+      defaultViews: { changes: true, fileNav: false },
+    });
+
+    expect(focusedPaneTabKinds()).toContain("files");
+    expect(focusedPaneTabKinds()).not.toContain("working_diff");
   });
 });

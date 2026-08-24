@@ -1814,6 +1814,9 @@ function WorkspaceScreenContent({
   const openInSidePanelByDefault = useSettings(
     (settings) => settings.openSupportingTabsInSidePanel,
   );
+  const sidePanelDefaultViews = useSettings((settings) => settings.sidePanelDefaultViews);
+  const sidePanelWidthPercent = useSettings((settings) => settings.sidePanelWidthPercent);
+  const fileOpenDisposition = useSettings((settings) => settings.fileOpenDisposition);
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
   const unpinWorkspaceAgent = useWorkspaceLayoutStore((state) => state.unpinAgent);
@@ -1829,8 +1832,16 @@ function WorkspaceScreenContent({
       isCompact: isMobile,
       workspaceKey: persistenceKey,
       checkout: activeExplorerCheckout,
+      defaultViews: sidePanelDefaultViews,
+      defaultWidthPercent: sidePanelWidthPercent,
     });
-  }, [activeExplorerCheckout, isMobile, persistenceKey]);
+  }, [
+    activeExplorerCheckout,
+    isMobile,
+    persistenceKey,
+    sidePanelDefaultViews,
+    sidePanelWidthPercent,
+  ]);
   const paneFocusSuppressedRef = useRef(false);
   const resizeWorkspaceSplit = useWorkspaceLayoutStore((state) => state.resizeSplit);
   const reorderWorkspaceTabsInPane = useWorkspaceLayoutStore((state) => state.reorderTabsInPane);
@@ -2156,31 +2167,6 @@ function WorkspaceScreenContent({
     ],
   );
 
-  // The Side panel's file navigation opens files beside itself, in the main
-  // window. No state is seeded, so the opened tab keeps the default file state
-  // with its folder tree hidden; an already-open path is revealed in place.
-  const handleOpenFileFromNavigation = useCallback(
-    (path: string) => {
-      const location = normalizeWorkspaceFileLocation({ path });
-      if (!location || !persistenceKey) {
-        return;
-      }
-      const store = useWorkspaceLayoutStore.getState();
-      const tabId = openWorkspaceTabFocused(
-        persistenceKey,
-        createWorkspaceFileTabTarget(location),
-        buildMainPanePlacement({
-          layout: store.layoutByWorkspace[persistenceKey],
-          sidePanelPaneId: selectSidePanelPaneId(store, persistenceKey),
-        }),
-      );
-      if (tabId) {
-        navigateToTabId(tabId);
-      }
-    },
-    [navigateToTabId, openWorkspaceTabFocused, persistenceKey],
-  );
-
   const handleOpenAssistantFileInSidePanel = useCallback(
     (input: { location: WorkspaceFileLocation; parentTabId?: string | null }) => {
       const location = normalizeWorkspaceFileLocation(input.location);
@@ -2213,6 +2199,46 @@ function WorkspaceScreenContent({
       persistenceKey,
       requestFileNavigation,
       showMobileAgent,
+    ],
+  );
+
+  // The Side panel's file navigation follows the "open files in" preference:
+  // the side panel routes the file beside the conversation, the main window
+  // opens it beside the navigation itself. No state is seeded, so the opened
+  // tab keeps the default file state with its folder tree hidden; an
+  // already-open path is revealed in place.
+  const handleOpenFileFromNavigation = useCallback(
+    (path: string) => {
+      const location = normalizeWorkspaceFileLocation({ path });
+      if (!location) {
+        return;
+      }
+      if (fileOpenDisposition === "side") {
+        handleOpenAssistantFileInSidePanel({ location });
+        return;
+      }
+      if (!persistenceKey) {
+        return;
+      }
+      const store = useWorkspaceLayoutStore.getState();
+      const tabId = openWorkspaceTabFocused(
+        persistenceKey,
+        createWorkspaceFileTabTarget(location),
+        buildMainPanePlacement({
+          layout: store.layoutByWorkspace[persistenceKey],
+          sidePanelPaneId: selectSidePanelPaneId(store, persistenceKey),
+        }),
+      );
+      if (tabId) {
+        navigateToTabId(tabId);
+      }
+    },
+    [
+      fileOpenDisposition,
+      handleOpenAssistantFileInSidePanel,
+      navigateToTabId,
+      openWorkspaceTabFocused,
+      persistenceKey,
     ],
   );
 

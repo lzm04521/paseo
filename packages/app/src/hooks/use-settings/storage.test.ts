@@ -89,6 +89,95 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.theme).toBe("auto");
   });
 
+  it("defaults the side panel reveal views to nothing selected", async () => {
+    const deps = makeDeps();
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sidePanelDefaultViews).toEqual({ changes: false, fileNav: false });
+  });
+
+  it("loads a persisted side panel reveal selection and fills omitted entries", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sidePanelDefaultViews: { fileNav: true } }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sidePanelDefaultViews).toEqual({ changes: false, fileNav: true });
+  });
+
+  it("drops an invalid side panel reveal selection back to the defaults", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          sidePanelDefaultViews: { changes: "yes", fileNav: true },
+        }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sidePanelDefaultViews).toEqual({ changes: false, fileNav: false });
+  });
+
+  it("persists a side panel reveal selection through save and reload", async () => {
+    const deps = makeDeps();
+    await saveAppSettings({
+      queryClient: new QueryClient(),
+      updates: { sidePanelDefaultViews: { changes: true, fileNav: true } },
+      deps,
+    });
+
+    expect((await loadAppSettingsFromStorage(deps)).sidePanelDefaultViews).toEqual({
+      changes: true,
+      fileNav: true,
+    });
+  });
+
+  it("defaults the side panel width and file open disposition", async () => {
+    const deps = makeDeps();
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sidePanelWidthPercent).toBe(50);
+    expect(result.fileOpenDisposition).toBe("side");
+  });
+
+  it("loads a persisted side panel width, clamping out-of-range values", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sidePanelWidthPercent: 65 }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(deps)).sidePanelWidthPercent).toBe(65);
+
+    const outOfRange = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sidePanelWidthPercent: 95 }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(outOfRange)).sidePanelWidthPercent).toBe(90);
+  });
+
+  it("loads a persisted file open disposition and drops unknown values", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ fileOpenDisposition: "main" }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(deps)).fileOpenDisposition).toBe("main");
+
+    const invalid = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ fileOpenDisposition: "center" }),
+      }),
+    });
+    expect((await loadAppSettingsFromStorage(invalid)).fileOpenDisposition).toBe("side");
+  });
+
   it.each(THEME_OPTIONS)("loads the persisted $name theme", async ({ name }) => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({

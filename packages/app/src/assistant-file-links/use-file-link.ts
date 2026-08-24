@@ -92,6 +92,7 @@ export function useFileLink(source: AssistantFileLinkSource): UseFileLinkResult 
         context,
         queryClient,
         formatNoFileFoundMessage: (token) => t("common.errors.noFileFound", { token }),
+        formatAttemptedPathMessage: (path) => t("common.errors.noFileFoundAttemptedPath", { path }),
       });
     },
   );
@@ -117,7 +118,7 @@ export function useFileLink(source: AssistantFileLinkSource): UseFileLinkResult 
   });
 
   const onPress = useStableEvent(() => {
-    open(stableSource, "side");
+    open(stableSource, activeConfig.defaultFileOpenDisposition ?? "side");
   });
 
   const target = useMemo(() => {
@@ -159,6 +160,7 @@ function openAssistantFileLink(input: {
   context: AssistantFileLinkResolverContextValue;
   queryClient: ReturnType<typeof useQueryClient>;
   formatNoFileFoundMessage: (token: string) => string;
+  formatAttemptedPathMessage: (path: string) => string;
 }): void {
   const capturedConfig = input.context.configRef.current;
   const capturedResolution = classifyForResolution(input.source, {
@@ -175,6 +177,13 @@ function openAssistantFileLink(input: {
     });
     return;
   }
+
+  // Only the lookup path can fail; the attempted path anchors the token's
+  // resolution for the error toast so a miss can be diagnosed from the message.
+  const attemptedPath = resolveAttemptedPath(
+    capturedResolution.target.path,
+    capturedConfig.workspaceRoot,
+  );
 
   const capturedQueryKey = assistantFileLinkQueryKey({
     serverId: capturedConfig.serverId,
@@ -208,6 +217,9 @@ function openAssistantFileLink(input: {
       await dispatchUnresolvedError({
         error,
         noFileFoundMessage: input.formatNoFileFoundMessage(capturedResolution.token),
+        attemptedPathMessage: attemptedPath
+          ? input.formatAttemptedPathMessage(attemptedPath)
+          : null,
         capturedServerId: capturedConfig.serverId,
         capturedWorkspaceRoot: capturedConfig.workspaceRoot,
         context: input.context,
@@ -216,6 +228,19 @@ function openAssistantFileLink(input: {
   };
 
   void run();
+}
+
+/** Workspace-relative link paths get the root prefixed so the toast shows a full address. */
+function resolveAttemptedPath(path: string, workspaceRoot: string | undefined): string | null {
+  const trimmedPath = path.trim();
+  if (!trimmedPath) {
+    return null;
+  }
+  if (/^([/\\]|[A-Za-z]:)/.test(trimmedPath)) {
+    return trimmedPath;
+  }
+  const trimmedRoot = workspaceRoot?.trim().replace(/\/+$/, "");
+  return trimmedRoot ? `${trimmedRoot}/${trimmedPath}` : trimmedPath;
 }
 
 function canOpenAssistantFileLink(
@@ -319,6 +344,7 @@ async function dispatchExternalUrl(input: {
 async function dispatchUnresolvedError(input: {
   error: unknown;
   noFileFoundMessage: string;
+  attemptedPathMessage: string | null;
   capturedServerId?: string;
   capturedWorkspaceRoot?: string;
   context: AssistantFileLinkResolverContextValue;
@@ -330,7 +356,11 @@ async function dispatchUnresolvedError(input: {
   ) {
     return;
   }
-  current.toast?.show(input.noFileFoundMessage, {
+  const message =
+    input.attemptedPathMessage !== null
+      ? `${input.noFileFoundMessage}\n${input.attemptedPathMessage}`
+      : input.noFileFoundMessage;
+  current.toast?.show(message, {
     variant: "error",
     testID: "assistant-file-link-not-found-toast",
   });

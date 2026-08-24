@@ -38,6 +38,7 @@ export const ar: TranslationResources = {
       daemonClientUnavailable: "عميل Daemon غير متوفر",
       daemonClientDisconnected: "تم قطع اتصال عميل Daemon",
       noFileFound: "لم يتم العثور على ملف لـ{{token}}",
+      noFileFoundAttemptedPath: "المسار الذي تم تجربته: {{path}}",
       unexpectedDictationError: "حدث خطأ غير متوقع أثناء معالجة الإملاء.",
     },
     connectionStatus: {
@@ -2258,6 +2259,29 @@ export const ar: TranslationResources = {
       chatOutline: {
         title: "مخطط المحادثة",
         description: "عرض مخطط للتنقل بين المطالبات",
+      },
+      sidePanel: {
+        title: "اللوحة الجانبية",
+        defaults: {
+          label: "فتح عند إظهار اللوحة الجانبية",
+          hint: "لا تُفتح «التغييرات» في المشاريع غير المُدارة بـ Git",
+          changes: "التغييرات",
+          fileNav: "المستكشف",
+        },
+        width: {
+          title: "الحجم عند الفتح",
+          hint: "نسبة اللوحة الجانبية من مساحة العمل، تُطبَّق في كل مرة تُفتح فيها",
+          accessibilityLabel: "حجم اللوحة الجانبية",
+        },
+        fileOpen: {
+          title: "فتح الملفات في",
+          hint: "المكان الذي تفتح فيه روابط الملفات والتنقل بين الملفات الملفات",
+          accessibilityLabel: "فتح الملفات في: {{value}}",
+          options: {
+            main: "النافذة الرئيسية",
+            side: "اللوحة الجانبية",
+          },
+        },
       },
       fonts: {
         title: "الخطوط",

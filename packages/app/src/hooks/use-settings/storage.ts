@@ -15,6 +15,17 @@ import {
   type SidebarRowItems,
 } from "@/components/sidebar/display-preferences/row-items";
 import { isNative } from "@/constants/platform";
+import type { OpenFileDisposition } from "@/workspace/file-open";
+import {
+  DEFAULT_FILE_OPEN_DISPOSITION,
+  DEFAULT_SIDE_PANEL_DEFAULT_VIEWS,
+  DEFAULT_SIDE_PANEL_WIDTH_PERCENT,
+  parseFileOpenDisposition,
+  parseSidePanelDefaultViews,
+  parseSidePanelWidthPercent,
+  SidePanelDefaultViewsSchema,
+  type SidePanelDefaultViews,
+} from "@/workspace-tabs/side-panel-defaults";
 import {
   FONT_SIZE,
   PLUGIN_THEME_PREFERENCE,
@@ -99,6 +110,12 @@ export interface AppSettings {
   vimKeybindings: boolean;
   /** Route implicitly opened supporting tabs into the Side panel. Desktop only. */
   openSupportingTabsInSidePanel: boolean;
+  /** Which panels the Side panel opens when the user reveals it. */
+  sidePanelDefaultViews: SidePanelDefaultViews;
+  /** Side panel share of the workspace when revealed, in percent (10–90). */
+  sidePanelWidthPercent: number;
+  /** Where chat file links and the file navigation panel open files. */
+  fileOpenDisposition: OpenFileDisposition;
 }
 
 export interface Settings extends AppSettings {
@@ -149,6 +166,9 @@ const StoredAppSettingsSchema = z.strictObject({
   chatOutlineEnabled: z.boolean().optional(),
   vimKeybindings: z.boolean().optional(),
   openSupportingTabsInSidePanel: z.boolean().optional(),
+  sidePanelDefaultViews: SidePanelDefaultViewsSchema.optional(),
+  sidePanelWidthPercent: z.union([z.number(), z.string()]).optional(),
+  fileOpenDisposition: z.enum(["main", "side"]).optional(),
   // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.
   manageBuiltInDaemon: z.boolean().optional(),
   releaseChannel: z.enum(["stable", "beta"]).optional(),
@@ -181,6 +201,9 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   chatOutlineEnabled: true,
   vimKeybindings: false,
   openSupportingTabsInSidePanel: true,
+  sidePanelDefaultViews: DEFAULT_SIDE_PANEL_DEFAULT_VIEWS,
+  sidePanelWidthPercent: DEFAULT_SIDE_PANEL_WIDTH_PERCENT,
+  fileOpenDisposition: DEFAULT_FILE_OPEN_DISPOSITION,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -404,6 +427,17 @@ function pickAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
   const sidebarChecksDisplay = parseStoredSidebarChecksDisplay(stored);
   if (sidebarChecksDisplay !== null) {
     result.sidebarChecksDisplay = sidebarChecksDisplay;
+  }
+  if (stored.sidePanelDefaultViews !== undefined) {
+    result.sidePanelDefaultViews = parseSidePanelDefaultViews(stored.sidePanelDefaultViews);
+  }
+  const sidePanelWidthPercent = parseSidePanelWidthPercent(stored.sidePanelWidthPercent);
+  if (sidePanelWidthPercent !== null) {
+    result.sidePanelWidthPercent = sidePanelWidthPercent;
+  }
+  const fileOpenDisposition = parseFileOpenDisposition(stored.fileOpenDisposition);
+  if (fileOpenDisposition !== null) {
+    result.fileOpenDisposition = fileOpenDisposition;
   }
   const language = parseAppLanguage(stored.language);
   if (language !== null) {

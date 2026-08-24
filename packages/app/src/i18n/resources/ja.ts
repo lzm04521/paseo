@@ -38,6 +38,7 @@ export const ja: TranslationResources = {
       daemonClientUnavailable: "デーモンクライアントが利用できません",
       daemonClientDisconnected: "デーモンクライアントが切断されています",
       noFileFound: "{{token}}のファイルが見つかりません",
+      noFileFoundAttemptedPath: "試行パス: {{path}}",
       unexpectedDictationError: "音声入力処理中に予期しないエラーが発生しました。",
     },
     connectionStatus: {
@@ -2275,6 +2276,29 @@ export const ja: TranslationResources = {
       chatOutline: {
         title: "チャットのアウトライン",
         description: "プロンプト間を移動するためのアウトラインを表示します",
+      },
+      sidePanel: {
+        title: "サイドパネル",
+        defaults: {
+          label: "サイドパネルを開いたときに開く",
+          hint: "Git 管理でないプロジェクトでは変更は開きません",
+          changes: "変更",
+          fileNav: "エクスプローラー",
+        },
+        width: {
+          title: "開いたときのサイズ",
+          hint: "ワークスペースに占めるサイドパネルの割合。パネルを開くたびに適用されます",
+          accessibilityLabel: "サイドパネルのサイズ",
+        },
+        fileOpen: {
+          title: "ファイルを開く場所",
+          hint: "チャットのファイルリンクとファイルナビゲーションがファイルを開く場所",
+          accessibilityLabel: "ファイルを開く場所: {{value}}",
+          options: {
+            main: "メインウィンドウ",
+            side: "サイドパネル",
+          },
+        },
       },
       fonts: {
         title: "フォント",

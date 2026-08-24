@@ -35,6 +35,7 @@ export const en = {
       daemonClientUnavailable: "Daemon client unavailable",
       daemonClientDisconnected: "Daemon client is disconnected",
       noFileFound: "No file found for {{token}}",
+      noFileFoundAttemptedPath: "Tried path: {{path}}",
       unexpectedDictationError: "An unexpected error occurred while handling dictation.",
     },
     connectionStatus: {
@@ -2322,6 +2323,29 @@ export const en = {
       chatOutline: {
         title: "Chat outline",
         description: "Show an outline for jumping between prompts",
+      },
+      sidePanel: {
+        title: "Side panel",
+        defaults: {
+          label: "Open when revealing the side panel",
+          hint: "Changes is skipped in projects without Git",
+          changes: "Changes",
+          fileNav: "Explorer",
+        },
+        width: {
+          title: "Size when opened",
+          hint: "Side panel share of the workspace, applied each time the panel opens",
+          accessibilityLabel: "Side panel size",
+        },
+        fileOpen: {
+          title: "Open files in",
+          hint: "Where chat file links and file navigation open files",
+          accessibilityLabel: "Open files in: {{value}}",
+          options: {
+            main: "Main window",
+            side: "Side panel",
+          },
+        },
       },
       fonts: {
         title: "Fonts",

@@ -38,6 +38,7 @@ export const ko: TranslationResources = {
       daemonClientUnavailable: "데몬 클라이언트를 사용할 수 없습니다",
       daemonClientDisconnected: "데몬 클라이언트 연결이 끊어졌습니다",
       noFileFound: "{{token}}에 해당하는 파일을 찾을 수 없습니다",
+      noFileFoundAttemptedPath: "시도한 경로: {{path}}",
       unexpectedDictationError: "받아쓰기를 처리하는 중 예기치 않은 오류가 발생했습니다.",
     },
     connectionStatus: {
@@ -2084,6 +2085,29 @@ export const ko: TranslationResources = {
       chatOutline: {
         title: "채팅 개요",
         description: "프롬프트 사이를 이동하기 위한 개요 표시",
+      },
+      sidePanel: {
+        title: "사이드 패널",
+        defaults: {
+          label: "사이드 패널을 열 때 기본으로 열기",
+          hint: "Git이 아닌 프로젝트에서는 변경 사항이 열리지 않습니다",
+          changes: "변경 사항",
+          fileNav: "탐색기",
+        },
+        width: {
+          title: "열 때 크기",
+          hint: "워크스페이스에서 사이드 패널이 차지하는 비율. 패널을 열 때마다 적용됩니다",
+          accessibilityLabel: "사이드 패널 크기",
+        },
+        fileOpen: {
+          title: "파일 열기 위치",
+          hint: "채팅 파일 링크와 파일 탐색이 파일을 여는 위치",
+          accessibilityLabel: "파일 열기 위치: {{value}}",
+          options: {
+            main: "메인 창",
+            side: "사이드 패널",
+          },
+        },
       },
       fonts: {
         title: "글꼴",

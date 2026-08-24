@@ -22,6 +22,12 @@ export interface AssistantFileLinkResolverConfig {
   serverId?: string;
   workspaceRoot?: string;
   onOpenWorkspaceFile?: (target: InlinePathTarget, disposition: OpenFileDisposition) => void;
+  /**
+   * Where a plain press on a file link opens the file. Falls back to "side",
+   * the historical behaviour; explicit `open(source, disposition)` callers are
+   * unaffected.
+   */
+  defaultFileOpenDisposition?: OpenFileDisposition;
   toast?: ToastApi | null;
 }
 
@@ -42,6 +48,7 @@ export function AssistantFileLinkResolverProvider({
   serverId,
   workspaceRoot,
   onOpenWorkspaceFile,
+  defaultFileOpenDisposition,
   toast,
   children,
 }: AssistantFileLinkResolverProviderProps) {
@@ -50,9 +57,17 @@ export function AssistantFileLinkResolverProvider({
     serverId,
     workspaceRoot,
     onOpenWorkspaceFile,
+    defaultFileOpenDisposition,
     toast,
   });
-  configRef.current = { client, serverId, workspaceRoot, onOpenWorkspaceFile, toast };
+  configRef.current = {
+    client,
+    serverId,
+    workspaceRoot,
+    onOpenWorkspaceFile,
+    defaultFileOpenDisposition,
+    toast,
+  };
 
   const getDirectorySuggestions = useCallback<GetDirectorySuggestions>(async (input) => {
     const activeClient = configRef.current.client;

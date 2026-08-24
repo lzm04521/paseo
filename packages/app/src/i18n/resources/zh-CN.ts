@@ -38,6 +38,7 @@ export const zhCN: TranslationResources = {
       daemonClientUnavailable: "Daemon client 不可用",
       daemonClientDisconnected: "Daemon client 已断开连接",
       noFileFound: "未找到 {{token}} 对应的文件",
+      noFileFoundAttemptedPath: "尝试的路径：{{path}}",
       unexpectedDictationError: "处理听写时发生意外错误。",
     },
     connectionStatus: {
@@ -2233,6 +2234,29 @@ export const zhCN: TranslationResources = {
       chatOutline: {
         title: "聊天大纲",
         description: "显示用于在提示词之间跳转的大纲",
+      },
+      sidePanel: {
+        title: "侧边栏",
+        defaults: {
+          label: "打开侧边栏时默认打开",
+          hint: "非 Git 项目不会打开变更",
+          changes: "变更",
+          fileNav: "文件导航",
+        },
+        width: {
+          title: "打开时占比",
+          hint: "侧边栏占工作区的宽度比例，每次打开侧边栏时应用",
+          accessibilityLabel: "侧边栏占比",
+        },
+        fileOpen: {
+          title: "文件打开位置",
+          hint: "对话中的文件链接与文件导航打开文件的位置",
+          accessibilityLabel: "文件打开位置：{{value}}",
+          options: {
+            main: "主窗口",
+            side: "侧边栏",
+          },
+        },
       },
       fonts: {
         title: "字体",

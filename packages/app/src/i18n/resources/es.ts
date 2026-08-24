@@ -38,6 +38,7 @@ export const es: TranslationResources = {
       daemonClientUnavailable: "ClienteDaemonno disponible",
       daemonClientDisconnected: "El clienteDaemonestá desconectado",
       noFileFound: "No se encontró ningún archivo para{{token}}",
+      noFileFoundAttemptedPath: "Ruta intentada: {{path}}",
       unexpectedDictationError: "Se produjo un error inesperado al manejar el dictado.",
     },
     connectionStatus: {
@@ -2308,6 +2309,29 @@ export const es: TranslationResources = {
       chatOutline: {
         title: "Esquema del chat",
         description: "Muestra un esquema para saltar entre instrucciones",
+      },
+      sidePanel: {
+        title: "Panel lateral",
+        defaults: {
+          label: "Abrir al mostrar el panel lateral",
+          hint: "En proyectos sin Git no se abre Cambios",
+          changes: "Cambios",
+          fileNav: "Explorador",
+        },
+        width: {
+          title: "Tamaño al abrirla",
+          hint: "Porción del espacio de trabajo que ocupa el panel lateral, aplicada cada vez que se abre",
+          accessibilityLabel: "Tamaño del panel lateral",
+        },
+        fileOpen: {
+          title: "Abrir archivos en",
+          hint: "Dónde abren los archivos los enlaces del chat y la navegación de archivos",
+          accessibilityLabel: "Abrir archivos en: {{value}}",
+          options: {
+            main: "Ventana principal",
+            side: "Panel lateral",
+          },
+        },
       },
       fonts: {
         title: "Fuentes",
