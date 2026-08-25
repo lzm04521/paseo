@@ -453,6 +453,7 @@ interface WorkspaceGitTarget {
   observationSetupPromise: Promise<void> | null;
   observationSetupComplete: boolean;
   observationSetupScheduledOnce: boolean;
+  observationSetupFirstActivityDone: boolean;
   closed: boolean;
 }
 
@@ -1200,6 +1201,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       observationSetupPromise: null,
       observationSetupComplete: false,
       observationSetupScheduledOnce: false,
+      observationSetupFirstActivityDone: false,
       closed: false,
     };
 
@@ -1255,10 +1257,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (scheduleFirstTime) {
       target.observationSetupScheduledOnce = true;
       this.scheduleInitialGitActivity(() => {
+        target.observationSetupFirstActivityDone = true;
         if (!target.closed && this.isActiveObservedWorkspaceTarget(target)) {
           this.scheduleWorkspaceObservationSetup(target);
         }
       });
+      return;
+    }
+    // 宽限期内（首次活动尚未发生）re-ensure/refresh() 的再次调度仅入队不执行，
+    // 由已排定的错峰定时器统一触发，避免提前绕过启动宽限（spec F4 第 1 点）。
+    if (!target.observationSetupFirstActivityDone) {
       return;
     }
     if (

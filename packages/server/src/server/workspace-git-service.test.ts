@@ -1539,9 +1539,6 @@ describe("WorkspaceGitServiceImpl", () => {
           exitCode: 0,
           signal: null,
         })),
-        // 默认 re-ensure 相位恰为 30_000ms，会在宽限期满的同一时刻以 re-arm 路径
-        // 立即触发第二个 workspace 的观察 setup，掩盖错峰间隔；推到观察窗口之外。
-        getWorkspaceGitSelfHealPhaseMs: () => 60_000,
         observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
       });
 
