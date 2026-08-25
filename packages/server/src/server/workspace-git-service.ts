@@ -409,6 +409,7 @@ interface WorkspaceGitServiceOptions {
   paseoHome: string;
   worktreesRoot?: string;
   fileObserver?: FileObserver;
+  observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
   deps?: Partial<WorkspaceGitServiceDependencies>;
 }
 
@@ -451,6 +452,7 @@ interface WorkspaceGitTarget {
   repoGitRoot: string | null;
   observationSetupPromise: Promise<void> | null;
   observationSetupComplete: boolean;
+  observationSetupScheduledOnce: boolean;
   closed: boolean;
 }
 
@@ -576,6 +578,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly disposeController = new AbortController();
   private disposed = false;
   private disposePromise: Promise<void> | null = null;
+  private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
+  private initialGitActivitySequence = 0;
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -617,6 +621,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.paseoHome = options.paseoHome;
     this.worktreesRoot = options.worktreesRoot;
     this.fileObserver = options.fileObserver ?? createFileObserver();
+    this.observationSchedulePolicy =
+      options.observationSchedulePolicy ?? loadWorkspaceGitObservationSchedulePolicy();
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
       options.deps,
@@ -1193,6 +1199,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       repoGitRoot: null,
       observationSetupPromise: null,
       observationSetupComplete: false,
+      observationSetupScheduledOnce: false,
       closed: false,
     };
 
@@ -1218,7 +1225,42 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     });
   }
 
+  /**
+   * F4 启动错峰：首次 git 观察活动（观察 setup、首次 fetch）统一经此调度，
+   * 延迟 = 注册批次宽限 + 序号×错峰步长 ± 抖动。grace=0 时立即执行（恢复现状）。
+   */
+  private scheduleInitialGitActivity(callback: () => void): void {
+    if (this.disposed) {
+      return;
+    }
+    const sequence = this.initialGitActivitySequence++;
+    const delayMs = computeInitialGitActivityDelayMs({
+      sequence,
+      policy: this.observationSchedulePolicy,
+      random: Math.random(),
+    });
+    if (delayMs <= 0) {
+      callback();
+      return;
+    }
+    setTimeout(() => {
+      if (!this.disposed) {
+        callback();
+      }
+    }, delayMs);
+  }
+
   private scheduleWorkspaceObservationSetup(target: WorkspaceGitTarget): void {
+    const scheduleFirstTime = !target.observationSetupScheduledOnce;
+    if (scheduleFirstTime) {
+      target.observationSetupScheduledOnce = true;
+      this.scheduleInitialGitActivity(() => {
+        if (!target.closed && this.isActiveObservedWorkspaceTarget(target)) {
+          this.scheduleWorkspaceObservationSetup(target);
+        }
+      });
+      return;
+    }
     if (
       target.observationSetupComplete ||
       target.observationSetupPromise ||

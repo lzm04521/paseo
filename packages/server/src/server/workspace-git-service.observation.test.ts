@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CheckoutSnapshotFacts, CheckoutStatusGit } from "../utils/checkout-git.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import type { FileObserver } from "./file-observer/index.js";
-import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
+import {
+  WorkspaceGitServiceImpl,
+  type WorkspaceGitObservationSchedulePolicy,
+} from "./workspace-git-service.js";
 
 const REPO_CWD = path.resolve("/tmp/paseo-observation-repo");
 const GIT_DIR = path.join(REPO_CWD, ".git");
@@ -145,11 +148,20 @@ function getWatcherSubscribeCallCount(
     .length;
 }
 
+// 本套件的既有用例都按"注册即建立观察"编写（F4 前的默认行为），因此缺省注入
+// 零宽限策略恢复即时行为；需要验证错峰的用例可显式传入其他策略。
+const IMMEDIATE_OBSERVATION_SCHEDULE_POLICY: WorkspaceGitObservationSchedulePolicy = {
+  bootGraceMs: 0,
+  staggerMs: 0,
+  jitterMs: 0,
+};
+
 function createService(
   watcher: ReturnType<typeof createWatcherHarness>,
   overrides?: Record<string, unknown>,
   logger: pino.Logger = createLogger(),
   fileObserver?: FileObserver,
+  observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy = IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
 ) {
   const defaultGetCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
   const defaultGetCheckoutShortstat = vi.fn(async () => null);
@@ -163,6 +175,7 @@ function createService(
     logger,
     paseoHome: "/tmp/paseo-home",
     fileObserver,
+    ...(observationSchedulePolicy ? { observationSchedulePolicy } : {}),
     deps: {
       subscribe: watcher.subscribe,
       getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutFacts(cwd)),
