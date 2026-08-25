@@ -1606,6 +1606,45 @@ describe("WorkspaceGitServiceImpl", () => {
       second.unsubscribe();
       service.dispose();
     });
+
+    test("six-workspace connect burst stays silent during grace, then staggers out", async () => {
+      const cwds = Array.from({ length: 6 }, (_, i) => `${REPO_CWD}-burst-${i}`);
+      const subscribe = vi.fn(async () => ({
+        updateIgnore: vi.fn(async () => {}),
+        unsubscribe: vi.fn(async () => {}),
+      }));
+      const runGitFetch = vi.fn(async () => ({ changes: [], error: null }));
+      const service = createService({
+        subscribe,
+        runGitFetch,
+        // 默认 runGitCommand mock 返回常量 REPO_CWD，会让 6 个 workspace 合并到
+        // 同一个 workingTreeWatchTarget（按 rev-parse --show-toplevel 键控），
+        // 必须按 cwd 区分才能断言 6 个独立观察链
+        runGitCommand: vi.fn(async (_args: string[], context: { cwd: string }) => ({
+          stdout: `${context.cwd}\n`,
+          stderr: "",
+          truncated: false,
+          exitCode: 0,
+          signal: null,
+        })),
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subs = cwds.map((cwd) => service.registerWorkspace({ cwd }, vi.fn()));
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(runGitFetch).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_001);
+      const roots = subscribe.mock.calls.map((call) => call[0]);
+      for (const cwd of cwds) {
+        expect(roots).toContain(cwd);
+      }
+      expect(runGitFetch).toHaveBeenCalledTimes(6);
+
+      subs.forEach((s) => s.unsubscribe());
+      service.dispose();
+    });
   });
 });
 
