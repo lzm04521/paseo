@@ -28,6 +28,7 @@ import {
   resolveTerminalProfiles,
 } from "@getpaseo/protocol/terminal-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
@@ -263,7 +264,15 @@ export function WorkspaceHeaderMenuMobile({
           disabled={createTerminalDisabled}
           onSelect={onCreateTerminal}
         >
-          {t("workspace.header.actions.newTerminal")}
+          {t("workspace.tabs.actions.openCmd")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          testID="workspace-header-new-powershell"
+          leading={MENU_NEW_TERMINAL_ICON}
+          disabled={createTerminalDisabled}
+          onSelect={() => onCreateTerminalWithProfile(POWERSHELL_PROFILE)}
+        >
+          {t("workspace.tabs.actions.openPowerShell")}
         </DropdownMenuItem>
         {profiles.map((profile) => (
           <HeaderMenuProfileItem

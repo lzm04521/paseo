@@ -651,6 +651,7 @@ export function resolveConfigFromPersisted(
     claudeImageDowngrade,
     idleAutoRestart,
     fileSearch,
+    powershellPath: persisted.daemon?.powershellPath,
     terminalProfiles,
     agentProfiles,
     skillSelection: persisted.agents?.skills?.selection,

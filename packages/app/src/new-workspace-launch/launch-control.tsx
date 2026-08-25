@@ -22,6 +22,7 @@ import {
 } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import type { Theme } from "@/styles/theme";
 import {
   BLANK_TERMINAL_PROFILE_ID,
@@ -132,7 +133,11 @@ export function LaunchControl({
   // Leading with the noun fixes that, and de-emphasising the profile name keeps
   // "Terminal" the thing you read first.
   const triggerLabel =
-    target.kind === "chat" ? t("newWorkspace.launch.chat") : t("newWorkspace.launch.terminal");
+    target.kind === "chat"
+      ? t("newWorkspace.launch.chat")
+      : selectedProfile
+        ? t("newWorkspace.launch.terminal")
+        : t("newWorkspace.launch.cmd");
 
   const selectChat = useCallback(() => onChange(CHAT_LAUNCH_TARGET), [onChange]);
   const selectBlankTerminal = useCallback(
@@ -208,8 +213,13 @@ export function LaunchControl({
           selected={isBlankTerminalTarget(target)}
           leading={blankTerminalIcon}
         >
-          {t("newWorkspace.launch.terminal")}
+          {t("newWorkspace.launch.cmd")}
         </DropdownMenuItem>
+        <LaunchProfileMenuItem
+          profile={POWERSHELL_PROFILE}
+          selected={selectedProfile?.id === POWERSHELL_PROFILE.id}
+          onSelect={selectTerminalProfile}
+        />
         {profiles.map((profile) => (
           <LaunchProfileMenuItem
             key={profile.id}

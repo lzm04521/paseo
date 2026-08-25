@@ -25,6 +25,7 @@ import { AgentProfilesSection } from "@/agent-profiles";
 import { AgentSkillsSection } from "@/agent-skills";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
+import { EditingTextInput } from "@/components/ui/text-input";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
@@ -1084,6 +1085,72 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
   );
 }
 
+function PowerShellPathCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+  const persistedPath = config?.powershellPath ?? "";
+  const [draft, setDraft] = useState(persistedPath);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(persistedPath);
+  }, [persistedPath]);
+
+  const trimmedDraft = draft.trim();
+  const hasChanges = trimmedDraft !== persistedPath;
+
+  const handleSave = useCallback(() => {
+    if (!hasChanges || isSaving) return;
+    setIsSaving(true);
+    void patchConfig({ powershellPath: trimmedDraft })
+      .catch((error) => {
+        console.error("[HostPage] Failed to save powershell path", error);
+        Alert.alert(
+          t("common.errors.unableToSave"),
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => setIsSaving(false));
+  }, [hasChanges, isSaving, patchConfig, t, trimmedDraft]);
+
+  if (!isConnected) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-powershell-path-card">
+      <View style={settingsStyles.row}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.terminalProfiles.powershellPathTitle")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.terminalProfiles.powershellPathHint")}
+          </Text>
+        </View>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleSave}
+          disabled={!hasChanges || isSaving}
+          testID="host-page-powershell-path-save"
+        >
+          {t("settings.host.terminalProfiles.powershellPathSave")}
+        </Button>
+      </View>
+      <EditingTextInput
+        testID="host-page-powershell-path-input"
+        accessibilityLabel={t("settings.host.terminalProfiles.powershellPathTitle")}
+        initialValue={draft}
+        onChangeText={setDraft}
+        placeholder={t("settings.host.terminalProfiles.powershellPathPlaceholder")}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={terminalProfileStyles.pathInput}
+      />
+    </View>
+  );
+}
+
 function AppendSystemPromptCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -1897,6 +1964,7 @@ export function HostTerminalsPage({ serverId }: { serverId: string }) {
         <EnableTerminalAgentHooksCard serverId={serverId} />
       </SettingsSection>
       <TerminalProfilesSection serverId={serverId} />
+      <PowerShellPathCard serverId={serverId} />
     </View>
   );
 }
@@ -1905,6 +1973,12 @@ const terminalProfileStyles = StyleSheet.create((theme) => ({
   row: {
     gap: theme.spacing[2],
     minHeight: 56,
+  },
+  pathInput: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
   },
   iconWrapper: {
     width: theme.iconSize.md,

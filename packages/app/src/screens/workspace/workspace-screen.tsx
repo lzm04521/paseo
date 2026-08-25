@@ -195,6 +195,7 @@ import {
   type WorkspaceFileOpenRequest,
 } from "@/workspace/file-open";
 import { RenderProfile } from "@/utils/render-profiler";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import { useWorkspaceCheckoutStatus } from "@/screens/workspace/use-workspace-checkout-status";
 import { useHasPullRequest } from "@/panels/pull-request";
 import { fileStateForFilesView } from "@/panels/file/state";
@@ -3156,6 +3157,9 @@ function WorkspaceScreenContent({
         case "workspace.terminal.new":
           handleCreateTerminal();
           return true;
+        case "workspace.terminal.new.powershell":
+          handleCreateTerminalWithProfile(POWERSHELL_PROFILE);
+          return true;
         case "workspace.browser.new":
           handleCreateBrowserTab();
           return true;
@@ -3197,6 +3201,7 @@ function WorkspaceScreenContent({
       handleCreateBrowserTab,
       handleCreateNewTab,
       handleCreateTerminal,
+      handleCreateTerminalWithProfile,
       focusedPaneTabState.pane?.id,
       navigateToTabId,
       tabs,

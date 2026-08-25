@@ -27,6 +27,10 @@ import type {
   TerminalWorkspaceContributionChangedEvent,
 } from "../terminal/terminal-manager.js";
 import { TerminalSessionController } from "../terminal/terminal-session-controller.js";
+import {
+  BUILTIN_POWERSHELL_COMMAND,
+  resolveBuiltinPowerShellCommand,
+} from "../terminal/powershell.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import { CursorError } from "./pagination/cursor.js";
@@ -990,6 +994,16 @@ export class Session {
       clientSupportsWrapReflow: () =>
         this.clientCapabilities.has(CLIENT_CAPS.terminalReflowableSnapshot),
       getClientBufferedAmount: () => this.getTransportBufferedAmount(),
+      resolveTerminalCommand: async (command) => {
+        if (command !== BUILTIN_POWERSHELL_COMMAND) {
+          return undefined;
+        }
+        return (
+          (await resolveBuiltinPowerShellCommand({
+            configuredPath: daemonConfigStore.get().powershellPath,
+          })) ?? undefined
+        );
+      },
     });
     this.agentUpdates = createAgentUpdatesService({
       emit: (message) => this.emit(message),

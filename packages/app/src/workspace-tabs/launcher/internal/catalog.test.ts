@@ -6,6 +6,7 @@ describe("getBuiltInLaunchOrder", () => {
     expect(getBuiltInLaunchOrder("primary")).toEqual([
       "agent",
       "terminal",
+      "powershell",
       "changes",
       "files",
       "browser",
@@ -19,6 +20,7 @@ describe("getBuiltInLaunchOrder", () => {
       "files",
       "fileNav",
       "terminal",
+      "powershell",
       "agent",
       "browser",
       "pullRequest",

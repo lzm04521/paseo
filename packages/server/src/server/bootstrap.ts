@@ -412,6 +412,7 @@ export interface PaseoDaemonConfig {
   claudeImageDowngrade?: "off" | "on";
   idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
   fileSearch?: MutableDaemonConfig["fileSearch"];
+  powershellPath?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
@@ -551,6 +552,7 @@ function resolveForkDaemonDefaults(config: PaseoDaemonConfig) {
     claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
     idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
     fileSearch: config.fileSearch,
+    ...(config.powershellPath !== undefined ? { powershellPath: config.powershellPath } : {}),
   };
 }
 

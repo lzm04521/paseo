@@ -268,6 +268,7 @@ export const MutableDaemonConfigSchema = z
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
     idleAutoRestart: MutableIdleAutoRestartConfigSchema.optional(),
+    powershellPath: z.string().optional(),
   })
   .passthrough();
 
@@ -291,6 +292,7 @@ export const MutableDaemonConfigPatchSchema = z
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     fileSearch: MutableFileSearchConfigSchema.optional(),
     idleAutoRestart: MutableIdleAutoRestartConfigSchema.partial().optional(),
+    powershellPath: z.string().optional(),
   })
   .partial()
   .passthrough();

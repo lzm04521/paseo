@@ -29,6 +29,7 @@ interface SupportedMutableConfigPatch {
   claudeImageDowngrade?: MutableDaemonConfig["claudeImageDowngrade"];
   idleAutoRestart?: Partial<NonNullable<MutableDaemonConfig["idleAutoRestart"]>>;
   fileSearch?: MutableDaemonConfig["fileSearch"];
+  powershellPath?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   skills?: MutableDaemonConfig["skills"];
@@ -184,6 +185,7 @@ const RELOADABLE_PATHS = [
   "daemon.autoArchiveAfterMerge",
   "daemon.enableTerminalAgentHooks",
   "daemon.appendSystemPrompt",
+  "daemon.powershellPath",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -207,6 +209,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.autoArchiveAfterMerge", "autoArchiveAfterMerge"],
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
+  ["daemon.powershellPath", "powershellPath"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["app.baseUrl", "app.baseUrl"],
@@ -280,6 +283,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.idleAutoRestart !== undefined ? { idleAutoRestart: patch.idleAutoRestart } : {}),
     ...(patch.fileSearch !== undefined ? { fileSearch: patch.fileSearch } : {}),
+    ...(patch.powershellPath !== undefined ? { powershellPath: patch.powershellPath } : {}),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
@@ -724,6 +728,7 @@ function mergeMutableDaemonPatch(
     next.idleAutoRestart = mergedMutable?.idleAutoRestart ?? patch.idleAutoRestart;
   }
   if (patch.fileSearch !== undefined) next.fileSearch = patch.fileSearch;
+  if (patch.powershellPath !== undefined) next.powershellPath = patch.powershellPath;
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;

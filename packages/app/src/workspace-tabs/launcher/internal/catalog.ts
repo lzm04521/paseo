@@ -1,6 +1,7 @@
 export const PRIMARY_LAUNCH_ORDER = [
   "agent",
   "terminal",
+  "powershell",
   "changes",
   "files",
   "browser",
@@ -14,6 +15,7 @@ export const SUPPORTING_LAUNCH_ORDER = [
   "files",
   "fileNav",
   "terminal",
+  "powershell",
   "agent",
   "browser",
   "pullRequest",
