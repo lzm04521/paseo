@@ -1573,6 +1573,39 @@ describe("WorkspaceGitServiceImpl", () => {
       subscription.unsubscribe();
       service.dispose();
     });
+
+    test("a reconnect batch after a quiet window restarts grace and stagger", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        // watch target 以 rev-parse --show-toplevel 结果为键；默认 mock 返回常量
+        // REPO_CWD 会让两个 workspace 合并到同一 target，必须按 cwd 区分
+        runGitCommand: vi.fn(async (_args: string[], context: { cwd: string }) => ({
+          stdout: `${context.cwd}\n`,
+          stderr: "",
+          truncated: false,
+          exitCode: 0,
+          signal: null,
+        })),
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      // 批次 1：setup 槽 30s + fetch 槽 32s；推进 70s 越过整个批次并静默超过宽限
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
+
+      const second = service.registerWorkspace({ cwd: `${REPO_CWD}-2` }, vi.fn());
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(subscribedRoots(subscribe)).not.toContain(`${REPO_CWD}-2`);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(subscribedRoots(subscribe)).toContain(`${REPO_CWD}-2`);
+
+      first.unsubscribe();
+      second.unsubscribe();
+      service.dispose();
+    });
   });
 });
 

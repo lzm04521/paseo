@@ -582,6 +582,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
   private initialGitActivitySequence = 0;
   private initialGitActivityAnchorMs: number | null = null;
+  private lastInitialGitActivitySlotMs: number | null = null;
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -1230,23 +1231,35 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
 
   /**
    * F4 启动错峰：首次 git 观察活动（观察 setup、首次 fetch）统一经此调度。
-   * 槽位时刻 = 首次活动锚点 + 注册批次宽限 + 序号×错峰步长 ± 抖动，序列为服务
-   * 生命周期单调递增；延迟 = max(0, 槽位时刻 − 距锚点流逝时间)，使链式活动
-   * （观察 setup 完成后调度的首 fetch）落在自身的错峰槽位而非重新起算宽限。
-   * grace=0 时立即执行（恢复现状）。
+   * 槽位时刻 = 批次锚点 + 注册批次宽限 + 序号×错峰步长 ± 抖动，延迟 =
+   * max(0, 槽位时刻 − 距锚点流逝时间)，使链式活动（观察 setup 完成后调度
+   * 的首 fetch）落在自身的错峰槽位而非重新起算宽限。锚点在静默（距上一
+   * 槽位超过宽限）后重置，每个连接批次各自起算宽限与错峰；grace=0 时
+   * 立即执行（恢复现状）。
    */
   private scheduleInitialGitActivity(callback: () => void): void {
     if (this.disposed) {
       return;
     }
+    const nowMs = Date.now();
+    const lastSlotMs = this.lastInitialGitActivitySlotMs;
+    if (
+      this.initialGitActivityAnchorMs === null ||
+      lastSlotMs === null ||
+      nowMs - lastSlotMs > this.observationSchedulePolicy.bootGraceMs
+    ) {
+      this.initialGitActivitySequence = 0;
+      this.initialGitActivityAnchorMs = nowMs;
+    }
+    const anchorMs = this.initialGitActivityAnchorMs;
     const sequence = this.initialGitActivitySequence++;
-    const anchorMs = (this.initialGitActivityAnchorMs ??= Date.now());
     const slotMs = computeInitialGitActivityDelayMs({
       sequence,
       policy: this.observationSchedulePolicy,
       random: Math.random(),
     });
-    const delayMs = Math.max(0, slotMs - (Date.now() - anchorMs));
+    this.lastInitialGitActivitySlotMs = anchorMs + slotMs;
+    const delayMs = Math.max(0, slotMs - (nowMs - anchorMs));
     if (delayMs <= 0) {
       callback();
       return;
