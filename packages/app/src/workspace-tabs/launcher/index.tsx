@@ -29,6 +29,7 @@ import {
   getTerminalProfileIcon,
   resolveTerminalProfiles,
 } from "@getpaseo/protocol/terminal-profiles";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import { getBuiltInLaunchOrder, type BuiltInLaunchItemId } from "./internal/catalog";
 
 export type WorkspaceTabLaunchPurpose = "primary" | "supporting";
@@ -78,6 +79,7 @@ export function NewTabLauncherProvider({
 const BUILT_IN_SELECTIONS: Record<BuiltInLaunchItemId, NewTabSelection> = {
   agent: { kind: "agent" },
   terminal: { kind: "terminal" },
+  powershell: { kind: "terminal", profile: POWERSHELL_PROFILE },
   changes: { kind: "target", target: { kind: "changes_tree" } },
   diff: { kind: "target", target: { kind: "working_diff" } },
   files: { kind: "target", target: { kind: "files" } },
@@ -132,12 +134,20 @@ export function useWorkspaceTabLaunchCatalog(input: {
       },
       terminal: {
         id: "terminal",
-        label: t("workspace.tabs.fallback.terminal"),
+        label: t("workspace.tabs.actions.openCmd"),
         Icon: SquareTerminal,
         shortcutActionId: "workspace-terminal-new",
         disabled: launcher.terminalDisabled,
         panelKind: "terminal",
         launch: launchSelection(BUILT_IN_SELECTIONS.terminal),
+      },
+      powershell: {
+        id: "powershell",
+        label: t("workspace.tabs.actions.openPowerShell"),
+        Icon: SquareTerminal,
+        disabled: launcher.terminalDisabled,
+        panelKind: "terminal",
+        launch: launchSelection(BUILT_IN_SELECTIONS.powershell),
       },
       changes: {
         id: "changes",

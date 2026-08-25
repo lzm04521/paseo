@@ -243,11 +243,15 @@ export function FilePane({
   workspaceRoot,
   location,
   navigationRevision,
+  readOnly,
 }: {
   serverId: string;
   workspaceRoot: string;
   location: WorkspaceFileLocation;
   navigationRevision: number;
+  /** Skips the editable editor path: text files stay in the read-only source
+   * view, so the pane needs no PaneProvider (which the editor path requires). */
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -300,10 +304,12 @@ export function FilePane({
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
   const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
   const isRenderable = isRenderablePreview(preview, location.path);
-  const editable = isEditableTextFile({
-    preview,
-    supportsEditing,
-  });
+  const editable =
+    !readOnly &&
+    isEditableTextFile({
+      preview,
+      supportsEditing,
+    });
   const canTogglePreviewMode = isRenderable && !location.lineStart;
   const lineCount =
     preview?.kind === "text" ? (preview.content ?? "").split("\n").length : undefined;
@@ -335,6 +341,7 @@ export function FilePane({
       location={location}
       navigationRevision={navigationRevision}
       imagePreviewUri={imagePreviewUri}
+      readOnly={readOnly}
     />
   );
 }
@@ -397,6 +404,7 @@ function FilePanePresentation({
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  readOnly?: boolean;
 }) {
   if (!client && readTarget) {
     return (

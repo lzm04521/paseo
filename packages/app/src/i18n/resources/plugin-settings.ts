@@ -343,6 +343,15 @@ export const pluginSettings = {
   "zh-CN": {
     ...shared,
     title: "插件",
+    logs: {
+      action: "日志",
+      title: "日志：{{id}}",
+      loading: "正在加载日志…",
+      refresh: "刷新",
+      refreshing: "正在刷新…",
+      errorTitle: "无法加载插件日志",
+      empty: "暂无插件输出",
+    },
     trustedTitle: "插件是受信任的代码",
     trustedDescription: "它们会在此主机和应用内运行，且没有隔离。请仅安装你信任的代码。",
     globalTitle: "启用插件",

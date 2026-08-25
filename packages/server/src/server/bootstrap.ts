@@ -3,7 +3,7 @@ import { createServer as createHTTPServer, type IncomingMessage, type ServerResp
 import { constants, existsSync, unlinkSync } from "fs";
 import { open, rm } from "fs/promises";
 import { randomUUID } from "node:crypto";
-import { hostname as getHostname } from "node:os";
+import { homedir, hostname as getHostname } from "node:os";
 import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Logger } from "pino";
@@ -138,6 +138,7 @@ import {
 } from "./agent/tools/paseo-tools.js";
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import { migrateLegacyImageDowngrade } from "./agent/providers/claude/image-downgrade.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -148,7 +149,7 @@ import {
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
-import { createOrchestrationSkills } from "./orchestration-skills/index.js";
+import { createOrchestrationSkills, resolveSkillTargets } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
@@ -178,6 +179,8 @@ import type {
   PluginSource,
   TerminalProfile,
 } from "@getpaseo/protocol/messages";
+import { DEFAULT_IDLE_AUTO_RESTART_CONFIG } from "@getpaseo/protocol/messages";
+import { agentCountsAsBusy, startIdleRestartWatchdog } from "./idle-restart-watchdog.js";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
@@ -406,9 +409,15 @@ export interface PaseoDaemonConfig {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  claudeImageDowngrade?: "off" | "on";
+  idleAutoRestart?: MutableDaemonConfig["idleAutoRestart"];
+  fileSearch?: MutableDaemonConfig["fileSearch"];
+  powershellPath?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   skillSelection?: AgentSkillSelection;
+  /** Root the orchestration skills install into, instead of the daemon user's home. */
+  skillsHome?: string;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
   staticDir: string;
@@ -447,6 +456,10 @@ export interface PaseoDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    title?: { instructions?: string };
+    branchName?: { instructions?: string };
+    commitMessage?: { instructions?: string };
+    pullRequest?: { instructions?: string };
   };
   providerOverrides?: Record<string, ProviderOverride>;
   log?: PersistedConfig["log"];
@@ -483,6 +496,10 @@ export interface PaseoDaemonDependencies {
   serverFeatureOverrides?: {
     daemonStatusRpc?: boolean;
     relayConfig?: boolean;
+  };
+  idleRestartWatchdog?: {
+    tickMs?: number;
+    now?: () => number;
   };
 }
 
@@ -527,6 +544,31 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
+// Fork daemon-config defaults (image downgrade, idle auto-restart, file search)
+// kept in one helper so the initial-config literal stays under the lint
+// complexity budget as upstream keeps adding fields.
+function resolveForkDaemonDefaults(config: PaseoDaemonConfig) {
+  return {
+    claudeImageDowngrade: config.claudeImageDowngrade ?? "off",
+    idleAutoRestart: config.idleAutoRestart ?? { ...DEFAULT_IDLE_AUTO_RESTART_CONFIG },
+    fileSearch: config.fileSearch,
+    ...(config.powershellPath !== undefined ? { powershellPath: config.powershellPath } : {}),
+  };
+}
+
+// Fork feature: fold the pre-settings-era claude-image-downgrade.json into the
+// daemon config store once, then delete the legacy file.
+function migrateLegacyImageDowngradeIntoStore(
+  daemonConfigStore: DaemonConfigStore,
+  paseoHome: string,
+  logger: Logger,
+): void {
+  const legacyDowngradeMode = migrateLegacyImageDowngrade(paseoHome, logger);
+  if (legacyDowngradeMode === "on") {
+    daemonConfigStore.patch({ claudeImageDowngrade: "on" });
+  }
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -547,6 +589,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
     metadataGeneration: {
+      ...config.metadataGeneration,
       providers: config.metadataGeneration?.providers ?? [],
     },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
@@ -555,6 +598,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
+    ...resolveForkDaemonDefaults(config),
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -603,10 +647,13 @@ export async function createPaseoDaemon(
       },
     },
   });
-  const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
+  const orchestrationSkills = createOrchestrationSkills(daemonConfigStore, () =>
+    resolveSkillTargets(config.skillsHome ?? homedir()),
+  );
   void orchestrationSkills.autoUpdate().catch((error) => {
     logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
   });
+  migrateLegacyImageDowngradeIntoStore(daemonConfigStore, config.paseoHome, logger);
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
   const pluginRuntime = new PluginService(logger, daemonConfigStore);
@@ -895,6 +942,7 @@ export async function createPaseoDaemon(
     managedProcesses,
     isDev: config.isDev === true,
     extraClients: config.agentClients,
+    getDaemonConfig: () => daemonConfigStore.get(),
   });
   daemonConfigStore.onFieldChange("catalogRefreshTimeoutMs", (value) => {
     providerSnapshotManager.setRefreshTimeoutMs(typeof value === "number" ? value : undefined);
@@ -918,6 +966,32 @@ export async function createPaseoDaemon(
     },
     mcpAuthToken: agentMcpAuthToken,
     logger,
+  });
+
+  const idleRestartWatchdogOptions = dependencies.idleRestartWatchdog ?? {};
+  const idleRestartWatchdog = startIdleRestartWatchdog({
+    getConfig: () => daemonConfigStore.get().idleAutoRestart,
+    isBusy: () => agentManager.listAgents().some(agentCountsAsBusy),
+    now: idleRestartWatchdogOptions.now ?? Date.now,
+    tickMs: idleRestartWatchdogOptions.tickMs,
+    onTrigger: (info) => {
+      logger.warn(
+        {
+          reason: "idle_auto_restart",
+          uptimeMinutes: info.uptimeMinutes,
+          idleMinutes: info.idleMinutes,
+          agentsByLifecycle: agentManager.getMetricsSnapshot().byLifecycle,
+          configuredThresholds: info.thresholds,
+        },
+        "Idle auto-restart triggered",
+      );
+      config.onLifecycleIntent?.({
+        type: "restart",
+        clientId: "idle-auto-restart-watchdog",
+        requestId: randomUUID(),
+        reason: "idle_auto_restart",
+      });
+    },
   });
 
   const detachAgentStoragePersistence = attachAgentStoragePersistence(
@@ -1654,6 +1728,10 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              {
+                getIdleSince: () => idleRestartWatchdog.getIdleSince(),
+                getStartedAt: () => idleRestartWatchdog.getStartedAt(),
+              },
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
@@ -1711,6 +1789,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    idleRestartWatchdog.stop();
     await pluginRuntime.stopAllPlugins();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();

@@ -12,6 +12,7 @@ export interface WorkspaceCommandCenterLabels {
   section: string;
   newAgent: string;
   newTerminal: string;
+  openPowerShell: string;
   newBrowser: string;
   splitRight: string;
   splitDown: string;
@@ -487,12 +488,20 @@ function buildCreationContributions(
       shortcutKeys: source.shortcuts.newTerminal,
       action: { id: "workspace.terminal.new", scope: "workspace" },
     }),
+    buildQueryAction(source, {
+      id: "tab:new-powershell",
+      rank: 3,
+      title: source.labels.openPowerShell,
+      keywords: ["terminal", "shell", "console", "powershell"],
+      icon: source.icons.newTerminal,
+      action: { id: "workspace.terminal.new.powershell", scope: "workspace" },
+    }),
   );
   if (source.capabilities.canOpenBrowserTabs) {
     contributions.push(
       buildQueryAction(source, {
         id: "tab:new-browser",
-        rank: 3,
+        rank: 4,
         title: source.labels.newBrowser,
         keywords: ["browser", "web", "preview"],
         icon: source.icons.newBrowser,
