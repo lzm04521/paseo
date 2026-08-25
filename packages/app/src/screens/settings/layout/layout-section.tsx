@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
+import { Switch } from "@/components/ui/switch";
 import { useAppSettings, type OpenInSidePanePreferences } from "@/hooks/use-settings";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { settingsStyles } from "@/styles/settings";
@@ -90,21 +91,47 @@ export function LayoutSection() {
     },
     [settings.openInSidePane, updateSettings],
   );
+  const handleAutoOpenExplorerSidebarChange = useCallback(
+    (autoOpenExplorerSidebar: boolean) => void updateSettings({ autoOpenExplorerSidebar }),
+    [updateSettings],
+  );
   return (
-    <SettingsSection title={t("settings.layout.openInSidePane.title")}>
-      <View style={settingsStyles.card}>
-        {SOURCES.map((source, index) => (
-          <Fragment key={source}>
-            <LayoutPreferenceRow
-              source={source}
-              value={settings.openInSidePane[source]}
-              first={index === 0}
-              onDestinationChange={handleDestinationChange}
+    <>
+      <SettingsSection title={t("settings.layout.openInSidePane.title")}>
+        <View style={settingsStyles.card}>
+          {SOURCES.map((source, index) => (
+            <Fragment key={source}>
+              <LayoutPreferenceRow
+                source={source}
+                value={settings.openInSidePane[source]}
+                first={index === 0}
+                onDestinationChange={handleDestinationChange}
+              />
+            </Fragment>
+          ))}
+        </View>
+      </SettingsSection>
+      <SettingsSection title={t("settings.layout.explorerSidebar.title")}>
+        <View style={settingsStyles.card}>
+          <View style={settingsStyles.row}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>
+                {t("settings.layout.explorerSidebar.autoOpen")}
+              </Text>
+              <Text style={settingsStyles.rowHint}>
+                {t("settings.layout.explorerSidebar.autoOpenHint")}
+              </Text>
+            </View>
+            <Switch
+              value={settings.autoOpenExplorerSidebar}
+              onValueChange={handleAutoOpenExplorerSidebarChange}
+              accessibilityLabel={t("settings.layout.explorerSidebar.autoOpen")}
+              testID="auto-open-explorer-sidebar-toggle"
             />
-          </Fragment>
-        ))}
-      </View>
-    </SettingsSection>
+          </View>
+        </View>
+      </SettingsSection>
+    </>
   );
 }
 

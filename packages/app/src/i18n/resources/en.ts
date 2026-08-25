@@ -2110,6 +2110,11 @@ export const en = {
           },
         },
       },
+      explorerSidebar: {
+        title: "Explorer sidebar",
+        autoOpen: "Open when a workspace opens",
+        autoOpenHint: "Reveal the Explorer sidebar whenever a workspace opens with it hidden",
+      },
     },
     editor: {
       title: "Editor",

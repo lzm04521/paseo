@@ -2148,6 +2148,12 @@ export const fr: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "Barre latérale de l'explorateur",
+        autoOpen: "Ouvrir à l'ouverture d'un espace de travail",
+        autoOpenHint:
+          "Affiche la barre latérale de l'explorateur à l'ouverture d'un espace de travail quand elle est masquée",
+      },
     },
     editor: {
       title: "Éditeur",

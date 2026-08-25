@@ -2129,6 +2129,12 @@ export const ptBR: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "Barra lateral do explorador",
+        autoOpen: "Abrir ao abrir um espaço de trabalho",
+        autoOpenHint:
+          "Revela a barra lateral do explorador ao abrir um espaço de trabalho quando ela está fechada",
+      },
     },
     editor: {
       title: "Editor",

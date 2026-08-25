@@ -48,6 +48,8 @@ import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar
 import {
   isExplorerSidebarOpen,
   openExplorerSidebarView,
+  shouldAutoRevealExplorerSidebar,
+  showExplorerSidebar,
   toggleExplorerSidebar,
   useIsExplorerSidebarOpen,
 } from "@/workspace-tabs/explorer-sidebar";
@@ -1802,6 +1804,22 @@ function WorkspaceScreenContent({
   });
   const lastMainPaneId = lastMainPaneRef.current.paneId;
   const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
+  const autoOpenExplorerSidebar = useSettings((settings) => settings.autoOpenExplorerSidebar);
+  useEffect(() => {
+    // The preference re-arms on every workspace open (mount or key switch) and
+    // after the persisted layouts hydrate; it never closes an open sidebar.
+    if (
+      !shouldAutoRevealExplorerSidebar({
+        enabled: autoOpenExplorerSidebar,
+        hydrated: hasHydratedWorkspaceLayoutStore,
+        isCompact: isMobile,
+        workspaceKey: persistenceKey,
+      })
+    ) {
+      return;
+    }
+    showExplorerSidebar({ isCompact: isMobile, workspaceKey: persistenceKey, checkout: null });
+  }, [autoOpenExplorerSidebar, hasHydratedWorkspaceLayoutStore, isMobile, persistenceKey]);
   const workspaceSetupSnapshot = useWorkspaceSetupStore((state) =>
     persistenceKey ? (state.snapshots[persistenceKey] ?? null) : null,
   );

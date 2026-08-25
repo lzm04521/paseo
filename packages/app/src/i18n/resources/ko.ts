@@ -1934,6 +1934,11 @@ export const ko: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "탐색기 사이드바",
+        autoOpen: "워크스페이스를 열 때 자동으로 열기",
+        autoOpenHint: "워크스페이스를 열 때 탐색기 사이드바가 닫혀 있으면 자동으로 표시합니다",
+      },
     },
     editor: {
       title: "편집기",

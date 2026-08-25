@@ -2143,6 +2143,12 @@ export const es: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "Barra lateral del explorador",
+        autoOpen: "Abrir al abrir un espacio de trabajo",
+        autoOpenHint:
+          "Muestra la barra lateral del explorador al abrir un espacio de trabajo si está oculta",
+      },
     },
     editor: {
       title: "Editor",

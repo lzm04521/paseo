@@ -18,6 +18,8 @@ import {
   isExplorerSidebarOpen,
   openExplorerSidebarView,
   resolveExplorerSidebarPresentation,
+  shouldAutoRevealExplorerSidebar,
+  showExplorerSidebar,
   toggleExplorerSidebar,
 } from "@/workspace-tabs/explorer-sidebar";
 
@@ -84,5 +86,39 @@ describe("Explorer sidebar", () => {
     expect(isExplorerSidebarOpen(input)).toBe(true);
     toggleExplorerSidebar(input);
     expect(isExplorerSidebarOpen(input)).toBe(false);
+  });
+
+  it("auto-reveals the Explorer sidebar only on wide layouts that have hydrated", () => {
+    const query = { isCompact: false, supportsPaneSplits: true, workspaceKey: WORKSPACE_KEY };
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: false, hydrated: true })).toBe(
+      false,
+    );
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: false })).toBe(
+      false,
+    );
+    expect(
+      shouldAutoRevealExplorerSidebar({
+        isCompact: true,
+        supportsPaneSplits: true,
+        workspaceKey: WORKSPACE_KEY,
+        enabled: true,
+        hydrated: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoRevealExplorerSidebar({
+        isCompact: false,
+        supportsPaneSplits: true,
+        workspaceKey: null,
+        enabled: true,
+        hydrated: true,
+      }),
+    ).toBe(false);
+    // The default layout keeps the Explorer hidden, so the workspace-open moment reveals it.
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: true })).toBe(true);
+    showExplorerSidebar({ ...query, checkout: CHECKOUT });
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: true })).toBe(
+      false,
+    );
   });
 });

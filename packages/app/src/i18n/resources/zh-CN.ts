@@ -2079,6 +2079,11 @@ export const zhCN: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "资源管理器侧栏",
+        autoOpen: "打开工作区时自动展开",
+        autoOpenHint: "打开工作区时，若资源管理器侧栏处于关闭状态则自动展开",
+      },
     },
     editor: {
       title: "编辑器",

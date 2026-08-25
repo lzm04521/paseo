@@ -2118,6 +2118,12 @@ export const ja: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "エクスプローラーサイドバー",
+        autoOpen: "ワークスペースを開くときに自動で開く",
+        autoOpenHint:
+          "ワークスペースを開いたとき、エクスプローラーサイドバーが閉じていれば自動的に表示します",
+      },
     },
     editor: {
       title: "エディター",

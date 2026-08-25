@@ -2100,6 +2100,11 @@ export const ar: TranslationResources = {
           },
         },
       },
+      explorerSidebar: {
+        title: "الشريط الجانبي للمستكشف",
+        autoOpen: "الفتح عند فتح مساحة عمل",
+        autoOpenHint: "إظهار الشريط الجانبي للمستكشف تلقائيًا عند فتح مساحة عمل وهو مغلق",
+      },
     },
     editor: {
       title: "المحرر",
