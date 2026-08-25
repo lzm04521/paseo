@@ -1554,6 +1554,25 @@ describe("WorkspaceGitServiceImpl", () => {
       s2.unsubscribe();
       service.dispose();
     });
+
+    test("first background fetch is staggered, not immediate at registration", async () => {
+      const runGitFetch = vi.fn(async () => ({ changes: [], error: null }));
+      const service = createService({
+        runGitFetch,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      // 观察槽位（30s）已过、fetch 槽位（32s，序列 1）未到——这段窗口是本测试的区分度所在
+      await vi.advanceTimersByTimeAsync(30_999);
+      expect(runGitFetch).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(runGitFetch).toHaveBeenCalledTimes(1);
+
+      subscription.unsubscribe();
+      service.dispose();
+    });
   });
 });
 

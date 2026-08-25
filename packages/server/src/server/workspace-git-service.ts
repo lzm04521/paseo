@@ -581,6 +581,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private disposePromise: Promise<void> | null = null;
   private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
   private initialGitActivitySequence = 0;
+  private initialGitActivityAnchorMs: number | null = null;
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -1228,19 +1229,24 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   }
 
   /**
-   * F4 启动错峰：首次 git 观察活动（观察 setup、首次 fetch）统一经此调度，
-   * 延迟 = 注册批次宽限 + 序号×错峰步长 ± 抖动。grace=0 时立即执行（恢复现状）。
+   * F4 启动错峰：首次 git 观察活动（观察 setup、首次 fetch）统一经此调度。
+   * 槽位时刻 = 首次活动锚点 + 注册批次宽限 + 序号×错峰步长 ± 抖动，序列为服务
+   * 生命周期单调递增；延迟 = max(0, 槽位时刻 − 距锚点流逝时间)，使链式活动
+   * （观察 setup 完成后调度的首 fetch）落在自身的错峰槽位而非重新起算宽限。
+   * grace=0 时立即执行（恢复现状）。
    */
   private scheduleInitialGitActivity(callback: () => void): void {
     if (this.disposed) {
       return;
     }
     const sequence = this.initialGitActivitySequence++;
-    const delayMs = computeInitialGitActivityDelayMs({
+    const anchorMs = (this.initialGitActivityAnchorMs ??= Date.now());
+    const slotMs = computeInitialGitActivityDelayMs({
       sequence,
       policy: this.observationSchedulePolicy,
       random: Math.random(),
     });
+    const delayMs = Math.max(0, slotMs - (Date.now() - anchorMs));
     if (delayMs <= 0) {
       callback();
       return;
@@ -1914,7 +1920,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     repoTarget.intervalId = setInterval(() => {
       void this.runRepoFetch(repoTarget);
     }, BACKGROUND_GIT_FETCH_INTERVAL_MS);
-    void this.runRepoFetch(repoTarget);
+    this.scheduleInitialGitActivity(() => {
+      if (!repoTarget.closed && this.repoTargets.get(repoTarget.repoGitRoot) === repoTarget) {
+        void this.runRepoFetch(repoTarget);
+      }
+    });
   }
 
   private async startRepoMetadataObservation(
