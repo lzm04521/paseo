@@ -583,6 +583,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private initialGitActivitySequence = 0;
   private initialGitActivityAnchorMs: number | null = null;
   private lastInitialGitActivitySlotMs: number | null = null;
+  private readonly initialGitActivityTimers = new Set<NodeJS.Timeout>();
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -1019,6 +1020,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.disposeController.abort(new WorkspaceGitServiceDisposedError());
     this.workspaceRefreshLimit.clearQueue();
     this.workspaceObservationSetupLimit.clearQueue();
+    for (const timer of this.initialGitActivityTimers) {
+      clearTimeout(timer);
+    }
+    this.initialGitActivityTimers.clear();
 
     for (const target of this.workspaceTargets.values()) {
       this.closeWorkspaceTarget(target);
@@ -1264,11 +1269,13 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       callback();
       return;
     }
-    setTimeout(() => {
+    const timer: NodeJS.Timeout = setTimeout(() => {
+      this.initialGitActivityTimers.delete(timer);
       if (!this.disposed) {
         callback();
       }
     }, delayMs);
+    this.initialGitActivityTimers.add(timer);
   }
 
   private scheduleWorkspaceObservationSetup(target: WorkspaceGitTarget): void {

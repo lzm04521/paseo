@@ -1526,6 +1526,27 @@ describe("WorkspaceGitServiceImpl", () => {
       subscription.unsubscribe();
     });
 
+    test("dispose during grace clears pending stagger timers", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      service.dispose();
+      // dispose 必须 clearTimeout 清掉宽限期内的错峰计时器，而非依赖回调内的
+      // disposed 检查兜底——未清的句柄会把 daemon 退出拖延至 grace+N×stagger。
+      expect(vi.getTimerCount()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(subscribe).not.toHaveBeenCalled();
+      subscription.unsubscribe();
+    });
+
     test("stagger spaces two workspaces apart", async () => {
       const subscribe = createSubscribeStub();
       const service = createService({

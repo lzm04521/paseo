@@ -38,7 +38,7 @@ daemon 启动
      │    └─ 全部失败 → 退化每 5s git 轮询/workspace（永续）      ← F1
      ├─ ensureRepoTarget：注册即 fetch + setInterval 每 180s
      │    └─ fetch 持续报错无退避（225 次告警）                    ← F3
-     └─ forge PR 状态轮询（schedule(0) 即刻首轮）
+     └─ forge PR 状态轮询（首轮按 base interval ≥20s；身份变化时 schedule(0) 重验证）
           └─ 无认证/不支持的仓库失败→重试，封顶 5min 永不放弃（551 次）← F2
  provider 首次刷新与上述爆发并发 → 活动饿死 → 120s 超时           ← F4
 ```
@@ -60,7 +60,7 @@ daemon 启动
 
 ### F4 · 启动错峰与延迟（救首次选模型）
 
-**现状**：workspace 注册即启动观察链；`ensureRepoTarget` 注册即 fetch；PR 轮询 `schedule(0)` 即刻首轮。provider 刷新与之并发抢事件循环。
+**现状**：workspace 注册即启动观察链；`ensureRepoTarget` 注册即 fetch；PR 轮询首轮按 base interval（≥20s），仅轮询身份变化时 schedule(0) 即刻重验证。provider 刷新与之并发抢事件循环。
 
 **设计**：
 1. 宽限期锚点为**工作区注册时刻**（而非 daemon 启动时刻）：每个 workspace 注册时起算 `WORKSPACE_GIT_BOOT_GRACE_MS = 30_000`（env `PASEO_WS_GIT_BOOT_GRACE_MS` 可覆盖，`0` 恢复现状）。宽限期内 `scheduleWorkspaceObservationSetup` 仅入队不执行。
