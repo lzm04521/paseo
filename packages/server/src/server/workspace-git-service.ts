@@ -72,6 +72,47 @@ import { createWatcherLivenessCanary } from "./watcher-liveness-canary.js";
 
 const WORKSPACE_GIT_WATCH_DEBOUNCE_MS = 1_000;
 const BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000;
+
+const DEFAULT_WS_GIT_BOOT_GRACE_MS = 30_000;
+const DEFAULT_WS_GIT_OBSERVATION_STAGGER_MS = 2_000;
+const DEFAULT_WS_GIT_OBSERVATION_JITTER_MS = 500;
+
+export interface WorkspaceGitObservationSchedulePolicy {
+  bootGraceMs: number;
+  staggerMs: number;
+  jitterMs: number;
+}
+
+export function loadWorkspaceGitObservationSchedulePolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): WorkspaceGitObservationSchedulePolicy {
+  const parse = (raw: string | undefined, fallback: number): number => {
+    const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  };
+  return {
+    bootGraceMs: parse(env.PASEO_WS_GIT_BOOT_GRACE_MS, DEFAULT_WS_GIT_BOOT_GRACE_MS),
+    staggerMs: parse(
+      env.PASEO_WS_GIT_OBSERVATION_STAGGER_MS,
+      DEFAULT_WS_GIT_OBSERVATION_STAGGER_MS,
+    ),
+    jitterMs: parse(env.PASEO_WS_GIT_OBSERVATION_JITTER_MS, DEFAULT_WS_GIT_OBSERVATION_JITTER_MS),
+  };
+}
+
+export function computeInitialGitActivityDelayMs(input: {
+  sequence: number;
+  policy: WorkspaceGitObservationSchedulePolicy;
+  random: number;
+}): number {
+  const { bootGraceMs, staggerMs, jitterMs } = input.policy;
+  if (bootGraceMs <= 0) {
+    return 0;
+  }
+  const jitter = jitterMs > 0 ? Math.round(input.random * jitterMs * 2) - jitterMs : 0;
+  return Math.max(0, bootGraceMs + input.sequence * staggerMs + jitter);
+}
+
 const FETCH_METADATA_ECHO_TTL_MS = 5_000;
 export const WORKSPACE_GIT_OBSERVATION_REENSURE_INTERVAL_MS = 60_000;
 const FORGE_PR_STATUS_POLL_FAST_INTERVAL_MS = 20_000;

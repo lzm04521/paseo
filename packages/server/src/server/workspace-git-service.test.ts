@@ -9,6 +9,8 @@ import type {
   PullRequestStatusResult,
 } from "../utils/checkout-git.js";
 import {
+  computeInitialGitActivityDelayMs,
+  loadWorkspaceGitObservationSchedulePolicy,
   WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY,
   WORKSPACE_GIT_REFRESH_CONCURRENCY,
   WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS,
@@ -1436,5 +1438,54 @@ describe("WorkspaceGitServiceImpl", () => {
     expect(getCheckoutDiff).toHaveBeenCalledTimes(CACHE_MAX + OVERFLOW + 1);
 
     service.dispose();
+  });
+});
+
+describe("workspace git observation schedule policy", () => {
+  test("defaults to 30s grace, 2s stagger, 500ms jitter", () => {
+    const policy = loadWorkspaceGitObservationSchedulePolicy({});
+    expect(policy).toEqual({ bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 });
+  });
+
+  test("env overrides and invalid values fall back", () => {
+    expect(
+      loadWorkspaceGitObservationSchedulePolicy({
+        PASEO_WS_GIT_BOOT_GRACE_MS: "0",
+        PASEO_WS_GIT_OBSERVATION_STAGGER_MS: "100",
+        PASEO_WS_GIT_OBSERVATION_JITTER_MS: "0",
+      }),
+    ).toEqual({ bootGraceMs: 0, staggerMs: 100, jitterMs: 0 });
+    expect(
+      loadWorkspaceGitObservationSchedulePolicy({
+        PASEO_WS_GIT_BOOT_GRACE_MS: "-5",
+        PASEO_WS_GIT_OBSERVATION_STAGGER_MS: "abc",
+      }),
+    ).toEqual({ bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 });
+  });
+
+  test("grace 0 disables delay entirely (kill switch)", () => {
+    expect(
+      computeInitialGitActivityDelayMs({
+        sequence: 5,
+        policy: { bootGraceMs: 0, staggerMs: 2_000, jitterMs: 500 },
+        random: 0.99,
+      }),
+    ).toBe(0);
+  });
+
+  test("delay = grace + sequence*stagger, jitter clamped to ±jitterMs", () => {
+    const policy = { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 };
+    expect(computeInitialGitActivityDelayMs({ sequence: 0, policy, random: 0 })).toBe(30_000 - 500);
+    expect(computeInitialGitActivityDelayMs({ sequence: 0, policy, random: 1 })).toBe(30_000 + 500);
+    expect(computeInitialGitActivityDelayMs({ sequence: 2, policy, random: 0.5 })).toBe(
+      30_000 + 4_000,
+    );
+    expect(
+      computeInitialGitActivityDelayMs({
+        sequence: 1,
+        policy: { ...policy, jitterMs: 0 },
+        random: 0.9,
+      }),
+    ).toBe(32_000);
   });
 });
