@@ -1442,8 +1442,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.peekSnapshot(REPO_CWD)).not.toBeNull();
       expect(getCheckoutStatus).toHaveBeenCalledTimes(1);
     });
-    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证首拍触发。
-    await vi.advanceTimersByTimeAsync(36_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(2);
     });
@@ -1458,7 +1458,8 @@ describe("WorkspaceGitService checkout observation", () => {
     await vi.waitFor(() => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
-    await vi.advanceTimersByTimeAsync(36_000);
+    // 阻塞拍完成后次拍仍在 48s~72s 之后，推进 72s 保证第三次调用触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(3);
     });
@@ -1519,8 +1520,8 @@ describe("WorkspaceGitService checkout observation", () => {
     expect(watcher.records.filter((record) => record.directory === GIT_DIR)).toHaveLength(0);
 
     isGit = true;
-    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证发现拍触发。
-    await vi.advanceTimersByTimeAsync(36_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证发现拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(service.peekSnapshot(REPO_CWD)?.git.isGit).toBe(true);
       expect(service.getMetrics()).toMatchObject({
@@ -1638,8 +1639,8 @@ describe("WorkspaceGitService checkout observation", () => {
     );
 
     const statusCallsBeforePoll = getCheckoutStatus.mock.calls.length;
-    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证首拍触发。
-    await vi.advanceTimersByTimeAsync(36_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsBeforePoll);
     });

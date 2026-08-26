@@ -156,8 +156,8 @@ export function classifyForgePollFailure(error: unknown): ForgePollFailureClass 
   return "transient";
 }
 
-const DEGRADED_GIT_POLL_BASE_INTERVAL_MS = 30_000;
-const DEGRADED_GIT_POLL_IDLE_INTERVAL_MS = 60_000;
+const DEGRADED_GIT_POLL_BASE_INTERVAL_MS = 60_000;
+const DEGRADED_GIT_POLL_IDLE_INTERVAL_MS = 120_000;
 const DEGRADED_GIT_POLL_IDLE_AFTER_POLLS = 3;
 const DEGRADED_GIT_POLL_JITTER_RATIO = 0.2;
 

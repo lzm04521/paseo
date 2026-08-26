@@ -2191,15 +2191,15 @@ describe("degraded git poll relief", () => {
 
   const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
 
-  test("interval math: base 30s, idle 60s after 3 polls, jitter within ±20%", () => {
-    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0.5 })).toBe(30_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 2, random: 0.5 })).toBe(30_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0.5 })).toBe(60_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 30, random: 0.5 })).toBe(60_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0 })).toBe(24_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 1 })).toBe(36_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0 })).toBe(48_000);
-    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 1 })).toBe(72_000);
+  test("interval math: base 60s, idle 120s after 3 polls, jitter within ±20%", () => {
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 2, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0.5 })).toBe(120_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 30, random: 0.5 })).toBe(120_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0 })).toBe(48_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 1 })).toBe(72_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0 })).toBe(96_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 1 })).toBe(144_000);
   });
 
   function createFallbackDeps() {
@@ -2223,7 +2223,7 @@ describe("degraded git poll relief", () => {
   // getCheckoutWorktreeState (the initial refresh reads shortstat instead), so the
   // count starts at 0 and each fallback poll adds exactly 1 — hence every expected
   // count below sits one below the brief's literal draft.
-  test("fallback polls at 30s cadence and slows to 60s after idle polls", async () => {
+  test("fallback polls at 60s cadence and slows to 120s after idle polls", async () => {
     const deps = createFallbackDeps();
     const getCheckoutWorktreeState = vi.fn(async () => ({
       isDirty: false,
@@ -2237,19 +2237,19 @@ describe("degraded git poll relief", () => {
     });
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(59_999);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
 
     subscription.unsubscribe();
@@ -2257,7 +2257,7 @@ describe("degraded git poll relief", () => {
   });
 
   // F1 review: pins the repo-metadata fallback chain (startRepoMetadataFallback)
-  // to the 30s degraded baseline. Its polls drive getCheckoutShortstat (structural
+  // to the 60s degraded baseline. Its polls drive getCheckoutShortstat (structural
   // refresh rewrites diffStat from shortstat), while working-tree chain polls drive
   // getCheckoutWorktreeState — so shortstat isolates this chain's counter.
   test("repo-metadata fallback polls at the degraded cadence, not legacy 5s", async () => {
@@ -2279,9 +2279,9 @@ describe("degraded git poll relief", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     const baseline = deps.getCheckoutShortstat.mock.calls.length;
 
-    // random()=0 → first degraded interval is 24s (30s − 20% jitter floor).
+    // random()=0 → first degraded interval is 48s (60s − 20% jitter floor).
     // A regression to the legacy 5s tail would poll at ~4s and trip these.
-    for (let second = 2; second <= 23; second++) {
+    for (let second = 2; second <= 47; second++) {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(deps.getCheckoutShortstat.mock.calls.length).toBe(baseline);
     }
@@ -2307,15 +2307,15 @@ describe("degraded git poll relief", () => {
     });
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
     dirty = true;
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
     dirty = false;
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
 
     subscription.unsubscribe();
