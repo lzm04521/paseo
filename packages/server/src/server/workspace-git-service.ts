@@ -817,7 +817,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (!request.force && target.latestSnapshot) {
       return target.latestSnapshot;
     }
-
+    if (!request.force && target.pendingInitialRefresh) {
+      // F5b：宽限期内并入已排定的首轮刷新，避免连接风暴里每个请求各刷一轮
+      await target.pendingInitialRefresh;
+      this.assertNotDisposed(); // 宽限期内被 dispose：快速失败而非继续刷新
+      if (target.latestSnapshot) {
+        return target.latestSnapshot;
+      }
+    }
     return this.requestWorkspaceSnapshot(target, request);
   }
 

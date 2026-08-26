@@ -2265,4 +2265,47 @@ describe("F5b: initial snapshot refresh joins the startup stagger", () => {
     subscription.unsubscribe();
     service.dispose();
   });
+
+  test("getSnapshot during grace joins the pending refresh instead of starting its own", async () => {
+    const watcher = createWatcherHarness();
+    const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
+    const service = createService(
+      watcher,
+      { getCheckoutStatus },
+      undefined,
+      undefined,
+      gracePolicy,
+    );
+
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+    const snapshotPromise = service.getSnapshot(REPO_CWD);
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    // 宽限期内：既不能立即返回，也不能绕过错峰自己起一轮刷新
+    expect(getCheckoutStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(1_000); // 冲刷刷新循环的微任务/定时器
+    const snapshot = await snapshotPromise;
+    // 注：brief 原文写作 snapshot.currentBranch，但 WorkspaceGitRuntimeSnapshot 的
+    // git 字段嵌套在 snapshot.git 下，此处按实际接口修正访问路径。
+    expect(snapshot.git.currentBranch).toBeTruthy(); // 并入的首轮刷新结果
+    // 只有一轮刷新。若 observation setup 在同槽位也触发一次 facts 刷新，上界放宽到 2 并注明；
+    // 核心断言是 29s 前为 0、且不因 getSnapshot 额外起一轮（无 join 时此处 ≥2）。
+    expect(getCheckoutStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("dispose during grace fails the joined getSnapshot fast instead of hanging", async () => {
+    const watcher = createWatcherHarness();
+    const service = createService(watcher, {}, undefined, undefined, gracePolicy);
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    const pending = service.getSnapshot(REPO_CWD);
+    service.dispose();
+    await expect(pending).rejects.toThrow(); // 宽限期内 dispose：join 醒来后 assertNotDisposed 快速失败
+    subscription.unsubscribe();
+  });
 });
