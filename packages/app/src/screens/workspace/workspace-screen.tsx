@@ -49,7 +49,6 @@ import {
   isExplorerSidebarOpen,
   openExplorerSidebarView,
   shouldAutoRevealExplorerSidebar,
-  showExplorerSidebar,
   toggleExplorerSidebar,
   useIsExplorerSidebarOpen,
 } from "@/workspace-tabs/explorer-sidebar";
@@ -1808,6 +1807,7 @@ function WorkspaceScreenContent({
   useEffect(() => {
     // The preference re-arms on every workspace open (mount or key switch) and
     // after the persisted layouts hydrate; it never closes an open sidebar.
+    // Revealing through the "files" view lands the Explorer on its Files tab.
     if (
       !shouldAutoRevealExplorerSidebar({
         enabled: autoOpenExplorerSidebar,
@@ -1818,7 +1818,12 @@ function WorkspaceScreenContent({
     ) {
       return;
     }
-    showExplorerSidebar({ isCompact: isMobile, workspaceKey: persistenceKey, checkout: null });
+    openExplorerSidebarView({
+      isCompact: isMobile,
+      workspaceKey: persistenceKey,
+      checkout: null,
+      view: "files",
+    });
   }, [autoOpenExplorerSidebar, hasHydratedWorkspaceLayoutStore, isMobile, persistenceKey]);
   const workspaceSetupSnapshot = useWorkspaceSetupStore((state) =>
     persistenceKey ? (state.snapshots[persistenceKey] ?? null) : null,

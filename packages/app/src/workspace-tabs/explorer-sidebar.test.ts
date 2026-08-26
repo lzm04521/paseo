@@ -11,10 +11,12 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 import { usePanelStore } from "@/stores/panel-store";
 import {
   collectAllTabs,
+  findPaneById,
   selectExplorerSidebarPaneId,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import {
+  hideExplorerSidebar,
   isExplorerSidebarOpen,
   openExplorerSidebarView,
   resolveExplorerSidebarPresentation,
@@ -120,5 +122,26 @@ describe("Explorer sidebar", () => {
     expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: true })).toBe(
       false,
     );
+  });
+
+  it("lands the workspace-open reveal on the Files tab", () => {
+    const query = { isCompact: false, supportsPaneSplits: true, workspaceKey: WORKSPACE_KEY };
+    const input = { ...query, checkout: CHECKOUT };
+    // The user last left the Explorer on Changes, then closed it.
+    openExplorerSidebarView({ ...input, view: "changes" });
+    hideExplorerSidebar(input);
+    expect(isExplorerSidebarOpen(query)).toBe(false);
+
+    // The workspace-open moment reopens through the "files" view, as workspace-screen wires it.
+    openExplorerSidebarView({ ...input, view: "files" });
+    expect(isExplorerSidebarOpen(query)).toBe(true);
+    const state = useWorkspaceLayoutStore.getState();
+    const layout = state.layoutByWorkspace[WORKSPACE_KEY];
+    const paneId = selectExplorerSidebarPaneId(state, WORKSPACE_KEY);
+    const pane = layout && paneId ? findPaneById(layout.root, paneId) : null;
+    const focusedTab = layout
+      ? collectAllTabs(layout.root).find((tab) => tab.tabId === pane?.focusedTabId)
+      : null;
+    expect(focusedTab?.target.kind).toBe("files");
   });
 });
