@@ -177,7 +177,7 @@ function createService(
     paseoHome: "/tmp/paseo-home",
     fileObserver,
     ...(observationSchedulePolicy ? { observationSchedulePolicy } : {}),
-    ...(serviceOptions ?? {}),
+    ...serviceOptions,
     deps: {
       subscribe: watcher.subscribe,
       getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutFacts(cwd)),
@@ -2226,6 +2226,43 @@ describe("WorkspaceGitService checkout observation", () => {
     diffSubscription.unsubscribe();
     subscription.unsubscribe();
     diffManager.dispose();
+    service.dispose();
+  });
+});
+
+describe("F5b: initial snapshot refresh joins the startup stagger", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const gracePolicy = { bootGraceMs: 30_000, staggerMs: 0, jitterMs: 0 };
+
+  test("no git refresh before the grace slot; refresh fires after grace", async () => {
+    const watcher = createWatcherHarness();
+    const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
+    const service = createService(
+      watcher,
+      { getCheckoutStatus },
+      undefined,
+      undefined,
+      gracePolicy,
+    );
+
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(getCheckoutStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2_000); // 跨过 30s 槽位
+    await vi.waitFor(() => {
+      expect(getCheckoutStatus).toHaveBeenCalled();
+    });
+
+    subscription.unsubscribe();
     service.dispose();
   });
 });

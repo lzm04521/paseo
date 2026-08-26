@@ -522,6 +522,8 @@ interface WorkspaceGitTarget {
   observationSetupComplete: boolean;
   observationSetupScheduledOnce: boolean;
   observationSetupFirstActivityDone: boolean;
+  pendingInitialRefresh: Promise<void> | null;
+  pendingInitialRefreshResolve: (() => void) | null;
   closed: boolean;
 }
 
@@ -1105,6 +1107,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.initialGitActivityTimers.clear();
 
     for (const target of this.workspaceTargets.values()) {
+      // F5b：宽限期内 dispose，resolve 同一个 pendingInitialRefresh 唤醒已 await
+      // 的 getSnapshot 等待方（Task 5 join 消费；本 Task 不单测，Task 5 覆盖）。
+      target.pendingInitialRefreshResolve?.();
+      target.pendingInitialRefreshResolve = null;
+      target.pendingInitialRefresh = null;
+    }
+
+    for (const target of this.workspaceTargets.values()) {
       this.closeWorkspaceTarget(target);
     }
     this.workspaceTargets.clear();
@@ -1290,6 +1300,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       observationSetupComplete: false,
       observationSetupScheduledOnce: false,
       observationSetupFirstActivityDone: false,
+      pendingInitialRefresh: null,
+      pendingInitialRefreshResolve: null,
       closed: false,
     };
 
@@ -1297,20 +1309,44 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return target;
   }
 
+  /**
+   * F5b 启动错峰（主修）：注册触发的首个快照刷新经 `scheduleInitialGitActivity`
+   * 纳入启动宽限+错峰槽位，而非注册即刷新；grace=0 时立即执行（恢复现状）。
+   * `pendingInitialRefresh` 供 getSnapshot 等待方 join（Task 5 消费）；dispose 通过
+   * `pendingInitialRefreshResolve` resolve 同一个 promise 唤醒已 await 的等待方。
+   */
   private scheduleInitialWorkspaceRefresh(target: WorkspaceGitTarget): void {
-    queueMicrotask(() => {
-      if (!this.isActiveObservedWorkspaceTarget(target) || target.latestSnapshot) {
-        return;
-      }
-      void this.refreshWorkspaceTarget(target, {
-        force: false,
-        refreshStructure: true,
-        refreshWorktree: true,
-        includeForge: true,
-        reason: "initial",
-        notify: true,
-        queueIfBusy: false,
-        movedRemoteRefs: new Set(),
+    if (target.pendingInitialRefresh) {
+      return;
+    }
+    let resolvePending: () => void = () => undefined;
+    const pending = new Promise<void>((settle) => {
+      resolvePending = () => {
+        // F5b：promise 正常结算后清空 dispose 兜底句柄，避免重复唤醒。
+        if (target.pendingInitialRefreshResolve === resolvePending) {
+          target.pendingInitialRefreshResolve = null;
+        }
+        settle();
+      };
+    });
+    target.pendingInitialRefresh = pending;
+    target.pendingInitialRefreshResolve = resolvePending;
+    this.scheduleInitialGitActivity(() => {
+      queueMicrotask(() => {
+        if (!this.isActiveObservedWorkspaceTarget(target) || target.latestSnapshot) {
+          resolvePending();
+          return;
+        }
+        void this.refreshWorkspaceTarget(target, {
+          force: false,
+          refreshStructure: true,
+          refreshWorktree: true,
+          includeForge: true,
+          reason: "initial",
+          notify: true,
+          queueIfBusy: false,
+          movedRemoteRefs: new Set(),
+        }).then(resolvePending, resolvePending);
       });
     });
   }
