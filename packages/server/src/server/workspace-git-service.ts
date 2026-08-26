@@ -72,6 +72,28 @@ import { createWatcherLivenessCanary } from "./watcher-liveness-canary.js";
 
 const WORKSPACE_GIT_WATCH_DEBOUNCE_MS = 1_000;
 const BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000;
+const BACKGROUND_GIT_FETCH_BACKOFF_CAP_MS = 1_800_000;
+
+export function computeBackgroundFetchDelayMs(consecutiveErrors: number): number {
+  if (consecutiveErrors <= 0) {
+    return BACKGROUND_GIT_FETCH_INTERVAL_MS;
+  }
+  return Math.min(
+    BACKGROUND_GIT_FETCH_INTERVAL_MS * 2 ** (consecutiveErrors - 1),
+    BACKGROUND_GIT_FETCH_BACKOFF_CAP_MS,
+  );
+}
+
+export function shouldWarnOnFetchFailure(consecutiveErrors: number): boolean {
+  if (consecutiveErrors === 1 || consecutiveErrors === 5 || consecutiveErrors === 20) {
+    return true;
+  }
+  return consecutiveErrors > 20 && consecutiveErrors % 20 === 0;
+}
+
+export function shouldRefreshMetadataAfterFetchFailure(consecutiveErrors: number): boolean {
+  return consecutiveErrors < 3;
+}
 
 const DEFAULT_WS_GIT_BOOT_GRACE_MS = 30_000;
 const DEFAULT_WS_GIT_OBSERVATION_STAGGER_MS = 2_000;

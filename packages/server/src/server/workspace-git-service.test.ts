@@ -9,8 +9,11 @@ import type {
   PullRequestStatusResult,
 } from "../utils/checkout-git.js";
 import {
+  computeBackgroundFetchDelayMs,
   computeInitialGitActivityDelayMs,
   loadWorkspaceGitObservationSchedulePolicy,
+  shouldRefreshMetadataAfterFetchFailure,
+  shouldWarnOnFetchFailure,
   WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY,
   WORKSPACE_GIT_REFRESH_CONCURRENCY,
   WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS,
@@ -1715,5 +1718,37 @@ describe("workspace git observation schedule policy", () => {
         random: 0.9,
       }),
     ).toBe(32_000);
+  });
+});
+
+describe("background git fetch backoff policy", () => {
+  test("delay follows 180s * 2^(n-1) capped at 30min", () => {
+    expect(computeBackgroundFetchDelayMs(0)).toBe(180_000);
+    expect(computeBackgroundFetchDelayMs(1)).toBe(180_000);
+    expect(computeBackgroundFetchDelayMs(2)).toBe(360_000);
+    expect(computeBackgroundFetchDelayMs(3)).toBe(720_000);
+    expect(computeBackgroundFetchDelayMs(4)).toBe(1_440_000);
+    expect(computeBackgroundFetchDelayMs(5)).toBe(1_800_000);
+    expect(computeBackgroundFetchDelayMs(50)).toBe(1_800_000);
+    expect(computeBackgroundFetchDelayMs(-1)).toBe(180_000);
+  });
+
+  test("warn aggregation fires on 1st, 5th, 20th, then every 20th failure", () => {
+    expect(shouldWarnOnFetchFailure(1)).toBe(true);
+    expect(shouldWarnOnFetchFailure(2)).toBe(false);
+    expect(shouldWarnOnFetchFailure(5)).toBe(true);
+    expect(shouldWarnOnFetchFailure(6)).toBe(false);
+    expect(shouldWarnOnFetchFailure(19)).toBe(false);
+    expect(shouldWarnOnFetchFailure(20)).toBe(true);
+    expect(shouldWarnOnFetchFailure(21)).toBe(false);
+    expect(shouldWarnOnFetchFailure(40)).toBe(true);
+    expect(shouldWarnOnFetchFailure(41)).toBe(false);
+  });
+
+  test("metadata refresh on failure is skipped once errors reach 3", () => {
+    expect(shouldRefreshMetadataAfterFetchFailure(1)).toBe(true);
+    expect(shouldRefreshMetadataAfterFetchFailure(2)).toBe(true);
+    expect(shouldRefreshMetadataAfterFetchFailure(3)).toBe(false);
+    expect(shouldRefreshMetadataAfterFetchFailure(30)).toBe(false);
   });
 });
