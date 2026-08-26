@@ -13,14 +13,14 @@ Paseo 每次重启后，首次选择模型必现 `Timed out refreshing Claude af
 
 ### 1.2 量化证据（本机 `~/.paseo/daemon.log`，2026-08-25 采集）
 
-| 指标 | 实测值 | 正常预期 |
-|---|---|---|
-| `daemon.get_status` 请求耗时 | **95,312 ms** | 毫秒级 |
-| "Failed to run forge PR status self-heal refresh" | **551 次** | 0（或个位数） |
-| "Background git fetch completed with errors" | **225 次** | 0 |
-| "Failed to start working tree watcher; using degraded polling" | **40 次**（6 个 workspace 全部命中） | 0 |
-| `/api/status` 启动后 3 分钟内延迟 | 0.24 ~ 2.0 s 持续 | 毫秒级 |
-| provider 首次刷新 | 120 s 限期饿死 | 秒级 |
+| 指标                                                           | 实测值                               | 正常预期      |
+| -------------------------------------------------------------- | ------------------------------------ | ------------- |
+| `daemon.get_status` 请求耗时                                   | **95,312 ms**                        | 毫秒级        |
+| "Failed to run forge PR status self-heal refresh"              | **551 次**                           | 0（或个位数） |
+| "Background git fetch completed with errors"                   | **225 次**                           | 0             |
+| "Failed to start working tree watcher; using degraded polling" | **40 次**（6 个 workspace 全部命中） | 0             |
+| `/api/status` 启动后 3 分钟内延迟                              | 0.24 ~ 2.0 s 持续                    | 毫秒级        |
+| provider 首次刷新                                              | 120 s 限期饿死                       | 秒级          |
 
 ### 1.3 已排除项
 
@@ -45,14 +45,14 @@ daemon 启动
 
 关键代码位置（`packages/server/src/server/workspace-git-service.ts`）：
 
-| 机制 | 常量/位置 |
-|---|---|
-| 启动并发 | `WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY = 2`（L84）、`scheduleWorkspaceObservationSetup`（L1180） |
-| 注册即 fetch | `ensureRepoTarget` 尾部 `void this.runRepoFetch(repoTarget)`（L1825） |
-| fetch 周期 | `BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000`（L74），错误无退避（`runRepoFetch` L3105 起） |
-| PR 轮询 | `retainGenericForgePrStatusPoll`（L2466 起）、`computeGenericForgeNextInterval`（L3520）：`min(base × 2^(n-1), 300_000)`，无放弃路径 |
-| 退化轮询 | `startWorkingTreeWatchFallback`（L1495）、`DEGRADED_GIT_POLL_INTERVAL_MS = 5_000`（L80） |
-| watcher 后端 | `file-observer/internal/native-recursive.ts`：`fs.watch(root, {recursive:true})`，订阅 10s 内需通过 liveness canary |
+| 机制         | 常量/位置                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 启动并发     | `WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY = 2`（L84）、`scheduleWorkspaceObservationSetup`（L1180）                               |
+| 注册即 fetch | `ensureRepoTarget` 尾部 `void this.runRepoFetch(repoTarget)`（L1825）                                                                |
+| fetch 周期   | `BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000`（L74），错误无退避（`runRepoFetch` L3105 起）                                           |
+| PR 轮询      | `retainGenericForgePrStatusPoll`（L2466 起）、`computeGenericForgeNextInterval`（L3520）：`min(base × 2^(n-1), 300_000)`，无放弃路径 |
+| 退化轮询     | `startWorkingTreeWatchFallback`（L1495）、`DEGRADED_GIT_POLL_INTERVAL_MS = 5_000`（L80）                                             |
+| watcher 后端 | `file-observer/internal/native-recursive.ts`：`fs.watch(root, {recursive:true})`，订阅 10s 内需通过 liveness canary                  |
 
 ## 3. 修复设计
 
@@ -63,6 +63,7 @@ daemon 启动
 **现状**：workspace 注册即启动观察链；`ensureRepoTarget` 注册即 fetch；PR 轮询首轮按 base interval（≥20s），仅轮询身份变化时 schedule(0) 即刻重验证。provider 刷新与之并发抢事件循环。
 
 **设计**：
+
 1. 宽限期锚点为**工作区注册时刻**（而非 daemon 启动时刻）：每个 workspace 注册时起算 `WORKSPACE_GIT_BOOT_GRACE_MS = 30_000`（env `PASEO_WS_GIT_BOOT_GRACE_MS` 可覆盖，`0` 恢复现状）。宽限期内 `scheduleWorkspaceObservationSetup` 仅入队不执行。
    > 锚点必须是注册时刻：provider 刷新与 workspace 注册由**同一次 app 连接**触发。若锚在 daemon 启动（daemon 常驻后台、app 晚连），宽限早已过期，连接风暴依旧。
 2. workspace 间错峰：同一连接批次内第 i 个 workspace 的观察启动时间 = `注册时刻 + GRACE + i × STAGGER_MS`（`STAGGER_MS = 2_000`）± 500ms 抖动；沿用现有并发限 2。
@@ -77,6 +78,7 @@ daemon 启动
 **现状**：固定 180s interval；失败仅 warn 并继续；错误路径还触发 `scheduleRepoMetadataRefresh` 结构刷新（失败时额外负载）。
 
 **设计**：
+
 1. `RepoGitTarget` 增加 `consecutiveFetchErrors: number`；`runRepoFetch` 抛错或 `result.error` 非空时 +1，成功清零。
 2. 定时器改 `setTimeout` 链动态调度：`min(180_000 × 2^(n-1), 1_800_000)`（封顶 30 分钟）。
 3. 连续失败 ≥ 3 次后，退避期间跳过 `scheduleRepoMetadataRefresh` 的失败触发（避免错误放大）。
@@ -89,6 +91,7 @@ daemon 启动
 **现状**：退避封顶 5 分钟、永不放弃；无凭据/不支持的仓库每 5 分钟失败一次直到永远（551 次来源）。
 
 **设计**（实施修正版，依据 F2 计划执行中核实的代码与本机日志）：
+
 1. 错误分类（`classifyForgePollFailure`）：`ForgeCliMissingError`（含各 forge 子类，本机 551 次失败实测元凶——gh CLI 未安装）→ environment；`ForgeAuthenticationError` → auth。两类**首次失败即停摆**（环境不变不可能自愈）。其余为 transient：连续 ≥8 次停摆（成功归零），generic 路径退避封顶 5→15 分钟。
 2. 停摆保留 pollKey：同 key 的自动重订（self-heal、观察重建）被抑制；GitHub adapter 内部节拍不改——由停摆（退订）终结其循环。
 3. 恢复路径：a) pollKey 变化（分支/远端变化）；b) 用户显式 `refresh(cwd)`（强制立即重订）。
@@ -100,9 +103,11 @@ daemon 启动
 
 **现状**：`fs.watch(recursive)` 订阅需 10s 内通过 canary 验证；本机 6 个 workspace 100% 失败 → 每 5s/仓 git 轮询（最大一股持续负载）。
 
-**设计（两步）**：
-1. **诊断先行**（不改行为）：订阅链路加分阶段耗时日志（fs.watch 建立、canary 写入→事件返回、首个事件），env 开关 `PASEO_WS_GIT_WATCH_DIAG=1` 启用；本机复现一次，判定是 watcher 建立慢（大目录/杀软/磁盘）还是 canary 事件丢失（Windows 平台缺陷→报上游）。
-2. **兜底缓解**（无论诊断结论）：`DEGRADED_GIT_POLL_INTERVAL_MS` 5s → 30s，加 ±20% 抖动；连续 N 次轮询无变化时间隔渐进至 60s；任一变化事件重置。轮询去重（in-flight 检查已有，补齐退避期间跳过）。
+**设计（两步，实施版）**：
+
+1. **诊断插桩（已实施，默认关闭）**：`PASEO_WS_GIT_WATCH_DIAG=1` 或构造选项开启后输出三类日志——`watch_diag_subscribe_deadline`（限期到点 + file-observer 指标快照）、`watch_diag_subscribe_settled`（订阅 promise **真实** settle 耗时，含超期后补记，直接回答"fs.watch 建立到底要多久"）、`watch_diag_canary_verified`（canary 验证耗时）。零行为变更。
+2. **兜底缓解（已实施）**：两条退化轮询链（工作区 + 仓库元数据）从固定 5s 改为：基线 30s ±20% 抖动；连续 3 轮快照指纹无变化渐进 60s（±20% 抖动同前）；任一 workspace 指纹变化即重置；订阅恢复清零。轮询链本身为完成后再调度，无并发重叠。
+   诊断结论：待手工运行（见 F1 计划手工验收），若 `watch_diag_subscribe_settled` 显示 settle 耗时远超 10s 限期，属 file-observer/native 层建立慢（Windows 大目录/杀软），携数据报上游。
 
 **代价/风险**：watcher 未修好时 git 状态刷新最慢 30~60s（当前 5s 但代价是持续卡顿，值得换）；诊断结论若是 Node/Windows 递归监视缺陷，需要上游或换后端（watchman/自研清单对比），另行立项。
 
