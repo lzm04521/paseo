@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { execCommand } from "../utils/spawn.js";
 import { isWindowsCommandScript } from "../utils/windows-command.js";
 import { windowsExecutableResolution } from "./windows.js";
@@ -17,10 +18,39 @@ function hasPathSeparator(value: string): boolean {
 }
 
 async function enumerateCandidates(name: string): Promise<string[]> {
-  if (process.platform !== "win32" && existsSync("/usr/bin/which")) {
+  if (process.platform === "win32") {
+    const viaWhere = await enumerateCandidatesViaWindowsWhere(name);
+    if (viaWhere.length > 0) {
+      return viaWhere;
+    }
+    return enumerateCandidatesViaLibrary(name);
+  }
+  if (existsSync("/usr/bin/which")) {
     return enumerateCandidatesViaSystemWhich(name);
   }
   return enumerateCandidatesViaLibrary(name);
+}
+
+// 单次子进程完成 PATH 枚举（实测空载 ~0.45s），替代 which 库上百次串行 fs 探测——
+// 后者在事件循环饥饿下会被放大到分钟级（见 F5 诊断 R-B）。
+// where.exe 会先搜当前目录，命中需过滤掉。
+async function enumerateCandidatesViaWindowsWhere(name: string): Promise<string[]> {
+  try {
+    const { stdout } = await execCommand("where.exe", [name], {
+      timeout: 3000,
+      killSignal: "SIGKILL",
+    });
+    const cwd = resolve(process.cwd()).toLowerCase();
+    return Array.from(new Set(stdout.trim().split(/\r?\n/).filter(Boolean))).filter((candidate) => {
+      try {
+        return dirname(resolve(candidate)).toLowerCase() !== cwd;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return [];
+  }
 }
 
 async function enumerateCandidatesViaSystemWhich(name: string): Promise<string[]> {
