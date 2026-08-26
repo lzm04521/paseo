@@ -88,11 +88,11 @@ daemon 启动
 
 **现状**：退避封顶 5 分钟、永不放弃；无凭据/不支持的仓库每 5 分钟失败一次直到永远（551 次来源）。
 
-**设计**：
-1. 错误分类（在 `ForgeService` 错误上识别）：认证类（401/403/无凭据）与"仓库/PR 不存在或不支持"类 → **立即退订**轮询并标记 `target.forgePrStatusDegraded = "auth" | "unsupported"`。
-2. 其它错误：退避封顶提到 15 分钟；连续 ≥ 8 次进入 degraded（同上标记）。
-3. 恢复路径（重订一次）：a) `pollTarget.headRef/headSha` 变化（git 事件驱动）；b) 消费侧显式请求（用户打开 PR 面板/手动刷新，挂在 `rememberForgePrStatusSnapshot` 消费事件上）。
-4. degraded 状态进快照，UI 显示"PR 状态不可用"而非空白。
+**设计**（实施修正版，依据 F2 计划执行中核实的代码与本机日志）：
+1. 错误分类（`classifyForgePollFailure`）：`ForgeCliMissingError`（含各 forge 子类，本机 551 次失败实测元凶——gh CLI 未安装）→ environment；`ForgeAuthenticationError` → auth。两类**首次失败即停摆**（环境不变不可能自愈）。其余为 transient：连续 ≥8 次停摆（成功归零），generic 路径退避封顶 5→15 分钟。
+2. 停摆保留 pollKey：同 key 的自动重订（self-heal、观察重建）被抑制；GitHub adapter 内部节拍不改——由停摆（退订）终结其循环。
+3. 恢复路径：a) pollKey 变化（分支/远端变化）；b) 用户显式 `refresh(cwd)`（强制立即重订）。
+4. 快照协议**不动**：degraded 为 daemon 内部状态 + 一次性 warn（含恢复条件）；UI 维持现状 null 展示。可选后续：复用快照既有 `forge.error` 槽位透出"PR 状态不可用"。
 
 **代价/风险**：私有/无凭据仓库不再自动重试——由明确信号唤醒，属预期行为；恢复钩子漏挂会导致不再刷新（测试覆盖）。
 
