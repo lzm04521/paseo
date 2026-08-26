@@ -268,6 +268,7 @@ interface CreateServiceTestOptions {
   getWorkspaceGitSelfHealPhaseMs?: (cwd: string) => number;
   now?: () => Date;
   observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
+  logger?: pino.Logger;
 }
 
 function buildDefaultTestServiceDeps() {
@@ -324,7 +325,7 @@ function createService(options?: CreateServiceTestOptions) {
       };
     });
   return new WorkspaceGitServiceImpl({
-    logger: createLogger() as unknown as pino.Logger,
+    logger: (options?.logger ?? createLogger()) as unknown as pino.Logger,
     paseoHome: "/tmp/paseo-test",
     ...(options?.observationSchedulePolicy
       ? { observationSchedulePolicy: options.observationSchedulePolicy }
@@ -1667,6 +1668,102 @@ describe("WorkspaceGitServiceImpl", () => {
       expect(runGitFetch).toHaveBeenCalledTimes(6);
 
       subs.forEach((s) => s.unsubscribe());
+      service.dispose();
+    });
+  });
+
+  describe("background fetch backoff", () => {
+    const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+    function buildFetchDeps() {
+      return {
+        hasOriginRemote: vi.fn(async () => true),
+        getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+        runGitFetch: vi.fn(),
+      };
+    }
+
+    async function registerOriginRepo(
+      service: WorkspaceGitServiceImpl,
+      runGitFetch: ReturnType<typeof vi.fn>,
+    ) {
+      void service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runGitFetch).toHaveBeenCalledTimes(1);
+    }
+
+    test("fetch failures back off exponentially and reset on success", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockResolvedValueOnce({ changes: null, error: new Error("boom") });
+      fetchDeps.runGitFetch.mockResolvedValueOnce({ changes: null, error: new Error("boom") });
+      fetchDeps.runGitFetch.mockResolvedValue({ changes: [], error: null });
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(360_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(4);
+      service.dispose();
+    });
+
+    test("delay caps at 30 minutes after five consecutive failures", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockRejectedValue(new Error("network down"));
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      let calls = 1;
+      for (const delayMs of [180_000, 360_000, 720_000, 1_440_000, 1_800_000]) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+        calls += 1;
+        expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls);
+      }
+      await vi.advanceTimersByTimeAsync(1_799_999);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls + 1);
+      service.dispose();
+    });
+
+    test("failure warnings aggregate to 1st, 5th, then every 20th", async () => {
+      const logger = createLogger();
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockRejectedValue(new Error("network down"));
+      const service = createService({
+        ...fetchDeps,
+        observationSchedulePolicy: graceZeroPolicy,
+        logger: logger as unknown as pino.Logger,
+      });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      let failures = 1;
+      for (const delayMs of [180_000, 360_000, 720_000, 1_440_000]) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+        failures += 1;
+      }
+      expect(failures).toBe(5);
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+      service.dispose();
+    });
+
+    test("fetch timer stops when the repo target closes", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockResolvedValue({ changes: [], error: null });
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(1);
+
+      subscription.unsubscribe();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(1);
       service.dispose();
     });
   });

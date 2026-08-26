@@ -487,7 +487,8 @@ interface RepoGitTarget {
   fallbackPolling: boolean;
   fallbackPollTimer: NodeJS.Timeout | null;
   recovery: WatchRecoveryState;
-  intervalId: NodeJS.Timeout | null;
+  fetchTimer: NodeJS.Timeout | null;
+  consecutiveFetchErrors: number;
   fetchInFlight: boolean;
   bufferedFetchMetadataEvents: FileChange[];
   recentFetchRemoteRefChanges: Map<
@@ -1925,7 +1926,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       fallbackPolling: false,
       fallbackPollTimer: null,
       recovery: { attemptCount: 0, timer: null },
-      intervalId: null,
+      fetchTimer: null,
+      consecutiveFetchErrors: 0,
       fetchInFlight: false,
       bufferedFetchMetadataEvents: [],
       recentFetchRemoteRefChanges: new Map(),
@@ -1959,9 +1961,6 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (!hasOrigin) {
       return;
     }
-    repoTarget.intervalId = setInterval(() => {
-      void this.runRepoFetch(repoTarget);
-    }, BACKGROUND_GIT_FETCH_INTERVAL_MS);
     this.scheduleInitialGitActivity(() => {
       if (!repoTarget.closed && this.repoTargets.get(repoTarget.repoGitRoot) === repoTarget) {
         void this.runRepoFetch(repoTarget);
@@ -3250,8 +3249,46 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (target.fetchInFlight) {
       return;
     }
-
     target.fetchInFlight = true;
+    try {
+      await this.performRepoFetch(target);
+    } finally {
+      target.fetchInFlight = false;
+      this.scheduleNextRepoFetch(target);
+    }
+  }
+
+  private scheduleNextRepoFetch(target: RepoGitTarget): void {
+    if (this.disposed || target.closed || this.repoTargets.get(target.repoGitRoot) !== target) {
+      return;
+    }
+    if (target.fetchTimer) {
+      clearTimeout(target.fetchTimer);
+    }
+    const delayMs = computeBackgroundFetchDelayMs(target.consecutiveFetchErrors);
+    target.fetchTimer = setTimeout(() => {
+      target.fetchTimer = null;
+      if (!this.disposed && !target.closed && this.repoTargets.get(target.repoGitRoot) === target) {
+        void this.runRepoFetch(target);
+      }
+    }, delayMs);
+  }
+
+  private logFetchFailure(target: RepoGitTarget, fields: object, message: string): void {
+    const fieldsWithCount = {
+      ...fields,
+      repoGitRoot: target.repoGitRoot,
+      cwd: target.cwd,
+      consecutiveFetchErrors: target.consecutiveFetchErrors,
+    };
+    if (shouldWarnOnFetchFailure(target.consecutiveFetchErrors)) {
+      this.logger.warn(fieldsWithCount, message);
+    } else {
+      this.logger.debug(fieldsWithCount, message);
+    }
+  }
+
+  private async performRepoFetch(target: RepoGitTarget): Promise<void> {
     this.logger.debug(
       { repoGitRoot: target.repoGitRoot, cwd: target.cwd },
       "Running background git fetch",
@@ -3269,32 +3306,36 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         },
       });
     } catch (error) {
-      this.logger.warn(
-        { err: error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
-        "Background git fetch failed",
-      );
-    } finally {
-      target.fetchInFlight = false;
+      target.consecutiveFetchErrors += 1;
+      this.logFetchFailure(target, { err: error }, "Background git fetch failed");
     }
     this.flushFetchMetadataEvents(target, eventsBeforeFetchSnapshot);
     if (!result || result.changes === null) {
-      target.recentFetchRemoteRefChanges.clear();
-      target.knownRemoteRefs = null;
-      this.flushBufferedFetchMetadataEvents(target);
       if (result) {
-        this.logger.warn(
-          { err: result.error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
+        target.consecutiveFetchErrors += 1;
+        this.logFetchFailure(
+          target,
+          { err: result.error },
           "Background git fetch ref classification failed; using structural refresh",
         );
       }
-      this.scheduleRepoMetadataRefresh(target, "repo-fetch-unclassified", false);
+      target.recentFetchRemoteRefChanges.clear();
+      target.knownRemoteRefs = null;
+      this.flushBufferedFetchMetadataEvents(target);
+      if (shouldRefreshMetadataAfterFetchFailure(target.consecutiveFetchErrors)) {
+        this.scheduleRepoMetadataRefresh(target, "repo-fetch-unclassified", false);
+      }
       return;
     }
     if (result.error) {
-      this.logger.warn(
-        { err: result.error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
+      target.consecutiveFetchErrors += 1;
+      this.logFetchFailure(
+        target,
+        { err: result.error },
         "Background git fetch completed with errors after changing refs",
       );
+    } else {
+      target.consecutiveFetchErrors = 0;
     }
     const expiresAtMs = this.deps.now().getTime() + FETCH_METADATA_ECHO_TTL_MS;
     const remoteRefShapeChanged =
@@ -3466,9 +3507,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
 
   private closeRepoTarget(target: RepoGitTarget): void {
     target.closed = true;
-    if (target.intervalId) {
-      clearInterval(target.intervalId);
-      target.intervalId = null;
+    if (target.fetchTimer) {
+      clearTimeout(target.fetchTimer);
+      target.fetchTimer = null;
     }
     if (target.fallbackPollTimer) {
       clearTimeout(target.fallbackPollTimer);
