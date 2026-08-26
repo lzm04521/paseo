@@ -1661,7 +1661,8 @@ describe("WorkspaceGitService checkout observation", () => {
       return openedSubscription.promise;
     });
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
-    // 固定抖动下限：首拍恰为 24s，早于固定 30s 的恢复重试，保持"先轮询、后恢复"的断言顺序。
+    // 固定抖动下限使节奏确定：60s 基线 ×0.8 → 首拍恰为 48s；恢复重试在 subscribe
+    // 结算后固定 30s。F5c 起两条断言互相独立，不再约束"先轮询、后恢复"的顺序。
     const service = createService(
       watcher,
       {
@@ -1691,18 +1692,19 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceObservationSetupInFlightCount).toBe(0);
     });
     const statusCallsAfterSetup = getCheckoutStatus.mock.calls.length;
-    // 首拍在 24s（抖动固定为下限）；推进 25s 保证轮询已发生、而 30s 的恢复重试未到。
-    await vi.advanceTimersByTimeAsync(25_000);
+    const subscribeCallsAfterSettle = getWatcherSubscribeCallCount(watcher, REPO_CWD);
+    // 两个独立断言（互不约束先后顺序）：
+    // (a) 恢复重试在 subscribe 结算后 30s 内发生（订阅计数 +1）；
+    // (b) 首拍轮询在注册起 72s 窗口内发生（getCheckoutStatus 计数增长；首拍 48s）。
+    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.waitFor(() => {
+      expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(subscribeCallsAfterSettle + 1);
+    });
+    expect(erroredUnsubscribe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(7_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterSetup);
     });
-    await vi.advanceTimersByTimeAsync(4_000);
-    expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(1);
-    await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => {
-      expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(2);
-    });
-    expect(erroredUnsubscribe).toHaveBeenCalledTimes(1);
 
     subscription.unsubscribe();
     service.dispose();
@@ -1877,7 +1879,7 @@ describe("WorkspaceGitService checkout observation", () => {
     const runGitCommand = vi.fn(async () => {
       throw new Error("not a git repository");
     });
-    // 固定抖动下限，使发现轮询节奏确定（首拍 24s、次拍 48s），便于断言恢复后仍在轮询。
+    // 固定抖动下限，使发现轮询节奏确定（首拍 48s、次拍 96s），便于断言恢复后仍在轮询。
     const service = createService(
       watcher,
       {
@@ -1908,7 +1910,7 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
     const statusCallsAfterRecovery = getCheckoutStatus.mock.calls.length;
-    // 次拍在恢复完成后 ~17s（24s+24s-31s）；推进 20s 保证发现轮询仍在继续。
+    // 首拍在 48s（抖动固定为下限），落在恢复结算（~31s）后 ~17s；推进 20s 保证发现轮询仍在继续。
     await vi.advanceTimersByTimeAsync(20_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterRecovery);

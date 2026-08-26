@@ -218,6 +218,32 @@ function createAsyncSubscription() {
   };
 }
 
+// 供嵌套 describe（回调深度受限）复用的桩工厂：定义提升到模块顶层，
+// 避免测试体内的嵌套 vi.fn 回调触发 max-nested-callbacks。
+const createNoopAsyncMock = () => vi.fn(async () => {});
+
+const createWorkspaceSubscriptionStub = () =>
+  vi.fn(async () => ({
+    updateIgnore: createNoopAsyncMock(),
+    unsubscribe: createNoopAsyncMock(),
+  }));
+
+// watch target 以 rev-parse --show-toplevel 结果为键；返回常量 REPO_CWD 的默认
+// mock 会让多个 workspace 合并到同一 target，必须按 cwd 区分。
+const createCwdEchoRunGitCommand = () =>
+  vi.fn(async (_args: string[], context: { cwd: string }) => ({
+    stdout: `${context.cwd}\n`,
+    stderr: "",
+    truncated: false,
+    exitCode: 0,
+    signal: null,
+  }));
+
+const createNoopFetchMock = () => vi.fn(async () => ({ changes: [], error: null }));
+
+const createSuffixedCwds = (prefix: string, count: number) =>
+  Array.from({ length: count }, (_, index) => `${prefix}-${index}`);
+
 function createGitHubServiceStub(): ForgeService {
   return {
     listPullRequests: vi.fn(async () => []),
@@ -761,9 +787,12 @@ describe("WorkspaceGitServiceImpl", () => {
 
     service.dispose();
 
+    // F5b：getSnapshot 并入待定的首轮刷新（pendingInitialRefresh）；dispose 唤醒
+    // join 等待方后由 assertNotDisposed 快速失败（语义见 observation 套件
+    // "dispose during grace fails the joined getSnapshot fast instead of hanging"）。
     await expect(queuedRefreshSettlement).resolves.toMatchObject({
       status: "rejected",
-      error: { name: "AbortError" },
+      error: { name: "WorkspaceGitServiceDisposedError" },
     });
     await vi.waitFor(() => {
       expect(service.getMetrics()).toMatchObject({
@@ -859,7 +888,13 @@ describe("WorkspaceGitServiceImpl", () => {
     const second = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     await flushPromises();
 
-    expect(getPullRequestStatus).toHaveBeenCalledTimes(0);
+    // F5b：首轮快照刷新进入启动宽限槽位（默认策略 30s±500ms），观察 setup 在其后
+    // 一个错峰槽位（32s±500ms）。推进 31s：刷新槽已过、setup 槽未到——两个监听者
+    // 只触发同一轮首轮刷新（facts 与 forge 状态各恰 1 次；F4 时代此处在刷新链
+    // 尚未推进到 forge 步骤时采样，PR 恒为 0），且无 watcher 工作。
+    await vi.advanceTimersByTimeAsync(31_000);
+
+    expect(getPullRequestStatus).toHaveBeenCalledTimes(1);
     expect(getCheckoutSnapshotFacts).toHaveBeenCalledTimes(1);
     expect(resolveAbsoluteGitDir).toHaveBeenCalledTimes(0);
 
@@ -881,9 +916,11 @@ describe("WorkspaceGitServiceImpl", () => {
 
     const subscription = service.registerWorkspace({ cwd: join(REPO_CWD, ".") }, vi.fn());
 
-    await expect(service.getSnapshot(join(REPO_CWD, "."))).resolves.toEqual(
-      createSnapshot(REPO_CWD),
-    );
+    // F5b：宽限期内非强制 getSnapshot 并入待定的首轮刷新（默认策略槽位 30s±500ms），
+    // 需推进虚拟时钟越过槽位后 join 才结算。
+    const snapshotPromise = service.getSnapshot(join(REPO_CWD, "."));
+    await vi.advanceTimersByTimeAsync(31_000);
+    await expect(snapshotPromise).resolves.toEqual(createSnapshot(REPO_CWD));
     expect(service.peekSnapshot(REPO_CWD)).toEqual(createSnapshot(REPO_CWD));
 
     nowMs += 3_000;
@@ -1491,11 +1528,7 @@ describe("WorkspaceGitServiceImpl", () => {
     // 观察链独有观测点：仅 setupWorkspaceObservation 链路会调用 subscribe（初始快照
     // 刷新不调用）。每个 workspace 的观察链有两次 subscribe（worktree 根 + .git
     // 元数据根），故断言"特定 worktree 根是否出现"，而非调用次数。
-    const createSubscribeStub = () =>
-      vi.fn(async () => ({
-        updateIgnore: vi.fn(async () => {}),
-        unsubscribe: vi.fn(async () => {}),
-      }));
+    const createSubscribeStub = createWorkspaceSubscriptionStub;
     const subscribedRoots = (subscribe: ReturnType<typeof createSubscribeStub>) =>
       subscribe.mock.calls.map((call) => call[0]);
 
@@ -1508,6 +1541,11 @@ describe("WorkspaceGitServiceImpl", () => {
 
       const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
       await vi.advanceTimersByTimeAsync(29_999);
+      expect(subscribe).not.toHaveBeenCalled();
+
+      // F5b：注册先占序列 0 的首轮快照刷新槽（30s，不订阅），观察 setup 顺延至
+      // 序列 1 槽位（32s）——31_999 时刷新已过而 setup 未到。
+      await vi.advanceTimersByTimeAsync(2_000);
       expect(subscribe).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
@@ -1572,24 +1610,18 @@ describe("WorkspaceGitServiceImpl", () => {
       const subscribe = createSubscribeStub();
       const service = createService({
         subscribe,
-        // watch target 以 rev-parse --show-toplevel 结果为键；默认 mock 返回常量
-        // REPO_CWD 会让两个 workspace 合并到同一 target，必须按 cwd 区分
-        runGitCommand: vi.fn(async (_args: string[], context: { cwd: string }) => ({
-          stdout: `${context.cwd}\n`,
-          stderr: "",
-          truncated: false,
-          exitCode: 0,
-          signal: null,
-        })),
+        runGitCommand: createCwdEchoRunGitCommand(),
         observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
       });
 
       const s1 = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
       const s2 = service.registerWorkspace({ cwd: `${REPO_CWD}-2` }, vi.fn());
-      await vi.advanceTimersByTimeAsync(30_999);
+      // F5b：每个注册占两个槽位（序列 0/1=ws1 刷新+setup，序列 2/3=ws2 刷新+
+      // setup），ws1 setup 槽 32s、ws2 setup 槽 36s。
+      await vi.advanceTimersByTimeAsync(32_999);
       expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
       expect(subscribedRoots(subscribe)).not.toContain(`${REPO_CWD}-2`);
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(3_001);
       expect(subscribedRoots(subscribe)).toContain(`${REPO_CWD}-2`);
 
       s1.unsubscribe();
@@ -1598,15 +1630,16 @@ describe("WorkspaceGitServiceImpl", () => {
     });
 
     test("first background fetch is staggered, not immediate at registration", async () => {
-      const runGitFetch = vi.fn(async () => ({ changes: [], error: null }));
+      const runGitFetch = createNoopFetchMock();
       const service = createService({
         runGitFetch,
         observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
       });
 
       const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
-      // 观察槽位（30s）已过、fetch 槽位（32s，序列 1）未到——这段窗口是本测试的区分度所在
-      await vi.advanceTimersByTimeAsync(30_999);
+      // F5b：序列 0=首轮刷新（30s）、序列 1=观察 setup（32s），首 fetch 由 setup 完成后
+      // 的 ensureRepoTarget 占序列 2 槽位（34s）——32s~34s 这段窗口是本测试的区分度所在
+      await vi.advanceTimersByTimeAsync(32_999);
       expect(runGitFetch).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);
@@ -1620,25 +1653,19 @@ describe("WorkspaceGitServiceImpl", () => {
       const subscribe = createSubscribeStub();
       const service = createService({
         subscribe,
-        // watch target 以 rev-parse --show-toplevel 结果为键；默认 mock 返回常量
-        // REPO_CWD 会让两个 workspace 合并到同一 target，必须按 cwd 区分
-        runGitCommand: vi.fn(async (_args: string[], context: { cwd: string }) => ({
-          stdout: `${context.cwd}\n`,
-          stderr: "",
-          truncated: false,
-          exitCode: 0,
-          signal: null,
-        })),
+        runGitCommand: createCwdEchoRunGitCommand(),
         observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
       });
 
       const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
-      // 批次 1：setup 槽 30s + fetch 槽 32s；推进 70s 越过整个批次并静默超过宽限
+      // 批次 1：刷新槽 30s + setup 槽 32s + fetch 槽 34s；推进 70s 越过整个批次并
+      // 静默超过宽限（70−34=36s > 30s），锚点重置
       await vi.advanceTimersByTimeAsync(70_000);
       expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
 
       const second = service.registerWorkspace({ cwd: `${REPO_CWD}-2` }, vi.fn());
-      await vi.advanceTimersByTimeAsync(29_999);
+      // F5b：批次 2 的 setup 在自身批次序列 1 槽位（102s=70+30+2），而非刷新槽 100s
+      await vi.advanceTimersByTimeAsync(31_999);
       expect(subscribedRoots(subscribe)).not.toContain(`${REPO_CWD}-2`);
 
       await vi.advanceTimersByTimeAsync(1);
@@ -1650,41 +1677,36 @@ describe("WorkspaceGitServiceImpl", () => {
     });
 
     test("six-workspace connect burst stays silent during grace, then staggers out", async () => {
-      const cwds = Array.from({ length: 6 }, (_, i) => `${REPO_CWD}-burst-${i}`);
-      const subscribe = vi.fn(async () => ({
-        updateIgnore: vi.fn(async () => {}),
-        unsubscribe: vi.fn(async () => {}),
-      }));
-      const runGitFetch = vi.fn(async () => ({ changes: [], error: null }));
+      const cwds = createSuffixedCwds(`${REPO_CWD}-burst`, 6);
+      const subscribe = createSubscribeStub();
+      const runGitFetch = createNoopFetchMock();
       const service = createService({
         subscribe,
         runGitFetch,
-        // 默认 runGitCommand mock 返回常量 REPO_CWD，会让 6 个 workspace 合并到
-        // 同一个 workingTreeWatchTarget（按 rev-parse --show-toplevel 键控），
-        // 必须按 cwd 区分才能断言 6 个独立观察链
-        runGitCommand: vi.fn(async (_args: string[], context: { cwd: string }) => ({
-          stdout: `${context.cwd}\n`,
-          stderr: "",
-          truncated: false,
-          exitCode: 0,
-          signal: null,
-        })),
+        runGitCommand: createCwdEchoRunGitCommand(),
         observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
       });
 
-      const subs = cwds.map((cwd) => service.registerWorkspace({ cwd }, vi.fn()));
+      const subs: Array<ReturnType<typeof service.registerWorkspace>> = [];
+      for (const cwd of cwds) {
+        subs.push(service.registerWorkspace({ cwd }, vi.fn()));
+      }
       await vi.advanceTimersByTimeAsync(29_999);
       expect(subscribe).not.toHaveBeenCalled();
       expect(runGitFetch).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(30_001);
-      const roots = subscribe.mock.calls.map((call) => call[0]);
+      // F5b：6 个注册各占刷新+setup 两个槽位（序列 0~11 → 30s~42s），首 fetch 由
+      // 各自 setup 完成后占序列 12~17 槽位（54s~64s）；推进至 65s 全部就绪
+      await vi.advanceTimersByTimeAsync(35_001);
+      const roots = subscribedRoots(subscribe);
       for (const cwd of cwds) {
         expect(roots).toContain(cwd);
       }
       expect(runGitFetch).toHaveBeenCalledTimes(6);
 
-      subs.forEach((s) => s.unsubscribe());
+      for (const sub of subs) {
+        sub.unsubscribe();
+      }
       service.dispose();
     });
   });
