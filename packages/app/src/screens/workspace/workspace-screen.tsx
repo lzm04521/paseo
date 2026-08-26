@@ -1804,10 +1804,13 @@ function WorkspaceScreenContent({
   const lastMainPaneId = lastMainPaneRef.current.paneId;
   const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
   const autoOpenExplorerSidebar = useSettings((settings) => settings.autoOpenExplorerSidebar);
+  const autoOpenExplorerSidebarView = useSettings(
+    (settings) => settings.autoOpenExplorerSidebarView,
+  );
   useEffect(() => {
     // The preference re-arms on every workspace open (mount or key switch) and
     // after the persisted layouts hydrate; it never closes an open sidebar.
-    // Revealing through the "files" view lands the Explorer on its Files tab.
+    // Revealing through the configured view lands the Explorer on that tab.
     if (
       !shouldAutoRevealExplorerSidebar({
         enabled: autoOpenExplorerSidebar,
@@ -1822,9 +1825,15 @@ function WorkspaceScreenContent({
       isCompact: isMobile,
       workspaceKey: persistenceKey,
       checkout: null,
-      view: "files",
+      view: autoOpenExplorerSidebarView,
     });
-  }, [autoOpenExplorerSidebar, hasHydratedWorkspaceLayoutStore, isMobile, persistenceKey]);
+  }, [
+    autoOpenExplorerSidebar,
+    autoOpenExplorerSidebarView,
+    hasHydratedWorkspaceLayoutStore,
+    isMobile,
+    persistenceKey,
+  ]);
   const workspaceSetupSnapshot = useWorkspaceSetupStore((state) =>
     persistenceKey ? (state.snapshots[persistenceKey] ?? null) : null,
   );

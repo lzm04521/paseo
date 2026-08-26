@@ -2148,6 +2148,17 @@ export const es: TranslationResources = {
         autoOpen: "Abrir al abrir un espacio de trabajo",
         autoOpenHint:
           "Muestra la barra lateral del explorador al abrir un espacio de trabajo si está oculta",
+        defaultView: "Pestaña al abrir automáticamente",
+        defaultViewHint:
+          "Pestaña del explorador en la que se sitúa el panel al abrirse automáticamente",
+        defaultWidth: "Ancho predeterminado",
+        defaultWidthHint:
+          "Porción del ancho del espacio de trabajo usada hasta que se cambie el tamaño del panel",
+        views: {
+          files: "Archivos",
+          changes: "Cambios",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

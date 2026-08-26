@@ -2104,6 +2104,15 @@ export const ar: TranslationResources = {
         title: "الشريط الجانبي للمستكشف",
         autoOpen: "الفتح عند فتح مساحة عمل",
         autoOpenHint: "إظهار الشريط الجانبي للمستكشف تلقائيًا عند فتح مساحة عمل وهو مغلق",
+        defaultView: "التبويب عند الفتح التلقائي",
+        defaultViewHint: "تبويب المستكشف الذي يفتح عليه الشريط عند إظهاره تلقائيًا",
+        defaultWidth: "العرض الافتراضي",
+        defaultWidthHint: "نسبة من عرض مساحة العمل تُستخدم حتى يتم تغيير حجم الشريط",
+        views: {
+          files: "الملفات",
+          changes: "التغييرات",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

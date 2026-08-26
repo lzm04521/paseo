@@ -2083,6 +2083,15 @@ export const zhCN: TranslationResources = {
         title: "资源管理器侧栏",
         autoOpen: "打开工作区时自动展开",
         autoOpenHint: "打开工作区时，若资源管理器侧栏处于关闭状态则自动展开",
+        defaultView: "自动展开定位标签",
+        defaultViewHint: "自动展开侧栏时定位到的标签",
+        defaultWidth: "默认打开宽度",
+        defaultWidthHint: "侧栏未记忆宽度时占工作区宽度的比例",
+        views: {
+          files: "文件",
+          changes: "变更",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

@@ -1938,6 +1938,15 @@ export const ko: TranslationResources = {
         title: "탐색기 사이드바",
         autoOpen: "워크스페이스를 열 때 자동으로 열기",
         autoOpenHint: "워크스페이스를 열 때 탐색기 사이드바가 닫혀 있으면 자동으로 표시합니다",
+        defaultView: "자동 열기 탭",
+        defaultViewHint: "사이드바가 자동으로 열릴 때 표시할 탭",
+        defaultWidth: "기본 너비",
+        defaultWidthHint: "사이드바 크기를 조정하기 전까지 사용되는 작업 공간 너비 비율",
+        views: {
+          files: "파일",
+          changes: "변경 사항",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

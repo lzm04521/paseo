@@ -2123,6 +2123,15 @@ export const ja: TranslationResources = {
         autoOpen: "ワークスペースを開くときに自動で開く",
         autoOpenHint:
           "ワークスペースを開いたとき、エクスプローラーサイドバーが閉じていれば自動的に表示します",
+        defaultView: "自動展開時のタブ",
+        defaultViewHint: "サイドバーを自動的に開いたときに表示するタブ",
+        defaultWidth: "既定の幅",
+        defaultWidthHint: "サイドバーのサイズを変更するまでのワークスペース幅に対する割合",
+        views: {
+          files: "ファイル",
+          changes: "変更",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

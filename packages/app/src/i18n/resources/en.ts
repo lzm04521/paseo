@@ -2114,6 +2114,15 @@ export const en = {
         title: "Explorer sidebar",
         autoOpen: "Open when a workspace opens",
         autoOpenHint: "Reveal the Explorer sidebar whenever a workspace opens with it hidden",
+        defaultView: "Auto-open tab",
+        defaultViewHint: "Which Explorer tab the sidebar lands on when auto-opened",
+        defaultWidth: "Default width",
+        defaultWidthHint: "Share of the workspace width used until the sidebar is resized",
+        views: {
+          files: "Files",
+          changes: "Changes",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {

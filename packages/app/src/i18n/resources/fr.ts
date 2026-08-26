@@ -2153,6 +2153,16 @@ export const fr: TranslationResources = {
         autoOpen: "Ouvrir à l'ouverture d'un espace de travail",
         autoOpenHint:
           "Affiche la barre latérale de l'explorateur à l'ouverture d'un espace de travail quand elle est masquée",
+        defaultView: "Onglet à l'ouverture automatique",
+        defaultViewHint: "Onglet de l'explorateur affiché quand le panneau s'ouvre automatiquement",
+        defaultWidth: "Largeur par défaut",
+        defaultWidthHint:
+          "Part de la largeur de l'espace de travail utilisée avant tout redimensionnement du panneau",
+        views: {
+          files: "Fichiers",
+          changes: "Modifications",
+        },
+        widthPercent: "{{percent}}%",
       },
     },
     editor: {
