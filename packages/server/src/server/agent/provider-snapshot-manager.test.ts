@@ -474,6 +474,9 @@ describe("ProviderSnapshotManager public surface", () => {
     vi.useFakeTimers();
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
+      // Keep the availability sub-deadline from masking the 120s total deadline
+      // this test exists to verify.
+      availabilityTimeoutMs: 120_000,
       providerOverrides: {
         claude: { enabled: false },
         copilot: { enabled: false },
@@ -706,6 +709,32 @@ describe("ProviderSnapshotManager public surface", () => {
     } finally {
       manager.destroy();
       vi.unstubAllEnvs();
+    }
+  });
+
+  test("availability stall fails the refresh at the sub-deadline instead of the total deadline", async () => {
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      refreshTimeoutMs: 120_000,
+      availabilityTimeoutMs: 50,
+      extraClients: {
+        codex: createExtraClient("codex", {
+          // Never resolves: simulates a stalled `which` scan under event-loop starvation.
+          isAvailable: () => new Promise<boolean>(() => {}),
+        }),
+      },
+    });
+
+    try {
+      await manager.listProviders({ cwd: "/tmp/project", providers: ["codex"], wait: true });
+
+      const entry = manager
+        .getSnapshot("/tmp/project")
+        .find((candidate) => candidate.provider === "codex");
+      expect(entry?.status).toBe("error");
+      expect(entry?.error).toContain("timed out after 50ms");
+    } finally {
+      manager.destroy();
     }
   });
 

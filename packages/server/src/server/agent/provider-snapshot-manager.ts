@@ -18,6 +18,7 @@ import {
 } from "./agent-sdk-types.js";
 import {
   raceProviderRefreshAbort,
+  raceProviderRefreshDeadline,
   runProviderRefreshWithDeadline,
 } from "./provider-refresh-deadline.js";
 import type { ManagedAgent } from "./agent-manager.js";
@@ -49,6 +50,8 @@ const DEFAULT_REFRESH_TIMEOUT_MS = 120_000;
 const MAX_REFRESH_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_DIAGNOSTIC_TIMEOUT_MS = 120_000;
 const REFRESH_TIMEOUT_ENV_VAR = "PASEO_PROVIDER_REFRESH_TIMEOUT_MS";
+const DEFAULT_AVAILABILITY_TIMEOUT_MS = 10_000;
+const AVAILABILITY_TIMEOUT_ENV_VAR = "PASEO_PROVIDER_AVAILABILITY_TIMEOUT_MS";
 export const GLOBAL_PROVIDER_SNAPSHOT_KEY = "paseo:global";
 
 // Provider refresh probes can be slow on cold starts (e.g. Copilot's first
@@ -72,6 +75,25 @@ function resolveRefreshTimeoutMs(option: number | undefined): number {
     }
   }
   return DEFAULT_REFRESH_TIMEOUT_MS;
+}
+
+function resolveAvailabilityTimeoutMs(option: number | undefined): number {
+  if (
+    typeof option === "number" &&
+    Number.isSafeInteger(option) &&
+    option > 0 &&
+    option <= MAX_REFRESH_TIMEOUT_MS
+  ) {
+    return option;
+  }
+  const fromEnv = process.env[AVAILABILITY_TIMEOUT_ENV_VAR];
+  if (fromEnv) {
+    const parsed = Number(fromEnv);
+    if (Number.isSafeInteger(parsed) && parsed > 0 && parsed <= MAX_REFRESH_TIMEOUT_MS) {
+      return parsed;
+    }
+  }
+  return DEFAULT_AVAILABILITY_TIMEOUT_MS;
 }
 
 function resolveDiagnosticTimeoutMs(option: number | undefined, refreshTimeoutMs: number): number {
@@ -102,6 +124,7 @@ export interface ProviderSnapshotManagerOptions {
   isDev?: boolean;
   extraClients?: Partial<Record<AgentProvider, AgentClient>>;
   refreshTimeoutMs?: number;
+  availabilityTimeoutMs?: number;
   diagnosticTimeoutMs?: number;
   getDaemonConfig?: () => MutableDaemonConfig;
 }
@@ -210,6 +233,7 @@ export class ProviderSnapshotManager {
   private readonly events = new EventEmitter();
   private destroyed = false;
   private refreshTimeoutMs: number;
+  private availabilityTimeoutMs: number;
   private diagnosticTimeoutMs: number;
   private readonly logger: Logger;
   private readonly workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
@@ -235,6 +259,7 @@ export class ProviderSnapshotManager {
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
     this.refreshTimeoutMs = resolveRefreshTimeoutMs(options.refreshTimeoutMs);
+    this.availabilityTimeoutMs = resolveAvailabilityTimeoutMs(options.availabilityTimeoutMs);
     this.diagnosticTimeoutMs = resolveDiagnosticTimeoutMs(
       options.diagnosticTimeoutMs,
       this.refreshTimeoutMs,
@@ -561,8 +586,9 @@ export class ProviderSnapshotManager {
     for (const [cwd, loads] of previous.providerLoads) this.providerLoads.set(cwd, loads);
   }
 
-  setRefreshTimeoutMs(refreshTimeoutMs: number | undefined): void {
+  setRefreshTimeoutMs(refreshTimeoutMs: number | undefined, availabilityTimeoutMs?: number): void {
     this.refreshTimeoutMs = resolveRefreshTimeoutMs(refreshTimeoutMs);
+    this.availabilityTimeoutMs = resolveAvailabilityTimeoutMs(availabilityTimeoutMs);
     this.diagnosticTimeoutMs = resolveDiagnosticTimeoutMs(undefined, this.refreshTimeoutMs);
   }
 
@@ -941,7 +967,14 @@ export class ProviderSnapshotManager {
         timeoutMs: this.refreshTimeoutMs,
         operation: async (context) => {
           const available = await context.runActivity("availability", () =>
-            raceProviderRefreshAbort(context.signal, client.isAvailable(context.signal)),
+            raceProviderRefreshAbort(
+              context.signal,
+              raceProviderRefreshDeadline(
+                client.isAvailable(context.signal),
+                this.availabilityTimeoutMs,
+                `Provider availability check for ${definition.label}`,
+              ),
+            ),
           );
           if (!available) {
             return null;
