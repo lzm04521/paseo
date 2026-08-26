@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import os from "node:os";
 import path, { join } from "node:path";
 import type pino from "pino";
+import { ForgeAuthenticationError, ForgeCliMissingError } from "../services/forge-cli-command.js";
 import type { ForgeService } from "../services/forge-service.js";
 import type {
   CheckoutSnapshotFacts,
@@ -9,8 +10,11 @@ import type {
   PullRequestStatusResult,
 } from "../utils/checkout-git.js";
 import {
+  classifyForgePollFailure,
   computeBackgroundFetchDelayMs,
+  computeGenericForgeNextInterval,
   computeInitialGitActivityDelayMs,
+  FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS,
   loadWorkspaceGitObservationSchedulePolicy,
   shouldRefreshMetadataAfterFetchFailure,
   shouldWarnOnFetchFailure,
@@ -1847,5 +1851,26 @@ describe("background git fetch backoff policy", () => {
     expect(shouldRefreshMetadataAfterFetchFailure(2)).toBe(true);
     expect(shouldRefreshMetadataAfterFetchFailure(3)).toBe(false);
     expect(shouldRefreshMetadataAfterFetchFailure(30)).toBe(false);
+  });
+});
+
+describe("forge poll failure classification", () => {
+  test("classifies CLI-missing, auth, and transient errors", () => {
+    expect(classifyForgePollFailure(new ForgeCliMissingError())).toBe("environment");
+    expect(
+      classifyForgePollFailure(new ForgeAuthenticationError("bad creds", { stderr: "x" })),
+    ).toBe("auth");
+    expect(classifyForgePollFailure(new Error("ETIMEDOUT"))).toBe("transient");
+    expect(classifyForgePollFailure("string error")).toBe("transient");
+    expect(classifyForgePollFailure(null)).toBe("transient");
+  });
+
+  test("degraded threshold is 8 and backoff cap is 15 minutes", () => {
+    expect(FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS).toBe(8);
+    expect(computeGenericForgeNextInterval(null, 1)).toBe(120_000);
+    expect(computeGenericForgeNextInterval(null, 2)).toBe(240_000);
+    expect(computeGenericForgeNextInterval(null, 3)).toBe(480_000);
+    expect(computeGenericForgeNextInterval(null, 4)).toBe(900_000);
+    expect(computeGenericForgeNextInterval(null, 50)).toBe(900_000);
   });
 });

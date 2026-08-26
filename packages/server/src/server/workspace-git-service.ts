@@ -27,6 +27,7 @@ import {
   resolveBranchCheckout,
   resolveAbsoluteGitDir,
 } from "../utils/checkout-git.js";
+import { ForgeAuthenticationError, ForgeCliMissingError } from "../services/forge-cli-command.js";
 import type {
   ForgeAuthState,
   ForgeService,
@@ -139,7 +140,22 @@ const FETCH_METADATA_ECHO_TTL_MS = 5_000;
 export const WORKSPACE_GIT_OBSERVATION_REENSURE_INTERVAL_MS = 60_000;
 const FORGE_PR_STATUS_POLL_FAST_INTERVAL_MS = 20_000;
 const FORGE_PR_STATUS_POLL_SLOW_INTERVAL_MS = 120_000;
-const FORGE_PR_STATUS_POLL_ERROR_BACKOFF_CAP_MS = 300_000;
+const FORGE_PR_STATUS_POLL_ERROR_BACKOFF_CAP_MS = 900_000;
+
+export const FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS = 8;
+
+export type ForgePollFailureClass = "environment" | "auth" | "transient";
+
+export function classifyForgePollFailure(error: unknown): ForgePollFailureClass {
+  if (error instanceof ForgeCliMissingError) {
+    return "environment";
+  }
+  if (error instanceof ForgeAuthenticationError) {
+    return "auth";
+  }
+  return "transient";
+}
+
 const DEGRADED_GIT_POLL_INTERVAL_MS = 5_000;
 // Keep whole workspace pipelines below the lower-level Git process pool so daemon control work
 // retains subprocess and event-loop headroom during large workspace reconciliation bursts.
@@ -3701,7 +3717,7 @@ function buildWorkspaceForgePrStatusPollKey({
   ]);
 }
 
-function computeGenericForgeNextInterval(
+export function computeGenericForgeNextInterval(
   status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   consecutiveErrors: number,
 ): number {
