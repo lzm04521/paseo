@@ -43,17 +43,19 @@ vi.mock("@gorhom/portal", () => ({
 
 vi.mock("@gorhom/bottom-sheet", async () => {
   const { Portal } = await import("@gorhom/portal");
+  const BottomSheetModal = React.forwardRef(
+    ({ children, stackBehavior }: { children?: React.ReactNode; stackBehavior?: string }, _ref) =>
+      React.createElement(
+        Portal,
+        null,
+        React.createElement("div", { "data-stack-behavior": stackBehavior }, children),
+      ),
+  );
+  BottomSheetModal.displayName = "BottomSheetModal";
   return {
     BottomSheetModalProvider: ({ children }: { children?: React.ReactNode }) =>
       React.createElement("div", { "data-bottom-sheet-provider": true }, children),
-    BottomSheetModal: React.forwardRef(
-      ({ children, stackBehavior }: { children?: React.ReactNode; stackBehavior?: string }, _ref) =>
-        React.createElement(
-          Portal,
-          null,
-          React.createElement("div", { "data-stack-behavior": stackBehavior }, children),
-        ),
-    ),
+    BottomSheetModal,
   };
 });
 

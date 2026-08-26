@@ -48,6 +48,7 @@ import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar
 import {
   isExplorerSidebarOpen,
   openExplorerSidebarView,
+  shouldAutoRevealExplorerSidebar,
   toggleExplorerSidebar,
   useIsExplorerSidebarOpen,
 } from "@/workspace-tabs/explorer-sidebar";
@@ -178,6 +179,7 @@ import {
   type BulkCloseConfirmationLabels,
   classifyBulkClosableTabs,
   closeBulkWorkspaceTabs,
+  protectLastAgentTab,
 } from "@/screens/workspace/workspace-bulk-close";
 import { resolveCloseAgentTabPolicy } from "@/subagents";
 import {
@@ -1801,6 +1803,28 @@ function WorkspaceScreenContent({
   });
   const lastMainPaneId = lastMainPaneRef.current.paneId;
   const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
+  const autoOpenExplorerSidebar = useSettings((settings) => settings.autoOpenExplorerSidebar);
+  useEffect(() => {
+    // The preference re-arms on every workspace open (mount or key switch) and
+    // after the persisted layouts hydrate; it never closes an open sidebar.
+    // Revealing through the "files" view lands the Explorer on its Files tab.
+    if (
+      !shouldAutoRevealExplorerSidebar({
+        enabled: autoOpenExplorerSidebar,
+        hydrated: hasHydratedWorkspaceLayoutStore,
+        isCompact: isMobile,
+        workspaceKey: persistenceKey,
+      })
+    ) {
+      return;
+    }
+    openExplorerSidebarView({
+      isCompact: isMobile,
+      workspaceKey: persistenceKey,
+      checkout: null,
+      view: "files",
+    });
+  }, [autoOpenExplorerSidebar, hasHydratedWorkspaceLayoutStore, isMobile, persistenceKey]);
   const workspaceSetupSnapshot = useWorkspaceSetupStore((state) =>
     persistenceKey ? (state.snapshots[persistenceKey] ?? null) : null,
   );
@@ -2506,6 +2530,14 @@ function WorkspaceScreenContent({
   const handleCloseAgentTab = useCallback(
     async (input: { tabId: string; agentId: string }) => {
       const { tabId, agentId } = input;
+      const closingTab = allTabDescriptorsById.get(tabId);
+      if (closingTab) {
+        const { protectedAgentTabId } = protectLastAgentTab(uiTabs, [closingTab]);
+        if (protectedAgentTabId) {
+          toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+          return;
+        }
+      }
       await closeTab(tabId, async () => {
         if (!normalizedServerId) {
           return;
@@ -2568,12 +2600,14 @@ function WorkspaceScreenContent({
     },
     [
       archiveAgent,
+      allTabDescriptorsById,
       closeTab,
       closeWorkspaceTabWithCleanup,
       normalizedServerId,
       persistenceKey,
       t,
       toast,
+      uiTabs,
     ],
   );
 
@@ -2789,7 +2823,15 @@ function WorkspaceScreenContent({
       title: string;
       logLabel: string;
     }): Promise<boolean> => {
-      const { tabsToClose, title, logLabel } = input;
+      const { title, logLabel } = input;
+      const { remainingTabsToClose: tabsToClose, protectedAgentTabId } = protectLastAgentTab(
+        uiTabs,
+        input.tabsToClose,
+      );
+      if (protectedAgentTabId && tabsToClose.length === 0) {
+        toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+        return false;
+      }
       if (tabsToClose.length === 0) {
         return true;
       }
@@ -2865,6 +2907,8 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       persistenceKey,
       t,
+      toast,
+      uiTabs,
     ],
   );
 

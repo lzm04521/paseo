@@ -2,6 +2,7 @@ import { Fragment, useMemo, type ReactElement } from "react";
 import { withUnistyles } from "react-native-unistyles";
 import {
   ArrowRightToLine,
+  Code,
   Copy,
   CopyPlus,
   Download,
@@ -56,6 +57,7 @@ interface FileActionsContextMenuContentProps {
   onCopyRelativePath?: () => void;
   onReveal?: () => void;
   revealTargetName?: string;
+  onOpenInVSCode?: () => void;
   onDownload?: () => void;
   onAddToChat?: () => void;
   onNewFile?: () => void;
@@ -81,6 +83,7 @@ export function FileActionsContextMenuContent({
   onCopyRelativePath,
   onReveal,
   revealTargetName,
+  onOpenInVSCode,
   onDownload,
   onAddToChat,
   onNewFile,
@@ -165,6 +168,15 @@ export function FileActionsContextMenuContent({
             onSelect: onReveal,
           }
         : null,
+      onOpenInVSCode
+        ? {
+            key: "open-in-vscode",
+            group: "reference",
+            label: t("workspace.fileActions.openInVSCode"),
+            icon: Code,
+            onSelect: onOpenInVSCode,
+          }
+        : null,
       availableFile && onDownload
         ? {
             key: "download",
@@ -243,6 +255,7 @@ export function FileActionsContextMenuContent({
     onNewFolder,
     onOpenFile,
     onOpenToSide,
+    onOpenInVSCode,
     onRename,
     onReveal,
     onRevert,

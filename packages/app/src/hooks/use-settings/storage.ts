@@ -87,6 +87,8 @@ export interface AppSettings {
   vimKeybindings: boolean;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
+  /** Reveal the Explorer sidebar when a workspace opens with it hidden. */
+  autoOpenExplorerSidebar: boolean;
 }
 
 export interface OpenInSidePanePreferences {
@@ -137,6 +139,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   chatOutlineEnabled: true,
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
+  autoOpenExplorerSidebar: false,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -240,6 +243,7 @@ const StoredAppSettingsSchema = z
         changesLinks: z.boolean().catch(false),
       })
       .catch(DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES),
+    autoOpenExplorerSidebar: z.boolean().catch(false),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.

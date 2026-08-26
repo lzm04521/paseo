@@ -121,7 +121,8 @@ export function useWorkspaceCommandCenterActions(): void {
         labels: {
           section: t("workspace.header.actions.workspaceActions"),
           newAgent: t("workspace.tabs.actions.newAgent"),
-          newTerminal: t("workspace.tabs.actions.newTerminal"),
+          newTerminal: t("workspace.tabs.actions.openCmd"),
+          openPowerShell: t("workspace.tabs.actions.openPowerShell"),
           newBrowser: t("workspace.tabs.actions.newBrowser"),
           splitRight: t("workspace.tabs.actions.splitRight"),
           splitDown: t("workspace.tabs.actions.splitDown"),

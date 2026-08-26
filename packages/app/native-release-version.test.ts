@@ -19,6 +19,14 @@ describe("native release version", () => {
     });
   });
 
+  it("maps fork -local.N iteration suffixes onto the beta slots", () => {
+    expect(getNativeReleaseVersion("0.4.1-local.1")).toEqual({
+      appVersion: "0.4.1",
+      androidVersionCode: 4001,
+      iosBuildNumber: "4001001",
+    });
+  });
+
   it("rejects beta numbers that consume the stable iOS build slot", () => {
     expect(() => getNativeReleaseVersion("0.2.6-beta.999")).toThrow(
       "iOS beta number must be between 1 and 998",
