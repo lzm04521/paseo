@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { execCommand } from "../utils/spawn.js";
 import { isPlatform } from "../test-utils/platform.js";
-import { findExecutable } from "./executable-resolution.js";
+import {
+  clearExecutableResolutionCacheForTests,
+  EXECUTABLE_RESOLUTION_FOUND_TTL_MS,
+  EXECUTABLE_RESOLUTION_NOT_FOUND_TTL_MS,
+  findExecutable,
+} from "./executable-resolution.js";
 
 vi.mock("../utils/spawn.js", () => ({ execCommand: vi.fn() }));
 const execCommandMock = vi.mocked(execCommand);
@@ -24,8 +29,8 @@ function prependPath(...dirs: string[]): void {
   process.env.PATH = [...dirs, originalPath].filter(Boolean).join(path.delimiter);
 }
 
-function writeExecutable(filePath: string): string {
-  writeFileSync(filePath, "@echo off\r\n");
+function writeExecutable(filePath: string, content = "@echo off\r\n"): string {
+  writeFileSync(filePath, content);
   return filePath;
 }
 
@@ -85,5 +90,75 @@ describe("windows where.exe enumeration", () => {
 
     const resolved = await findExecutable("paseo-where-fallback");
     expect(resolved?.toLowerCase()).toBe(exe.toLowerCase());
+  });
+});
+
+describe("findExecutable result cache", () => {
+  beforeEach(() => {
+    clearExecutableResolutionCacheForTests();
+    execCommandMock.mockReset();
+  });
+
+  function mockWhereResolves(exePath: string): void {
+    execCommandMock.mockImplementation(async (command: string, args: string[]) => {
+      if (command === "where.exe" && args[0] === "paseo-cache-tool") {
+        return { stdout: exePath };
+      }
+      if (command === exePath) {
+        return { stdout: "v1.0.0" };
+      }
+      throw new Error(`unexpected execCommand: ${command}`);
+    });
+  }
+
+  itWindows("concurrent lookups dedupe to one enumeration; fresh entry skips re-scan", async () => {
+    const dir = makeTempDir();
+    const exe = writeExecutable(path.join(dir, "paseo-cache-tool.cmd"), "@echo off\r\n");
+    mockWhereResolves(exe);
+
+    const [first, second] = await Promise.all([
+      findExecutable("paseo-cache-tool"),
+      findExecutable("paseo-cache-tool"),
+    ]);
+    expect(first).toBe(exe);
+    expect(second).toBe(exe);
+    expect(whereExeCallCount()).toBe(1);
+
+    await findExecutable("paseo-cache-tool");
+    expect(whereExeCallCount()).toBe(1); // TTL 内复用缓存
+  });
+
+  itWindows("found entries expire after EXECUTABLE_RESOLUTION_FOUND_TTL_MS", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const dir = makeTempDir();
+      const exe = writeExecutable(path.join(dir, "paseo-cache-tool.cmd"), "@echo off\r\n");
+      mockWhereResolves(exe);
+
+      await findExecutable("paseo-cache-tool");
+      expect(whereExeCallCount()).toBe(1);
+
+      vi.setSystemTime(Date.now() + EXECUTABLE_RESOLUTION_FOUND_TTL_MS + 1);
+      await findExecutable("paseo-cache-tool");
+      expect(whereExeCallCount()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  itWindows("negative results are cached briefly then retried", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      execCommandMock.mockRejectedValue(new Error("nothing anywhere"));
+      expect(await findExecutable("paseo-no-such-binary-xyz")).toBeNull();
+      expect(await findExecutable("paseo-no-such-binary-xyz")).toBeNull();
+      expect(whereExeCallCount()).toBe(1);
+
+      vi.setSystemTime(Date.now() + EXECUTABLE_RESOLUTION_NOT_FOUND_TTL_MS + 1);
+      await findExecutable("paseo-no-such-binary-xyz");
+      expect(whereExeCallCount()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
