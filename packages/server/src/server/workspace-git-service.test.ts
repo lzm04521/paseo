@@ -257,6 +257,13 @@ function createGitHubServiceStub(): ForgeService {
   };
 }
 
+function createEnvironmentFailingRetain(unsubscribe: ReturnType<typeof vi.fn>) {
+  return vi.fn((input: { onError?: (error: unknown) => void }) => {
+    setTimeout(() => input.onError?.(new ForgeCliMissingError()), 0);
+    return { unsubscribe };
+  });
+}
+
 interface CreateServiceTestOptions {
   subscribe?: ReturnType<typeof vi.fn>;
   getCheckoutStatus?: ReturnType<typeof vi.fn>;
@@ -1872,5 +1879,147 @@ describe("forge poll failure classification", () => {
     expect(computeGenericForgeNextInterval(null, 3)).toBe(480_000);
     expect(computeGenericForgeNextInterval(null, 4)).toBe(900_000);
     expect(computeGenericForgeNextInterval(null, 50)).toBe(900_000);
+  });
+});
+
+describe("forge pr status poll degraded", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  function createForgeThrowingDeps(makeError: () => Error) {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(async () => {
+        throw makeError();
+      }),
+    } as unknown as ForgeService;
+    return {
+      deps: {
+        hasOriginRemote: vi.fn(async () => true),
+        getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      },
+      github,
+    };
+  }
+
+  test("environment failure stops polling after the first attempt", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new ForgeCliMissingError());
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("self-heal reensure does not resubscribe a degraded poll", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new ForgeCliMissingError());
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("eight transient failures degrade the poll", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new Error("ETIMEDOUT"));
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    const delays = [120_000, 120_000, 240_000, 480_000, 900_000, 900_000, 900_000, 900_000];
+    let expected = 0;
+    for (const delayMs of delays) {
+      await vi.advanceTimersByTimeAsync(delayMs);
+      expected += 1;
+      expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(expected);
+    }
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(8);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("adapter-path environment failure unsubscribes the retained poll", async () => {
+    const unsubscribe = vi.fn();
+    const retain = createEnvironmentFailingRetain(unsubscribe);
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(async () => null),
+      retainCurrentPullRequestStatusPoll: retain,
+    } as unknown as ForgeService;
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(retain).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(retain).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("a success between failures resets the counter", async () => {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(),
+    } as unknown as { getCurrentPullRequestStatus: ReturnType<typeof vi.fn> };
+    github.getCurrentPullRequestStatus
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")))
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")))
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")));
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github: github as unknown as ForgeService },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(240_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(5);
+
+    subscription.unsubscribe();
+    service.dispose();
   });
 });

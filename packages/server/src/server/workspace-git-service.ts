@@ -476,6 +476,8 @@ interface WorkspaceGitTarget {
   observationReensureTimer: NodeJS.Timeout | null;
   forgePrStatusPollSubscription: { unsubscribe: () => void } | null;
   forgePrStatusPollKey: string | null;
+  forgePrStatusDegraded: ForgePollFailureClass | "repeated" | null;
+  forgePrStatusConsecutiveErrors: number;
   refreshState: WorkspaceGitRefreshState;
   latestGit: WorkspaceGitRuntimeSnapshot["git"] | null;
   latestGitLoadedAtMs: number | null;
@@ -1232,6 +1234,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       observationReensureTimer: null,
       forgePrStatusPollSubscription: null,
       forgePrStatusPollKey: null,
+      forgePrStatusDegraded: null,
+      forgePrStatusConsecutiveErrors: 0,
       refreshState: { status: "idle" },
       latestGit: null,
       latestGitLoadedAtMs: null,
@@ -2547,7 +2551,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.updateForgePrStatusPollForTarget(target);
   }
 
-  private updateForgePrStatusPollForTarget(target: WorkspaceGitTarget): void {
+  private updateForgePrStatusPollForTarget(
+    target: WorkspaceGitTarget,
+    options?: { forceImmediate?: boolean },
+  ): void {
     if (target.listeners.size === 0) {
       this.stopForgePrStatusPollForTarget(target);
       return;
@@ -2580,7 +2587,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (target.forgePrStatusPollKey === pollKey && target.forgePrStatusPollSubscription) {
       return;
     }
-    const pollImmediately = previousPollKey !== null && previousPollKey !== pollKey;
+    const pollImmediately =
+      options?.forceImmediate === true || (previousPollKey !== null && previousPollKey !== pollKey);
+    if (target.forgePrStatusDegraded !== null) {
+      if (previousPollKey === pollKey) {
+        return;
+      }
+      target.forgePrStatusDegraded = null;
+    }
 
     this.stopForgePrStatusPollForTarget(target);
     target.forgePrStatusPollKey = pollKey;
@@ -2593,6 +2607,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           ? { headRepositoryOwner: pollTarget.headRepositoryOwner }
           : {}),
         onStatus: (status) => {
+          target.forgePrStatusConsecutiveErrors = 0;
           if (!this.isActiveObservedWorkspaceTarget(target)) {
             return;
           }
@@ -2605,17 +2620,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           );
         },
         onError: (error) => {
-          this.logger.warn(
-            {
-              err: error,
-              cwd: target.cwd,
-              forge: resolution.forge,
-              headRef: pollTarget.headRef,
-              headRepositoryOwner: pollTarget.headRepositoryOwner,
-              reason: "self-heal-forge-pr-status",
-            },
-            "Failed to run forge PR status self-heal refresh",
-          );
+          this.handleForgePollError(target, resolution.forge, error);
         },
       });
       return;
@@ -2647,7 +2652,6 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     let timer: NodeJS.Timeout | null = null;
     let latestStatus: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"] =
       target.latestForge?.pullRequest ?? null;
-    let consecutiveErrors = 0;
 
     const schedule = (delayMs: number) => {
       if (closed) {
@@ -2675,26 +2679,15 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         });
         if (!closed && this.isActiveObservedWorkspaceTarget(target)) {
           latestStatus = status;
-          consecutiveErrors = 0;
+          target.forgePrStatusConsecutiveErrors = 0;
           this.rememberForgePrStatusSnapshot(target, buildForgeSnapshotFromStatus(status, forge), {
             notify: true,
           });
         }
       } catch (error) {
-        consecutiveErrors += 1;
-        this.logger.warn(
-          {
-            err: error,
-            cwd: target.cwd,
-            forge,
-            headRef: pollTarget.headRef,
-            headRepositoryOwner: pollTarget.headRepositoryOwner,
-            reason: "self-heal-forge-pr-status",
-          },
-          "Failed to run forge PR status self-heal refresh",
-        );
+        this.handleForgePollError(target, forge, error);
       } finally {
-        schedule(computeGenericForgeNextInterval(latestStatus, consecutiveErrors));
+        schedule(computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors));
       }
     };
 
@@ -2702,7 +2695,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     // changes. Revalidate that new identity immediately instead of leaving the
     // PR panel empty for the full stable polling interval.
     schedule(
-      pollImmediately ? 0 : computeGenericForgeNextInterval(latestStatus, consecutiveErrors),
+      pollImmediately
+        ? 0
+        : computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors),
     );
     return {
       unsubscribe: () => {
@@ -2737,10 +2732,63 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return { headRef: git.currentBranch };
   }
 
+  /**
+   * F2 停摆：仅断开订阅并标记 degraded，保留 pollKey——同 key 的自动重订
+   * （self-heal、观察重建）被 updateForgePrStatusPollForTarget 的守卫抑制；
+   * pollKey 变化（分支/远端变化）或用户显式 refresh(cwd) 才恢复。
+   */
+  private degradeForgePrStatusPoll(
+    target: WorkspaceGitTarget,
+    reason: ForgePollFailureClass | "repeated",
+  ): void {
+    target.forgePrStatusPollSubscription?.unsubscribe();
+    target.forgePrStatusPollSubscription = null;
+    target.forgePrStatusDegraded = reason;
+    this.logger.warn(
+      {
+        cwd: target.cwd,
+        degraded: reason,
+        consecutiveErrors: target.forgePrStatusConsecutiveErrors,
+        recovery: "branch/remote change or explicit workspace refresh",
+      },
+      "Forge PR status polling stopped after repeated failures",
+    );
+  }
+
+  private handleForgePollError(
+    target: WorkspaceGitTarget,
+    forge: string,
+    error: unknown,
+  ): void {
+    const failureClass = classifyForgePollFailure(error);
+    if (failureClass === "environment" || failureClass === "auth") {
+      this.degradeForgePrStatusPoll(target, failureClass);
+      return;
+    }
+    target.forgePrStatusConsecutiveErrors += 1;
+    if (target.forgePrStatusConsecutiveErrors >= FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS) {
+      this.degradeForgePrStatusPoll(target, "repeated");
+      return;
+    }
+    const fields = {
+      err: error,
+      cwd: target.cwd,
+      forge,
+      reason: "self-heal-forge-pr-status",
+    };
+    if (target.forgePrStatusConsecutiveErrors === 1) {
+      this.logger.warn(fields, "Failed to run forge PR status self-heal refresh");
+    } else {
+      this.logger.debug(fields, "Failed to run forge PR status self-heal refresh");
+    }
+  }
+
   private stopForgePrStatusPollForTarget(target: WorkspaceGitTarget): void {
     target.forgePrStatusPollSubscription?.unsubscribe();
     target.forgePrStatusPollSubscription = null;
     target.forgePrStatusPollKey = null;
+    target.forgePrStatusDegraded = null;
+    target.forgePrStatusConsecutiveErrors = 0;
   }
 
   private async loadIgnoredDirs(rootPath: string): Promise<Set<string>> {
