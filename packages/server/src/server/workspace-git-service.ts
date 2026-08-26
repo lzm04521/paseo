@@ -1528,29 +1528,50 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const signal = this.disposeController.signal;
     let outcome: "pending" | "accepted" | "expired" = "pending";
     let timeout: NodeJS.Timeout | null = null;
+    let timeoutFired = false;
     let removeAbortListener = () => {};
     let unsubscribePromise: Promise<void> | null = null;
     let subscriptionPromise: Promise<FileObserverSubscription>;
     const startedAtMs = Date.now();
-    const settledWithDiag = () => {
+    // F1 review: the settle diagnostic must not read `outcome`. A reaction on the
+    // raw subscribe promise runs BEFORE the Promise.race continuation assigns
+    // "accepted", so every settle would log "pending". Derive the label from how
+    // the raw promise settled instead: once the deadline fired or disposal
+    // aborted, any (late) settle is an expiry; otherwise resolution is acceptance
+    // and rejection is an error.
+    const reportSettleWithDiag = (settledAs: "resolved" | "rejected") => {
       onSubscribeSettled();
-      if (this.watchDiagnostics) {
-        this.logger.warn(
-          {
-            watchPath,
-            durationMs: Date.now() - startedAtMs,
-            outcome,
-          },
-          "watch_diag_subscribe_settled",
-        );
+      if (!this.watchDiagnostics) {
+        return;
       }
+      let settleOutcome: "accepted" | "error" | "expired";
+      if (timeoutFired || signal.aborted) {
+        settleOutcome = "expired";
+      } else {
+        settleOutcome = settledAs === "resolved" ? "accepted" : "error";
+      }
+      this.logger.warn(
+        {
+          watchPath,
+          durationMs: Date.now() - startedAtMs,
+          outcome: settleOutcome,
+        },
+        "watch_diag_subscribe_settled",
+      );
     };
     try {
-      subscriptionPromise = this.deps
-        .subscribe(watchPath, callback, options)
-        .finally(settledWithDiag);
+      subscriptionPromise = this.deps.subscribe(watchPath, callback, options).then(
+        (subscription) => {
+          reportSettleWithDiag("resolved");
+          return subscription;
+        },
+        (error: unknown) => {
+          reportSettleWithDiag("rejected");
+          throw error;
+        },
+      );
     } catch (error) {
-      settledWithDiag();
+      reportSettleWithDiag("rejected");
       throw error;
     }
     void subscriptionPromise.then(
@@ -1566,6 +1587,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => {
         outcome = "expired";
+        timeoutFired = true;
         if (this.watchDiagnostics) {
           this.logger.warn(
             {

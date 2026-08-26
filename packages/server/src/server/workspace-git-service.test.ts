@@ -2126,6 +2126,35 @@ describe("workspace git watch diagnostics", () => {
     service.dispose();
   });
 
+  test("successful subscribes settle with outcome accepted", async () => {
+    const logger = createLogger();
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(async () => createAsyncSubscription()),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+      watchDiagnostics: true,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    const settleLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_settled",
+    );
+    // Both the working-tree and repo-metadata chains subscribe and settle here.
+    expect(settleLogs.length).toBeGreaterThanOrEqual(2);
+    for (const [fields] of settleLogs) {
+      expect(fields).toMatchObject({ outcome: "accepted" });
+    }
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
   test("diagnostics are silent when disabled", async () => {
     const logger = createLogger();
     const deps = {
@@ -2222,6 +2251,42 @@ describe("degraded git poll relief", () => {
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  // F1 review: pins the repo-metadata fallback chain (startRepoMetadataFallback)
+  // to the 30s degraded baseline. Its polls drive getCheckoutShortstat (structural
+  // refresh rewrites diffStat from shortstat), while working-tree chain polls drive
+  // getCheckoutWorktreeState — so shortstat isolates this chain's counter.
+  test("repo-metadata fallback polls at the degraded cadence, not legacy 5s", async () => {
+    const deps = createFallbackDeps();
+    // Must agree with the shortstat mock above (see createFallbackDeps comment):
+    // shared fingerprint state means a mismatch would oscillate every tick.
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: false,
+      diffStat: { additions: 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const baseline = deps.getCheckoutShortstat.mock.calls.length;
+
+    // random()=0 → first degraded interval is 24s (30s − 20% jitter floor).
+    // A regression to the legacy 5s tail would poll at ~4s and trip these.
+    for (let second = 2; second <= 23; second++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(deps.getCheckoutShortstat.mock.calls.length).toBe(baseline);
+    }
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(deps.getCheckoutShortstat.mock.calls.length).toBe(baseline + 1);
 
     subscription.unsubscribe();
     service.dispose();

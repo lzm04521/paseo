@@ -51,7 +51,7 @@ daemon 启动
 | 注册即 fetch | `ensureRepoTarget` 尾部 `void this.runRepoFetch(repoTarget)`（L1825）                                                                |
 | fetch 周期   | `BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000`（L74），错误无退避（`runRepoFetch` L3105 起）                                           |
 | PR 轮询      | `retainGenericForgePrStatusPoll`（L2466 起）、`computeGenericForgeNextInterval`（L3520）：`min(base × 2^(n-1), 300_000)`，无放弃路径 |
-| 退化轮询     | `startWorkingTreeWatchFallback`（L1495）、`DEGRADED_GIT_POLL_INTERVAL_MS = 5_000`（L80）                                             |
+| 退化轮询     | `startWorkingTreeWatchFallback`（L1495）、`DEGRADED_GIT_POLL_INTERVAL_MS = 5_000`（L80；已删除，F1 改为 30s 基线）                                             |
 | watcher 后端 | `file-observer/internal/native-recursive.ts`：`fs.watch(root, {recursive:true})`，订阅 10s 内需通过 liveness canary                  |
 
 ## 3. 修复设计
