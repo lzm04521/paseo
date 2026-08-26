@@ -1002,6 +1002,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       movedRemoteRefs: new Set(),
     });
     this.scheduleWorkspaceObservationSetup(target);
+    if (target.forgePrStatusDegraded !== null) {
+      target.forgePrStatusDegraded = null;
+      this.updateForgePrStatusPollForTarget(target, { forceImmediate: true });
+    }
   }
 
   async requestWorkingTreeWatch(

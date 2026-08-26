@@ -2022,4 +2022,34 @@ describe("forge pr status poll degraded", () => {
     subscription.unsubscribe();
     service.dispose();
   });
+
+  test("explicit refresh recovers a degraded poll immediately", async () => {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(),
+    } as unknown as { getCurrentPullRequestStatus: ReturnType<typeof vi.fn> };
+    github.getCurrentPullRequestStatus
+      .mockImplementationOnce(async () => {
+        throw new ForgeCliMissingError();
+      })
+      .mockResolvedValue(null);
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github: github as unknown as ForgeService },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    await service.refresh(REPO_CWD);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(2);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
 });
