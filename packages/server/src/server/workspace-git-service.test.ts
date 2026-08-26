@@ -12,6 +12,7 @@ import type {
 import {
   classifyForgePollFailure,
   computeBackgroundFetchDelayMs,
+  computeDegradedPollIntervalMs,
   computeGenericForgeNextInterval,
   computeInitialGitActivityDelayMs,
   FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS,
@@ -281,6 +282,7 @@ interface CreateServiceTestOptions {
   now?: () => Date;
   observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
   watchDiagnostics?: boolean;
+  degradedPollRandom?: () => number;
   logger?: pino.Logger;
 }
 
@@ -344,6 +346,7 @@ function createService(options?: CreateServiceTestOptions) {
       ? { observationSchedulePolicy: options.observationSchedulePolicy }
       : {}),
     watchDiagnostics: options?.watchDiagnostics,
+    degradedPollRandom: options?.degradedPollRandom,
     deps,
   });
 }
@@ -2142,6 +2145,113 @@ describe("workspace git watch diagnostics", () => {
     expect(
       logger.warn.mock.calls.filter(([, msg]) => msg === "watch_diag_subscribe_settled").length,
     ).toBe(0);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+});
+
+describe("degraded git poll relief", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  test("interval math: base 30s, idle 60s after 3 polls, jitter within ±20%", () => {
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0.5 })).toBe(30_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 2, random: 0.5 })).toBe(30_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 30, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0 })).toBe(24_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 1 })).toBe(36_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0 })).toBe(48_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 1 })).toBe(72_000);
+  });
+
+  function createFallbackDeps() {
+    return {
+      hasOriginRemote: vi.fn(async () => false),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      // Must agree with the clean getCheckoutWorktreeState below: the repo-metadata
+      // fallback chain rewrites diffStat from shortstat on its own polls, and a
+      // mismatch would oscillate the fingerprint every tick, defeating the idle ramp.
+      getCheckoutShortstat: vi.fn(async () => ({
+        additions: 0,
+        deletions: 0,
+      })),
+      subscribe: vi.fn(async () => {
+        throw new Error("fs.watch unavailable");
+      }),
+    };
+  }
+
+  // Baseline note (F1 Task 2, R3 ruling): observation setup does NOT invoke
+  // getCheckoutWorktreeState (the initial refresh reads shortstat instead), so the
+  // count starts at 0 and each fallback poll adds exactly 1 — hence every expected
+  // count below sits one below the brief's literal draft.
+  test("fallback polls at 30s cadence and slows to 60s after idle polls", async () => {
+    const deps = createFallbackDeps();
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: false,
+      diffStat: { additions: 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0.5,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("a changed fingerprint resets the idle counter", async () => {
+    const deps = createFallbackDeps();
+    let dirty = false;
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: dirty,
+      diffStat: { additions: dirty ? 5 : 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0.5,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
+    dirty = true;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
+    dirty = false;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
 
     subscription.unsubscribe();
     service.dispose();

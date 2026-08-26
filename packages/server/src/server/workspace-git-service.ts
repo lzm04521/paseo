@@ -156,7 +156,22 @@ export function classifyForgePollFailure(error: unknown): ForgePollFailureClass 
   return "transient";
 }
 
-const DEGRADED_GIT_POLL_INTERVAL_MS = 5_000;
+const DEGRADED_GIT_POLL_BASE_INTERVAL_MS = 30_000;
+const DEGRADED_GIT_POLL_IDLE_INTERVAL_MS = 60_000;
+const DEGRADED_GIT_POLL_IDLE_AFTER_POLLS = 3;
+const DEGRADED_GIT_POLL_JITTER_RATIO = 0.2;
+
+export function computeDegradedPollIntervalMs(input: {
+  idlePolls: number;
+  random: number;
+}): number {
+  const base =
+    input.idlePolls >= DEGRADED_GIT_POLL_IDLE_AFTER_POLLS
+      ? DEGRADED_GIT_POLL_IDLE_INTERVAL_MS
+      : DEGRADED_GIT_POLL_BASE_INTERVAL_MS;
+  const jitterFactor = 1 + (input.random * 2 - 1) * DEGRADED_GIT_POLL_JITTER_RATIO;
+  return Math.round(base * jitterFactor);
+}
 // Keep whole workspace pipelines below the lower-level Git process pool so daemon control work
 // retains subprocess and event-loop headroom during large workspace reconciliation bursts.
 export const WORKSPACE_GIT_REFRESH_CONCURRENCY = 4;
@@ -460,6 +475,7 @@ interface WorkspaceGitServiceOptions {
   fileObserver?: FileObserver;
   observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
   watchDiagnostics?: boolean;
+  degradedPollRandom?: () => number;
   deps?: Partial<WorkspaceGitServiceDependencies>;
 }
 
@@ -515,6 +531,7 @@ interface RepoGitTarget {
   workspaceKeys: Set<string>;
   subscription: FileObserverSubscription | null;
   fallbackPolling: boolean;
+  fallbackIdlePolls: number;
   fallbackPollTimer: NodeJS.Timeout | null;
   recovery: WatchRecoveryState;
   fetchTimer: NodeJS.Timeout | null;
@@ -547,6 +564,7 @@ interface WorkingTreeWatchTarget {
   aliases: Set<string>;
   workspaceKeys: Set<string>;
   fallbackPolling: boolean;
+  fallbackIdlePolls: number;
   fallbackPollTimer: NodeJS.Timeout | null;
   recovery: WatchRecoveryState;
   listeners: Set<() => void>;
@@ -634,6 +652,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private disposePromise: Promise<void> | null = null;
   private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
   private readonly watchDiagnostics: boolean;
+  private readonly degradedPollRandom: () => number;
   private initialGitActivitySequence = 0;
   private initialGitActivityAnchorMs: number | null = null;
   private lastInitialGitActivitySlotMs: number | null = null;
@@ -682,6 +701,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.observationSchedulePolicy =
       options.observationSchedulePolicy ?? loadWorkspaceGitObservationSchedulePolicy();
     this.watchDiagnostics = options.watchDiagnostics ?? isWatchDiagnosticsEnabled();
+    this.degradedPollRandom = options.degradedPollRandom ?? Math.random;
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
       options.deps,
@@ -1479,6 +1499,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       aliases: new Set([cwd]),
       workspaceKeys: new Set(),
       fallbackPolling: false,
+      fallbackIdlePolls: 0,
       fallbackPollTimer: null,
       recovery: { attemptCount: 0, timer: null },
       listeners: new Set(),
@@ -1669,6 +1690,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       target.subscription = subscription;
       if (options?.replaceFallback && target.repoRoot !== null) {
         target.fallbackPolling = false;
+        target.fallbackIdlePolls = 0;
         if (target.fallbackPollTimer) {
           clearTimeout(target.fallbackPollTimer);
           target.fallbackPollTimer = null;
@@ -1697,6 +1719,22 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     }
   }
 
+  /**
+   * F1 缓解：按指纹是否变化更新 idle 计数并返回下一轮间隔。
+   * fingerprints 为 [{before, after}]；任一变化即归零。
+   */
+  private nextDegradedPollDelayMs(
+    target: { fallbackIdlePolls: number },
+    fingerprints: Array<{ before: string | null; after: string | null }>,
+  ): number {
+    const changed = fingerprints.some((entry) => entry.before !== entry.after);
+    target.fallbackIdlePolls = changed ? 0 : target.fallbackIdlePolls + 1;
+    return computeDegradedPollIntervalMs({
+      idlePolls: target.fallbackIdlePolls,
+      random: this.degradedPollRandom(),
+    });
+  }
+
   private startWorkingTreeWatchFallback(
     target: WorkingTreeWatchTarget,
     reason: WorkingTreeWatchFallbackReason,
@@ -1705,12 +1743,19 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       return;
     }
     target.fallbackPolling = true;
+    target.fallbackIdlePolls = 0;
     const { cwd } = target;
     const poll = async () => {
       target.fallbackPollTimer = null;
       if (target.closed || this.workingTreeWatchTargets.get(target.cwd) !== target) {
         return;
       }
+      const capturedBefore = new Map(
+        Array.from(target.workspaceKeys, (workspaceKey) => {
+          const workspaceTarget = this.workspaceTargets.get(workspaceKey);
+          return [workspaceKey, workspaceTarget?.latestFingerprint ?? null] as const;
+        }),
+      );
       await Promise.all(
         Array.from(target.workspaceKeys, async (workspaceKey) => {
           const workspaceTarget = this.workspaceTargets.get(workspaceKey);
@@ -1735,16 +1780,27 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       );
       this.notifyWorkingTreeConsumers(target);
       if (!target.closed && (target.subscription === null || target.repoRoot === null)) {
-        target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+        const fingerprints = Array.from(target.workspaceKeys, (workspaceKey) => {
+          const workspaceTarget = this.workspaceTargets.get(workspaceKey);
+          const before = capturedBefore.get(workspaceKey) ?? null;
+          return { before, after: workspaceTarget?.latestFingerprint ?? null };
+        });
+        target.fallbackPollTimer = setTimeout(
+          poll,
+          this.nextDegradedPollDelayMs(target, fingerprints),
+        );
       } else {
         target.fallbackPolling = false;
       }
     };
-    target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+    target.fallbackPollTimer = setTimeout(
+      poll,
+      computeDegradedPollIntervalMs({ idlePolls: 0, random: this.degradedPollRandom() }),
+    );
     this.logger.warn(
       {
         cwd,
-        intervalMs: DEGRADED_GIT_POLL_INTERVAL_MS,
+        intervalMs: DEGRADED_GIT_POLL_BASE_INTERVAL_MS,
         reason,
       },
       "Working tree watcher unavailable; using bounded polling fallback",
@@ -1990,6 +2046,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       workspaceKeys: new Set([workspaceTarget.cwd]),
       subscription: null,
       fallbackPolling: false,
+      fallbackIdlePolls: 0,
       fallbackPollTimer: null,
       recovery: { attemptCount: 0, timer: null },
       fetchTimer: null,
@@ -2133,6 +2190,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       target.subscription = subscription;
       if (options?.replaceFallback) {
         target.fallbackPolling = false;
+        target.fallbackIdlePolls = 0;
         if (target.fallbackPollTimer) {
           clearTimeout(target.fallbackPollTimer);
           target.fallbackPollTimer = null;
@@ -2506,11 +2564,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       return;
     }
     target.fallbackPolling = true;
+    target.fallbackIdlePolls = 0;
     const poll = async () => {
       target.fallbackPollTimer = null;
       if (target.closed || this.repoTargets.get(target.repoGitRoot) !== target) {
         return;
       }
+      const capturedBefore = new Map(
+        Array.from(target.workspaceKeys, (workspaceKey) => {
+          const workspaceTarget = this.workspaceTargets.get(workspaceKey);
+          return [workspaceKey, workspaceTarget?.latestFingerprint ?? null] as const;
+        }),
+      );
       const workingTreeTargets = new Set<WorkingTreeWatchTarget>();
       await Promise.all(
         Array.from(target.workspaceKeys, async (workspaceKey) => {
@@ -2543,12 +2608,23 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         this.notifyWorkingTreeConsumers(workingTreeTarget);
       }
       if (!target.closed && target.subscription === null) {
-        target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+        const fingerprints = Array.from(target.workspaceKeys, (workspaceKey) => {
+          const workspaceTarget = this.workspaceTargets.get(workspaceKey);
+          const before = capturedBefore.get(workspaceKey) ?? null;
+          return { before, after: workspaceTarget?.latestFingerprint ?? null };
+        });
+        target.fallbackPollTimer = setTimeout(
+          poll,
+          this.nextDegradedPollDelayMs(target, fingerprints),
+        );
       } else {
         target.fallbackPolling = false;
       }
     };
-    target.fallbackPollTimer = setTimeout(poll, DEGRADED_GIT_POLL_INTERVAL_MS);
+    target.fallbackPollTimer = setTimeout(
+      poll,
+      computeDegradedPollIntervalMs({ idlePolls: 0, random: this.degradedPollRandom() }),
+    );
   }
 
   private scheduleWorkspaceRefresh(
