@@ -162,6 +162,7 @@ function createService(
   logger: pino.Logger = createLogger(),
   fileObserver?: FileObserver,
   observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy = IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+  serviceOptions?: Record<string, unknown>,
 ) {
   const defaultGetCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
   const defaultGetCheckoutShortstat = vi.fn(async () => null);
@@ -176,6 +177,7 @@ function createService(
     paseoHome: "/tmp/paseo-home",
     fileObserver,
     ...(observationSchedulePolicy ? { observationSchedulePolicy } : {}),
+    ...(serviceOptions ?? {}),
     deps: {
       subscribe: watcher.subscribe,
       getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutFacts(cwd)),
@@ -1424,6 +1426,7 @@ describe("WorkspaceGitService checkout observation", () => {
       getCheckoutSnapshotFacts,
       getCheckoutStatus,
       getPullRequestStatus,
+      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
     });
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
@@ -1439,7 +1442,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.peekSnapshot(REPO_CWD)).not.toBeNull();
       expect(getCheckoutStatus).toHaveBeenCalledTimes(1);
     });
-    await vi.advanceTimersByTimeAsync(7_000);
+    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(36_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(2);
     });
@@ -1454,7 +1458,7 @@ describe("WorkspaceGitService checkout observation", () => {
     await vi.waitFor(() => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(36_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(3);
     });
@@ -1515,7 +1519,8 @@ describe("WorkspaceGitService checkout observation", () => {
     expect(watcher.records.filter((record) => record.directory === GIT_DIR)).toHaveLength(0);
 
     isGit = true;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证发现拍触发。
+    await vi.advanceTimersByTimeAsync(36_000);
     await vi.waitFor(() => {
       expect(service.peekSnapshot(REPO_CWD)?.git.isGit).toBe(true);
       expect(service.getMetrics()).toMatchObject({
@@ -1633,7 +1638,8 @@ describe("WorkspaceGitService checkout observation", () => {
     );
 
     const statusCallsBeforePoll = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 退化轮询基线 30s ±20% 抖动（24s~36s），推进 36s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(36_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsBeforePoll);
     });
@@ -1654,10 +1660,18 @@ describe("WorkspaceGitService checkout observation", () => {
       return openedSubscription.promise;
     });
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
-    const service = createService(watcher, {
-      getCheckoutStatus,
-      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
-    });
+    // 固定抖动下限：首拍恰为 24s，早于固定 30s 的恢复重试，保持"先轮询、后恢复"的断言顺序。
+    const service = createService(
+      watcher,
+      {
+        getCheckoutStatus,
+        getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
+      },
+      undefined,
+      undefined,
+      IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+      { degradedPollRandom: () => 0 },
+    );
 
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     await vi.waitFor(() => {
@@ -1676,11 +1690,12 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceObservationSetupInFlightCount).toBe(0);
     });
     const statusCallsAfterSetup = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 首拍在 24s（抖动固定为下限）；推进 25s 保证轮询已发生、而 30s 的恢复重试未到。
+    await vi.advanceTimersByTimeAsync(25_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterSetup);
     });
-    await vi.advanceTimersByTimeAsync(24_000);
+    await vi.advanceTimersByTimeAsync(4_000);
     expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(1);
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.waitFor(() => {
@@ -1861,12 +1876,20 @@ describe("WorkspaceGitService checkout observation", () => {
     const runGitCommand = vi.fn(async () => {
       throw new Error("not a git repository");
     });
-    const service = createService(watcher, {
-      getCheckoutSnapshotFacts,
-      getCheckoutStatus,
-      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
-      runGitCommand,
-    });
+    // 固定抖动下限，使发现轮询节奏确定（首拍 24s、次拍 48s），便于断言恢复后仍在轮询。
+    const service = createService(
+      watcher,
+      {
+        getCheckoutSnapshotFacts,
+        getCheckoutStatus,
+        getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
+        runGitCommand,
+      },
+      undefined,
+      undefined,
+      IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+      { degradedPollRandom: () => 0 },
+    );
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
     await vi.waitFor(() => {
@@ -1884,7 +1907,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
     const statusCallsAfterRecovery = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 次拍在恢复完成后 ~17s（24s+24s-31s）；推进 20s 保证发现轮询仍在继续。
+    await vi.advanceTimersByTimeAsync(20_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterRecovery);
     });
