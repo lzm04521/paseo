@@ -162,6 +162,17 @@ const DEGRADED_GIT_POLL_INTERVAL_MS = 5_000;
 export const WORKSPACE_GIT_REFRESH_CONCURRENCY = 4;
 export const WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY = 2;
 export const WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS = 10_000;
+
+/**
+ * Opt-in diagnostics for watcher subscription stalls (F1). Off by default; enable
+ * via PASEO_WS_GIT_WATCH_DIAG=1 or the watchDiagnostics constructor option. When
+ * enabled, subscription settle durations, deadline hits, canary verify durations,
+ * and observer metrics snapshots are logged at warn level for field triage.
+ */
+export function isWatchDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.PASEO_WS_GIT_WATCH_DIAG === "1";
+}
+
 const WATCH_RECOVERY_BASE_DELAY_MS = 30_000;
 const WATCH_RECOVERY_MAX_ATTEMPTS = 3;
 // Auxiliary reads may reuse cached values within this window; snapshots do not expire on read.
@@ -448,6 +459,7 @@ interface WorkspaceGitServiceOptions {
   worktreesRoot?: string;
   fileObserver?: FileObserver;
   observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
+  watchDiagnostics?: boolean;
   deps?: Partial<WorkspaceGitServiceDependencies>;
 }
 
@@ -621,6 +633,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private disposed = false;
   private disposePromise: Promise<void> | null = null;
   private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
+  private readonly watchDiagnostics: boolean;
   private initialGitActivitySequence = 0;
   private initialGitActivityAnchorMs: number | null = null;
   private lastInitialGitActivitySlotMs: number | null = null;
@@ -668,6 +681,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.fileObserver = options.fileObserver ?? createFileObserver();
     this.observationSchedulePolicy =
       options.observationSchedulePolicy ?? loadWorkspaceGitObservationSchedulePolicy();
+    this.watchDiagnostics = options.watchDiagnostics ?? isWatchDiagnosticsEnabled();
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
       options.deps,
@@ -1496,12 +1510,26 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     let removeAbortListener = () => {};
     let unsubscribePromise: Promise<void> | null = null;
     let subscriptionPromise: Promise<FileObserverSubscription>;
+    const startedAtMs = Date.now();
+    const settledWithDiag = () => {
+      onSubscribeSettled();
+      if (this.watchDiagnostics) {
+        this.logger.warn(
+          {
+            watchPath,
+            durationMs: Date.now() - startedAtMs,
+            outcome,
+          },
+          "watch_diag_subscribe_settled",
+        );
+      }
+    };
     try {
       subscriptionPromise = this.deps
         .subscribe(watchPath, callback, options)
-        .finally(onSubscribeSettled);
+        .finally(settledWithDiag);
     } catch (error) {
-      onSubscribeSettled();
+      settledWithDiag();
       throw error;
     }
     void subscriptionPromise.then(
@@ -1517,6 +1545,16 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => {
         outcome = "expired";
+        if (this.watchDiagnostics) {
+          this.logger.warn(
+            {
+              watchPath,
+              deadlineMs: WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS,
+              fileObserver: this.fileObserver.getDiagnostics(),
+            },
+            "watch_diag_subscribe_deadline",
+          );
+        }
         reject(new WorkspaceGitWatcherSubscriptionTimeoutError(watchPath));
       }, WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS);
     });
@@ -1645,7 +1683,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         throw error;
       }
       this.logger.warn(
-        { err: error, cwd: target.cwd },
+        {
+          err: error,
+          cwd: target.cwd,
+          ...(this.watchDiagnostics ? { fileObserver: this.fileObserver.getDiagnostics() } : {}),
+        },
         "Failed to start working tree watcher; using degraded polling",
       );
       if (!options?.replaceFallback) {
@@ -2068,7 +2110,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         markSubscribeSettled,
       );
       openedSubscription = subscription;
+      const canaryStartedAtMs = Date.now();
       await canary.verify(this.disposeController.signal);
+      if (this.watchDiagnostics) {
+        this.logger.warn(
+          { repoGitRoot: target.repoGitRoot, durationMs: Date.now() - canaryStartedAtMs },
+          "watch_diag_canary_verified",
+        );
+      }
       if (watcherErrored) {
         await this.unsubscribeWatcherSubscription(subscription, target.repoGitRoot);
         return false;
@@ -2101,7 +2150,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         throw error;
       }
       this.logger.warn(
-        { err: error, repoGitRoot: target.repoGitRoot },
+        {
+          err: error,
+          repoGitRoot: target.repoGitRoot,
+          ...(this.watchDiagnostics ? { fileObserver: this.fileObserver.getDiagnostics() } : {}),
+        },
         "Failed to start repository metadata watcher; using degraded polling",
       );
       if (!options?.replaceFallback) {
@@ -2691,7 +2744,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       } catch (error) {
         this.handleForgePollError(target, forge, error);
       } finally {
-        schedule(computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors));
+        schedule(
+          computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors),
+        );
       }
     };
 
@@ -2759,11 +2814,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     );
   }
 
-  private handleForgePollError(
-    target: WorkspaceGitTarget,
-    forge: string,
-    error: unknown,
-  ): void {
+  private handleForgePollError(target: WorkspaceGitTarget, forge: string, error: unknown): void {
     const failureClass = classifyForgePollFailure(error);
     if (failureClass === "environment" || failureClass === "auth") {
       this.degradeForgePrStatusPoll(target, failureClass);

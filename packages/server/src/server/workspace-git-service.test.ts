@@ -15,6 +15,7 @@ import {
   computeGenericForgeNextInterval,
   computeInitialGitActivityDelayMs,
   FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS,
+  isWatchDiagnosticsEnabled,
   loadWorkspaceGitObservationSchedulePolicy,
   shouldRefreshMetadataAfterFetchFailure,
   shouldWarnOnFetchFailure,
@@ -279,6 +280,7 @@ interface CreateServiceTestOptions {
   getWorkspaceGitSelfHealPhaseMs?: (cwd: string) => number;
   now?: () => Date;
   observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
+  watchDiagnostics?: boolean;
   logger?: pino.Logger;
 }
 
@@ -341,6 +343,7 @@ function createService(options?: CreateServiceTestOptions) {
     ...(options?.observationSchedulePolicy
       ? { observationSchedulePolicy: options.observationSchedulePolicy }
       : {}),
+    watchDiagnostics: options?.watchDiagnostics,
     deps,
   });
 }
@@ -2048,6 +2051,97 @@ describe("forge pr status poll degraded", () => {
     await service.refresh(REPO_CWD);
     await vi.advanceTimersByTimeAsync(0);
     expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(2);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+});
+
+describe("workspace git watch diagnostics", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  test("isWatchDiagnosticsEnabled reads the env flag", () => {
+    expect(isWatchDiagnosticsEnabled({})).toBe(false);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "1" })).toBe(true);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "0" })).toBe(false);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "yes" })).toBe(false);
+  });
+
+  test("deadline and late-settle diagnostics record real durations", async () => {
+    const logger = createLogger();
+    const subscribeSettlers: Array<(value: unknown) => void> = [];
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(
+        (_watchPath: string, _callback: unknown, _options: unknown) =>
+          new Promise((resolve) => {
+            subscribeSettlers.push(resolve);
+          }),
+      ),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+      watchDiagnostics: true,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const deadlineLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_deadline",
+    );
+    expect(deadlineLogs.length).toBeGreaterThanOrEqual(1);
+    const deadlineFields = deadlineLogs[0][0] as Record<string, unknown>;
+    expect(deadlineFields["deadlineMs"]).toBe(10_000);
+    expect(deadlineFields["fileObserver"]).toBeDefined();
+
+    // Settle only the first subscription — the one opened at t=0 whose deadline
+    // expired. Later subscriptions opened after that deadline stay pending here.
+    subscribeSettlers[0]?.({
+      updateIgnore: async () => {},
+      unsubscribe: async () => {},
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const settleLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_settled",
+    );
+    expect(settleLogs.length).toBeGreaterThanOrEqual(1);
+    const settleFields = settleLogs[settleLogs.length - 1][0] as Record<string, unknown>;
+    expect(settleFields["durationMs"]).toBeGreaterThanOrEqual(10_000);
+    expect(settleFields["outcome"]).toBe("expired");
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("diagnostics are silent when disabled", async () => {
+    const logger = createLogger();
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(
+        (_watchPath: string, _callback: unknown, _options: unknown) => new Promise<void>(() => {}),
+      ),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(
+      logger.warn.mock.calls.filter(([, msg]) => msg === "watch_diag_subscribe_settled").length,
+    ).toBe(0);
 
     subscription.unsubscribe();
     service.dispose();
