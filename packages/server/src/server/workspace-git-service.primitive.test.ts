@@ -408,9 +408,14 @@ function createService(options?: CreateServiceOptions) {
   return new WorkspaceGitServiceImpl({
     logger: createLogger() as never,
     paseoHome: "/tmp/paseo-test",
-    ...(options?.observationSchedulePolicy
-      ? { observationSchedulePolicy: options.observationSchedulePolicy }
-      : {}),
+    // F5b 起首次 git 活动默认有 30s 启动宽限；primitive 用例只测基础行为
+    // （stagger 语义由 workspace-git-service.test.ts / observation.test.ts 覆盖），
+    // 默认禁用宽限保持旧时序，需要时单测显式传入 policy 覆盖。
+    observationSchedulePolicy: options?.observationSchedulePolicy ?? {
+      bootGraceMs: 0,
+      staggerMs: 0,
+      jitterMs: 0,
+    },
     deps: buildServiceDeps(options),
   });
 }
