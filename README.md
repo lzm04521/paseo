@@ -34,7 +34,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.6.1-local.2-x64.exe`）安装。仅支持 Windows x64。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.6.1-local.3-x64.exe`）安装。仅支持 Windows x64。
 
 已安装旧版时，应用启动后自动检查新版本并升级，无需手动重装。
 
@@ -47,6 +47,13 @@
 - **Directory Opus 兼容**：安装了 Directory Opus 时，「在文件管理器中显示 / Reveal」优先复用已打开的 Opus lister，未安装则回退 Windows 资源管理器。
 - **「在 VSCode 打开」菜单**：workspace 三点菜单、project 三点菜单、文件浏览器右键菜单，均可在 VSCode 打开 workspace / project / 文件 / 文件夹。
 - **@ 文件选择 gitignore 例外**：workspace 根下的 `doc` / `docs` / `handoff` 目录即使被 .gitignore 排除，@ 提及时仍可见；例外清单可在 Settings → Host → Agents 配置。
+
+### 后台稳定性
+
+- **git 观测启动错峰与失败退避**：daemon 启动 / 重连风暴时，各 workspace 的首次 git 刷新按 30s 启动宽限 + 每仓 2s 间隔错峰执行，避免集中刷新形成 git 命令风暴拖慢冷启动；后台 git fetch 连续失败按指数间隔退避；forge（GitHub 等）PR 轮询对认证 / 环境类失败停止轮询、瞬时失败指数退避（上限 15 分钟），手动刷新工作区可恢复已降级的 PR 轮询。
+- **文件 watcher 降级轮询放宽**：大仓 watcher 订阅超时进入降级轮询时，基线放宽到 60s（空闲爬升至 120s），显著降低大仓的 CPU / IO 后台负载。
+- **Windows 冷启动提速**：PATH 上的可执行文件改用 `where.exe` 解析并缓存结果（并发去重），provider 可用性探测卡住时 10 秒快速失败，缓解启动后选模型 / 连 workspace 卡顿。
+- **watch 订阅诊断开关**：设置环境变量 `PASEO_WS_GIT_WATCH_DIAG=1` 并重启后，daemon 日志输出各 workspace watcher 订阅 settle / canary 耗时，用于排查大仓 watcher 问题。
 
 ### 界面 / 行为
 
@@ -67,7 +74,7 @@
 
 ## 版本与更新
 
-- 版本号 = 对应上游版本 + `-local.N`（如 `0.6.1-local.2`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
+- 版本号 = 对应上游版本 + `-local.N`（如 `0.6.1-local.3`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
 - 应用内自动更新指向本仓库 Release；跨上游版本的升级链无缝（如 `0.5.x-local.N → 0.6.x-local.1`）。
 - 不运行上游的 CI / Android / Docker / 网站等构建流程，仅构建 Windows x64 桌面版。
 
