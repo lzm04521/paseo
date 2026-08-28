@@ -601,15 +601,26 @@ export function FileExplorerPane({
       if (!fileManagerTarget) {
         return;
       }
+      // Directories open themselves (like the VS Code action); only files are revealed
+      // inside their containing folder. Passing a directory as filePath would resolve to
+      // its parent in both the Opus and shell.showItemInFolder paths.
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
+      });
       try {
-        await openDesktopTarget({
-          editorId: fileManagerTarget.id,
-          workspacePath: normalizedWorkspaceRoot,
-          filePath: buildAbsoluteExplorerPath({
-            workspaceRoot: normalizedWorkspaceRoot,
-            entryPath: entry.path,
-          }),
-        });
+        await openDesktopTarget(
+          entry.kind === "directory"
+            ? {
+                editorId: fileManagerTarget.id,
+                workspacePath: absoluteEntryPath,
+              }
+            : {
+                editorId: fileManagerTarget.id,
+                workspacePath: normalizedWorkspaceRoot,
+                filePath: absoluteEntryPath,
+              },
+        );
       } catch (cause) {
         toast.error(
           cause instanceof Error ? cause.message : t("workspace.fileExplorer.errors.revealFailed"),
