@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/github/v/release/lzm04521/paseo?style=flat&logo=github&include_prereleases" alt="release">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D6?logo=windows11" alt="platform">
-  <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="license">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="license">
 </p>
 
 ## 简介
@@ -34,7 +34,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.6.1-local.4-x64.exe`）安装。仅支持 Windows x64。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.7.0-local.1-x64.exe`）安装。仅支持 Windows x64。
 
 已安装旧版时，应用启动后自动检查新版本并升级，无需手动重装。
 
@@ -45,7 +45,7 @@
 ### 桌面 / 文件操作
 
 - **Directory Opus 兼容**：安装了 Directory Opus 时，「在文件管理器中显示 / Reveal」优先复用已打开的 Opus lister，未安装则回退 Windows 资源管理器。
-- **「在 VSCode 打开」菜单**：workspace 三点菜单、project 三点菜单、文件浏览器右键菜单，均可在 VSCode 打开 workspace / project / 文件 / 文件夹。
+- **「在 VSCode 打开」菜单**：workspace 三点菜单、project 三点菜单、文件浏览器右键菜单，均可在 VSCode 打开 workspace / project / 文件。文件夹条目自 v0.7.0 起改用上游「在 {首选编辑器} 打开」菜单项（跟随设置中的首选编辑器）。
 - **@ 文件选择 gitignore 例外**：workspace 根下的 `doc` / `docs` / `handoff` 目录即使被 .gitignore 排除，@ 提及时仍可见；例外清单可在 Settings → Host → Agents 配置。
 
 ### 后台稳定性
@@ -64,7 +64,7 @@
   - 以上仅桌面宽布局生效，不覆盖紧凑窗口的悬浮侧栏。
 - **「新建 workspace」页文件导航**：新建 workspace 时，右侧显示当前所选项目的文件树，切换项目自动刷新；点击文件在面板内预览（代码高亮 / Markdown / 图片，带返回按钮，可滚动、可选中复制，右键菜单仍可外部编辑器打开）。标题栏按钮 / Ctrl(Cmd)+E 开关，开合状态与宽度（220–720px）跨会话记忆。上游资源管理器仅覆盖已创建的工作区，本页补足新建流程中的文件浏览。
 - **终端菜单（打开cmd / 打开PowerShell）**：所有「打开终端」类菜单（标签页「+」菜单、Workspace 菜单、命令中心、/new 启动选择器）提供「打开cmd」与「打开PowerShell」两项；PowerShell 按优先级自动解析：设置里配置的路径 → PATH 上的 pwsh → `C:\Program Files\PowerShell\7` → 系统 Windows PowerShell。可在 Settings → Host → 终端页配置「PowerShell 路径」，即改即生效。
-- **文件夹「在Explorer中显示」打开自身**：文件浏览器右键文件夹选「在Explorer中显示」时打开该文件夹本身（与「在VSCode中打开」对文件夹的语义对齐），而非定位到其父目录；文件条目行为不变。
+- **文件夹「在Explorer中显示」打开自身**：文件浏览器右键文件夹选「在Explorer中显示」时打开该文件夹本身（Directory Opus 安装时在最近活动窗口开新标签），而非定位到其父目录；文件条目行为不变（仍在所在目录中定位）。
 - **文件链接错误提示增强**：对话中点击文件链接未找到文件时，错误提示附带尝试打开的完整路径，便于分析。
 - **workspace tab 保护**：禁止关闭 workspace 内最后一个 agent（对话）tab，其他类型 tab 照常关闭。
 - **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
@@ -75,7 +75,7 @@
 
 ## 版本与更新
 
-- 版本号 = 对应上游版本 + `-local.N`（如 `0.6.1-local.4`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
+- 版本号 = 对应上游版本 + `-local.N`（如 `0.7.0-local.1`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
 - 应用内自动更新指向本仓库 Release；跨上游版本的升级链无缝（如 `0.5.x-local.N → 0.6.x-local.1`）。
 - 不运行上游的 CI / Android / Docker / 网站等构建流程，仅构建 Windows x64 桌面版。
 
@@ -103,4 +103,4 @@ bash scripts/build-local.sh --x64
 
 ## License
 
-AGPL-3.0，继承上游。
+Apache-2.0，随上游 v0.7.0 变更（此前为 AGPL-3.0）。
