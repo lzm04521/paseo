@@ -27,6 +27,10 @@ import type {
   TerminalWorkspaceContributionChangedEvent,
 } from "../terminal/terminal-manager.js";
 import { TerminalSessionController } from "../terminal/terminal-session-controller.js";
+import {
+  BUILTIN_POWERSHELL_COMMAND,
+  resolveBuiltinPowerShellCommand,
+} from "../terminal/powershell.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import { CursorError } from "./pagination/cursor.js";
@@ -537,6 +541,8 @@ export interface SessionOptions {
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
+  getIdleRestartStartedAt?: () => number | null;
 }
 
 export type SessionLifecycleIntent =
@@ -795,6 +801,8 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
     } = options;
     this.clientId = clientId;
     this.authorization = new SessionAuthorization(permissions);
@@ -876,6 +884,7 @@ export class Session {
       checkoutDiffManager,
       gitMetadataGenerator: createGitMetadataGenerator({
         workspaceGitService: this.workspaceGitService,
+        readDaemonConfig: () => this.readStructuredGenerationDaemonConfig(),
         generation: createAgentStructuredTextGeneration({
           agentManager: this.agentManager,
           providerSnapshotManager,
@@ -956,6 +965,8 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
       listProviderAvailability: () => this.agentManager.listProviderAvailability(),
       listAgents: () => this.agentManager.listAgents(),
       listProjects: () => this.projectRegistry.list(),
@@ -985,6 +996,16 @@ export class Session {
       clientSupportsWrapReflow: () =>
         this.clientCapabilities.has(CLIENT_CAPS.terminalReflowableSnapshot),
       getClientBufferedAmount: () => this.getTransportBufferedAmount(),
+      resolveTerminalCommand: async (command) => {
+        if (command !== BUILTIN_POWERSHELL_COMMAND) {
+          return undefined;
+        }
+        return (
+          (await resolveBuiltinPowerShellCommand({
+            configuredPath: daemonConfigStore.get().powershellPath,
+          })) ?? undefined
+        );
+      },
     });
     this.agentUpdates = createAgentUpdatesService({
       emit: (message) => this.emit(message),
@@ -4321,6 +4342,12 @@ export class Session {
     try {
       const workspaceCwd = cwd?.trim();
       const searchesWorkspace = Boolean(workspaceCwd);
+      // Daemon-level global default (`fileSearch.gitIgnoreOverrides` in $PASEO_HOME/config.json).
+      // An explicit array, including empty, fully replaces the built-in
+      // DEFAULT_GIT_IGNORE_PATH_OVERRIDES; undefined falls back to it.
+      const fileSearchOverrides = searchesWorkspace
+        ? this.daemonConfigStore.get().fileSearch?.gitIgnoreOverrides
+        : undefined;
       const entries = await searchDirectoryEntries({
         root: workspaceCwd ? expandTilde(workspaceCwd) : (process.env.HOME ?? homedir()),
         query,
@@ -4333,6 +4360,7 @@ export class Session {
           : [],
         confidentResultScanThreshold: searchesWorkspace ? undefined : 5_000,
         respectGitIgnore: searchesWorkspace,
+        gitIgnorePathOverrides: fileSearchOverrides,
         includeFiles,
         includeDirectories,
         matchMode,

@@ -24,6 +24,7 @@ import {
 import {
   getWorkspaceGitSelfHealPhaseMs,
   WorkspaceGitServiceImpl,
+  type WorkspaceGitObservationSchedulePolicy,
   type WorkspaceGitRuntimeSnapshot,
 } from "./workspace-git-service.js";
 
@@ -333,6 +334,7 @@ interface CreateServiceOptions {
   runGitCommand?: ReturnType<typeof vi.fn>;
   now?: () => Date;
   getWorkspaceGitSelfHealPhaseMs?: (cwd: string) => number;
+  observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
 }
 
 function buildDefaultServiceDeps() {
@@ -383,7 +385,7 @@ function buildDefaultServiceDeps() {
 }
 
 function buildServiceDeps(options?: CreateServiceOptions) {
-  const { github, ...rest } = options ?? {};
+  const { github, observationSchedulePolicy: _observationSchedulePolicy, ...rest } = options ?? {};
   const defaults = buildDefaultServiceDeps();
   const deps = {
     ...defaults,
@@ -409,6 +411,14 @@ function createService(options?: CreateServiceOptions) {
   return new WorkspaceGitServiceImpl({
     logger: createLogger() as never,
     paseoHome: "/tmp/paseo-test",
+    // F5b 起首次 git 活动默认有 30s 启动宽限；primitive 用例只测基础行为
+    // （stagger 语义由 workspace-git-service.test.ts / observation.test.ts 覆盖），
+    // 默认禁用宽限保持旧时序，需要时单测显式传入 policy 覆盖。
+    observationSchedulePolicy: options?.observationSchedulePolicy ?? {
+      bootGraceMs: 0,
+      staggerMs: 0,
+      jitterMs: 0,
+    },
     deps: buildServiceDeps(options),
   });
 }
@@ -1013,6 +1023,7 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
       getCheckoutStatus,
       resolveAbsoluteGitDir: vi.fn(async () => join(REPO_CWD, ".git")),
       subscribe,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
 
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());

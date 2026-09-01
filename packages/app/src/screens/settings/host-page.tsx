@@ -25,6 +25,7 @@ import { AgentProfilesSection } from "@/agent-profiles";
 import { AgentSkillsSection } from "@/agent-skills";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
+import { EditingTextInput } from "@/components/ui/text-input";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
@@ -60,6 +61,8 @@ import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section"
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/screens/settings/settings-section";
+import { ClaudeImageDowngradeCard } from "@/screens/settings/claude-image-downgrade-card";
+import { IdleAutoRestartCard } from "./idle-auto-restart-card";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
@@ -278,6 +281,8 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
+          <FileSearchDefaultsCard serverId={serverId} />
+          <ClaudeImageDowngradeCard serverId={serverId} />
         </SettingsSection>
       ) : (
         <View style={[settingsStyles.card, styles.emptyCard]}>
@@ -1088,6 +1093,72 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
   );
 }
 
+function PowerShellPathCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+  const persistedPath = config?.powershellPath ?? "";
+  const [draft, setDraft] = useState(persistedPath);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(persistedPath);
+  }, [persistedPath]);
+
+  const trimmedDraft = draft.trim();
+  const hasChanges = trimmedDraft !== persistedPath;
+
+  const handleSave = useCallback(() => {
+    if (!hasChanges || isSaving) return;
+    setIsSaving(true);
+    void patchConfig({ powershellPath: trimmedDraft })
+      .catch((error) => {
+        console.error("[HostPage] Failed to save powershell path", error);
+        Alert.alert(
+          t("common.errors.unableToSave"),
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => setIsSaving(false));
+  }, [hasChanges, isSaving, patchConfig, t, trimmedDraft]);
+
+  if (!isConnected) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-powershell-path-card">
+      <View style={settingsStyles.row}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.terminalProfiles.powershellPathTitle")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.terminalProfiles.powershellPathHint")}
+          </Text>
+        </View>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleSave}
+          disabled={!hasChanges || isSaving}
+          testID="host-page-powershell-path-save"
+        >
+          {t("settings.host.terminalProfiles.powershellPathSave")}
+        </Button>
+      </View>
+      <EditingTextInput
+        testID="host-page-powershell-path-input"
+        accessibilityLabel={t("settings.host.terminalProfiles.powershellPathTitle")}
+        initialValue={draft}
+        onChangeText={setDraft}
+        placeholder={t("settings.host.terminalProfiles.powershellPathPlaceholder")}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={terminalProfileStyles.pathInput}
+      />
+    </View>
+  );
+}
+
 function AppendSystemPromptCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
@@ -1195,6 +1266,128 @@ function AppendSystemPromptCard({ serverId }: { serverId: string }) {
               {isSaving
                 ? t("settings.host.orchestration.systemPrompt.saving")
                 : t("settings.host.orchestration.systemPrompt.save")}
+            </Button>
+          </View>
+        </AdaptiveModalSheet>
+      ) : null}
+    </>
+  );
+}
+
+function FileSearchDefaultsCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+  // Daemon-level global default. An explicit array, including empty, fully replaces the built-in
+  // DEFAULT_GIT_IGNORE_PATH_OVERRIDES; absent falls back to it.
+  const persisted = config?.fileSearch?.gitIgnoreOverrides ?? [];
+  const persistedText = persisted.join("\n");
+  const [draft, setDraft] = useState(persistedText);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const header = useMemo<SheetHeader>(
+    () => ({ title: t("settings.host.fileSearch.defaults.sheetTitle") }),
+    [t],
+  );
+
+  useEffect(() => {
+    setDraft(persistedText);
+  }, [persistedText]);
+
+  const hasChanges = draft !== persistedText;
+
+  const handleOpen = useCallback(() => {
+    setDraft(persistedText);
+    setIsEditing(true);
+  }, [persistedText]);
+
+  const handleClose = useCallback(() => {
+    if (isSaving) return;
+    setDraft(persistedText);
+    setIsEditing(false);
+  }, [isSaving, persistedText]);
+
+  const handleSave = useCallback(() => {
+    setIsSaving(true);
+    const gitIgnoreOverrides = draft
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    void patchConfig({ fileSearch: { gitIgnoreOverrides } })
+      .then(() => {
+        setIsEditing(false);
+        return;
+      })
+      .catch((error) => {
+        console.error("[HostPage] Failed to save file search overrides", error);
+      })
+      .finally(() => setIsSaving(false));
+  }, [draft, patchConfig]);
+
+  const handleReset = useCallback(() => {
+    setDraft(persistedText);
+  }, [persistedText]);
+
+  if (!isConnected) return null;
+
+  return (
+    <>
+      <View style={settingsStyles.card} testID="host-page-file-search-defaults-card">
+        <View style={settingsStyles.row}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>
+              {t("settings.host.fileSearch.defaults.title")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.host.fileSearch.defaults.hint")}
+            </Text>
+          </View>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleOpen}
+            testID="host-page-file-search-defaults-edit"
+          >
+            {t("settings.host.fileSearch.defaults.edit")}
+          </Button>
+        </View>
+      </View>
+
+      {isEditing ? (
+        <AdaptiveModalSheet
+          header={header}
+          visible
+          onClose={handleClose}
+          testID="host-page-file-search-defaults-sheet"
+          desktopMaxWidth={560}
+        >
+          <SettingsTextAreaCard
+            testID="host-page-file-search-defaults-input"
+            accessibilityLabel={t("settings.host.fileSearch.defaults.accessibilityLabel")}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={t("settings.host.fileSearch.defaults.placeholder")}
+          />
+          <View style={styles.appendPromptActions}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={handleReset}
+              disabled={!hasChanges || isSaving}
+              testID="host-page-file-search-defaults-reset"
+            >
+              {t("settings.host.fileSearch.defaults.reset")}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onPress={handleSave}
+              disabled={!hasChanges || isSaving}
+              testID="host-page-file-search-defaults-save"
+            >
+              {isSaving
+                ? t("settings.host.fileSearch.defaults.saving")
+                : t("settings.host.fileSearch.defaults.save")}
             </Button>
           </View>
         </AdaptiveModalSheet>
@@ -1350,6 +1543,7 @@ function RemoveHostSection({
       testID="host-page-remove-host-card"
     >
       <RestartDaemonCard host={host} />
+      <IdleAutoRestartCard serverId={host.serverId} />
 
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
@@ -1778,6 +1972,7 @@ export function HostTerminalsPage({ serverId }: { serverId: string }) {
         <EnableTerminalAgentHooksCard serverId={serverId} />
       </SettingsSection>
       <TerminalProfilesSection serverId={serverId} />
+      <PowerShellPathCard serverId={serverId} />
     </View>
   );
 }
@@ -1786,6 +1981,12 @@ const terminalProfileStyles = StyleSheet.create((theme) => ({
   row: {
     gap: theme.spacing[2],
     minHeight: 56,
+  },
+  pathInput: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
   },
   iconWrapper: {
     width: theme.iconSize.md,

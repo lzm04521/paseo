@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CheckoutSnapshotFacts, CheckoutStatusGit } from "../utils/checkout-git.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import type { FileObserver } from "./file-observer/index.js";
-import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
+import {
+  WorkspaceGitServiceImpl,
+  type WorkspaceGitObservationSchedulePolicy,
+} from "./workspace-git-service.js";
 
 const REPO_CWD = path.resolve("/tmp/paseo-observation-repo");
 const GIT_DIR = path.join(REPO_CWD, ".git");
@@ -145,11 +148,21 @@ function getWatcherSubscribeCallCount(
     .length;
 }
 
+// 本套件的既有用例都按"注册即建立观察"编写（F4 前的默认行为），因此缺省注入
+// 零宽限策略恢复即时行为；需要验证错峰的用例可显式传入其他策略。
+const IMMEDIATE_OBSERVATION_SCHEDULE_POLICY: WorkspaceGitObservationSchedulePolicy = {
+  bootGraceMs: 0,
+  staggerMs: 0,
+  jitterMs: 0,
+};
+
 function createService(
   watcher: ReturnType<typeof createWatcherHarness>,
   overrides?: Record<string, unknown>,
   logger: pino.Logger = createLogger(),
   fileObserver?: FileObserver,
+  observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy = IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+  serviceOptions?: Record<string, unknown>,
 ) {
   const defaultGetCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
   const defaultGetCheckoutShortstat = vi.fn(async () => null);
@@ -163,6 +176,8 @@ function createService(
     logger,
     paseoHome: "/tmp/paseo-home",
     fileObserver,
+    ...(observationSchedulePolicy ? { observationSchedulePolicy } : {}),
+    ...serviceOptions,
     deps: {
       subscribe: watcher.subscribe,
       getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutFacts(cwd)),
@@ -1415,6 +1430,7 @@ describe("WorkspaceGitService checkout observation", () => {
       getCheckoutSnapshotFacts,
       getCheckoutStatus,
       getPullRequestStatus,
+      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
     });
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
@@ -1430,7 +1446,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.peekSnapshot(REPO_CWD)).not.toBeNull();
       expect(getCheckoutStatus).toHaveBeenCalledTimes(1);
     });
-    await vi.advanceTimersByTimeAsync(7_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(2);
     });
@@ -1445,7 +1462,8 @@ describe("WorkspaceGitService checkout observation", () => {
     await vi.waitFor(() => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 阻塞拍完成后次拍仍在 48s~72s 之后，推进 72s 保证第三次调用触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus).toHaveBeenCalledTimes(3);
     });
@@ -1506,7 +1524,8 @@ describe("WorkspaceGitService checkout observation", () => {
     expect(watcher.records.filter((record) => record.directory === GIT_DIR)).toHaveLength(0);
 
     isGit = true;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证发现拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(service.peekSnapshot(REPO_CWD)?.git.isGit).toBe(true);
       expect(service.getMetrics()).toMatchObject({
@@ -1624,7 +1643,8 @@ describe("WorkspaceGitService checkout observation", () => {
     );
 
     const statusCallsBeforePoll = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 退化轮询基线 60s ±20% 抖动（48s~72s），推进 72s 保证首拍触发。
+    await vi.advanceTimersByTimeAsync(72_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsBeforePoll);
     });
@@ -1645,10 +1665,19 @@ describe("WorkspaceGitService checkout observation", () => {
       return openedSubscription.promise;
     });
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
-    const service = createService(watcher, {
-      getCheckoutStatus,
-      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
-    });
+    // 固定抖动下限使节奏确定：60s 基线 ×0.8 → 首拍恰为 48s；恢复重试在 subscribe
+    // 结算后固定 30s。F5c 起两条断言互相独立，不再约束"先轮询、后恢复"的顺序。
+    const service = createService(
+      watcher,
+      {
+        getCheckoutStatus,
+        getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
+      },
+      undefined,
+      undefined,
+      IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+      { degradedPollRandom: () => 0 },
+    );
 
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     await vi.waitFor(() => {
@@ -1667,17 +1696,19 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceObservationSetupInFlightCount).toBe(0);
     });
     const statusCallsAfterSetup = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    const subscribeCallsAfterSettle = getWatcherSubscribeCallCount(watcher, REPO_CWD);
+    // 两个独立断言（互不约束先后顺序）：
+    // (a) 恢复重试在 subscribe 结算后 30s 内发生（订阅计数 +1）；
+    // (b) 首拍轮询在注册起 72s 窗口内发生（getCheckoutStatus 计数增长；首拍 48s）。
+    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.waitFor(() => {
+      expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(subscribeCallsAfterSettle + 1);
+    });
+    expect(erroredUnsubscribe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(7_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterSetup);
     });
-    await vi.advanceTimersByTimeAsync(24_000);
-    expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(1);
-    await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => {
-      expect(getWatcherSubscribeCallCount(watcher, REPO_CWD)).toBe(2);
-    });
-    expect(erroredUnsubscribe).toHaveBeenCalledTimes(1);
 
     subscription.unsubscribe();
     service.dispose();
@@ -1852,12 +1883,20 @@ describe("WorkspaceGitService checkout observation", () => {
     const runGitCommand = vi.fn(async () => {
       throw new Error("not a git repository");
     });
-    const service = createService(watcher, {
-      getCheckoutSnapshotFacts,
-      getCheckoutStatus,
-      getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
-      runGitCommand,
-    });
+    // 固定抖动下限，使发现轮询节奏确定（首拍 48s、次拍 96s），便于断言恢复后仍在轮询。
+    const service = createService(
+      watcher,
+      {
+        getCheckoutSnapshotFacts,
+        getCheckoutStatus,
+        getWorkspaceGitSelfHealPhaseMs: () => 1_000_000,
+        runGitCommand,
+      },
+      undefined,
+      undefined,
+      IMMEDIATE_OBSERVATION_SCHEDULE_POLICY,
+      { degradedPollRandom: () => 0 },
+    );
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 
     await vi.waitFor(() => {
@@ -1875,7 +1914,8 @@ describe("WorkspaceGitService checkout observation", () => {
       expect(service.getMetrics().workspaceRefreshInFlightCount).toBe(0);
     });
     const statusCallsAfterRecovery = getCheckoutStatus.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(5_000);
+    // 首拍在 48s（抖动固定为下限），落在恢复结算（~31s）后 ~17s；推进 20s 保证发现轮询仍在继续。
+    await vi.advanceTimersByTimeAsync(20_000);
     await vi.waitFor(() => {
       expect(getCheckoutStatus.mock.calls.length).toBeGreaterThan(statusCallsAfterRecovery);
     });
@@ -2194,5 +2234,85 @@ describe("WorkspaceGitService checkout observation", () => {
     subscription.unsubscribe();
     diffManager.dispose();
     service.dispose();
+  });
+});
+
+describe("F5b: initial snapshot refresh joins the startup stagger", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const gracePolicy = { bootGraceMs: 30_000, staggerMs: 0, jitterMs: 0 };
+
+  test("no git refresh before the grace slot; refresh fires after grace", async () => {
+    const watcher = createWatcherHarness();
+    const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
+    const service = createService(
+      watcher,
+      { getCheckoutStatus },
+      undefined,
+      undefined,
+      gracePolicy,
+    );
+
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(getCheckoutStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2_000); // 跨过 30s 槽位
+    await vi.waitFor(() => {
+      expect(getCheckoutStatus).toHaveBeenCalled();
+    });
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("getSnapshot during grace joins the pending refresh instead of starting its own", async () => {
+    const watcher = createWatcherHarness();
+    const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
+    const service = createService(
+      watcher,
+      { getCheckoutStatus },
+      undefined,
+      undefined,
+      gracePolicy,
+    );
+
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+    const snapshotPromise = service.getSnapshot(REPO_CWD);
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    // 宽限期内：既不能立即返回，也不能绕过错峰自己起一轮刷新
+    expect(getCheckoutStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(1_000); // 冲刷刷新循环的微任务/定时器
+    const snapshot = await snapshotPromise;
+    // 注：brief 原文写作 snapshot.currentBranch，但 WorkspaceGitRuntimeSnapshot 的
+    // git 字段嵌套在 snapshot.git 下，此处按实际接口修正访问路径。
+    expect(snapshot.git.currentBranch).toBeTruthy(); // 并入的首轮刷新结果
+    // 只有一轮刷新。若 observation setup 在同槽位也触发一次 facts 刷新，上界放宽到 2 并注明；
+    // 核心断言是 29s 前为 0、且不因 getSnapshot 额外起一轮（无 join 时此处 ≥2）。
+    expect(getCheckoutStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("dispose during grace fails the joined getSnapshot fast instead of hanging", async () => {
+    const watcher = createWatcherHarness();
+    const service = createService(watcher, {}, undefined, undefined, gracePolicy);
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    const pending = service.getSnapshot(REPO_CWD);
+    service.dispose();
+    await expect(pending).rejects.toThrow(); // 宽限期内 dispose：join 醒来后 assertNotDisposed 快速失败
+    subscription.unsubscribe();
   });
 });
