@@ -38,6 +38,7 @@ function source(gitActions: GitActions): {
         section: "Workspace actions",
         newAgent: "New agent",
         newTerminal: "New terminal",
+        openPowerShell: "Open PowerShell",
         newBrowser: "New browser",
         splitRight: "Split pane right",
         splitDown: "Split pane down",

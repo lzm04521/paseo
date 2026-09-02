@@ -4,8 +4,10 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
+import { Switch } from "@/components/ui/switch";
 import {
   useAppSettings,
+  type ExplorerSidebarViewPreference,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
 } from "@/hooks/use-settings";
@@ -22,11 +24,69 @@ const SOURCES = [
 
 type LayoutPreferenceSource = keyof OpenInSidePanePreferences | "pullRequests";
 
+const AUTO_OPEN_VIEW_OPTIONS = [
+  "files",
+  "changes",
+] as const satisfies readonly ExplorerSidebarViewPreference[];
+
+const WIDTH_PERCENT_OPTIONS = [10, 15, 20, 25, 30, 35, 40, 45, 50];
+
 function destinationTriggerStyle({
   pressed,
   open,
 }: PressableStateCallbackType & { open?: boolean }) {
   return [styles.destinationTrigger, (pressed || open) && styles.destinationTriggerActive];
+}
+
+function SettingsOptionRow<T>({
+  label,
+  hint,
+  testID,
+  options,
+  value,
+  first,
+  menuWidth = 180,
+  onSelect,
+}: {
+  label: string;
+  hint?: string;
+  testID: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  first: boolean;
+  menuWidth?: number;
+  onSelect: (value: T) => void;
+}) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
+  return (
+    <View style={[settingsStyles.row, first ? null : settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{label}</Text>
+        {hint ? <Text style={settingsStyles.rowHint}>{hint}</Text> : null}
+      </View>
+      <DropdownMenu>
+        <DropdownTrigger
+          style={destinationTriggerStyle}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${selectedLabel}`}
+          testID={testID}
+        >
+          <Text style={styles.destinationLabel}>{selectedLabel}</Text>
+        </DropdownTrigger>
+        <DropdownMenuContent side="bottom" align="end" width={menuWidth}>
+          {options.map((option) => (
+            <DropdownMenuItem
+              key={String(option.value)}
+              selected={option.value === value}
+              onSelect={() => onSelect(option.value)}
+            >
+              {option.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
 }
 
 function LayoutPreferenceRow({
@@ -106,28 +166,88 @@ export function LayoutSection() {
     },
     [settings.openInSidePane, updateSettings],
   );
+  const handleAutoOpenExplorerSidebarChange = useCallback(
+    (autoOpenExplorerSidebar: boolean) => void updateSettings({ autoOpenExplorerSidebar }),
+    [updateSettings],
+  );
+  const handleAutoOpenExplorerSidebarViewChange = useCallback(
+    (autoOpenExplorerSidebarView: ExplorerSidebarViewPreference) =>
+      void updateSettings({ autoOpenExplorerSidebarView }),
+    [updateSettings],
+  );
+  const handleExplorerSidebarWidthPercentChange = useCallback(
+    (explorerSidebarWidthPercent: number) => void updateSettings({ explorerSidebarWidthPercent }),
+    [updateSettings],
+  );
   return (
-    <SettingsSection title={t("settings.layout.openInSidePane.title")}>
-      <View style={settingsStyles.card}>
-        {SOURCES.map((source, index) => (
-          <Fragment key={source}>
-            <LayoutPreferenceRow
-              source={source}
-              destination={settings.openInSidePane[source] ? "side" : "main"}
-              first={index === 0}
-              onDestinationChange={handleDestinationChange}
+    <>
+      <SettingsSection title={t("settings.layout.openInSidePane.title")}>
+        <View style={settingsStyles.card}>
+          {SOURCES.map((source, index) => (
+            <Fragment key={source}>
+              <LayoutPreferenceRow
+                source={source}
+                destination={settings.openInSidePane[source] ? "side" : "main"}
+                first={index === 0}
+                onDestinationChange={handleDestinationChange}
+              />
+            </Fragment>
+          ))}
+          <LayoutPreferenceRow
+            source="pullRequests"
+            destination={settings.pullRequestOpenLocation}
+            first={false}
+            allowExplorer
+            onDestinationChange={handleDestinationChange}
+          />
+        </View>
+      </SettingsSection>
+      <SettingsSection title={t("settings.layout.explorerSidebar.title")}>
+        <View style={settingsStyles.card}>
+          <View style={settingsStyles.row}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>
+                {t("settings.layout.explorerSidebar.autoOpen")}
+              </Text>
+              <Text style={settingsStyles.rowHint}>
+                {t("settings.layout.explorerSidebar.autoOpenHint")}
+              </Text>
+            </View>
+            <Switch
+              value={settings.autoOpenExplorerSidebar}
+              onValueChange={handleAutoOpenExplorerSidebarChange}
+              accessibilityLabel={t("settings.layout.explorerSidebar.autoOpen")}
+              testID="auto-open-explorer-sidebar-toggle"
             />
-          </Fragment>
-        ))}
-        <LayoutPreferenceRow
-          source="pullRequests"
-          destination={settings.pullRequestOpenLocation}
-          first={false}
-          allowExplorer
-          onDestinationChange={handleDestinationChange}
-        />
-      </View>
-    </SettingsSection>
+          </View>
+          <SettingsOptionRow<ExplorerSidebarViewPreference>
+            label={t("settings.layout.explorerSidebar.defaultView")}
+            hint={t("settings.layout.explorerSidebar.defaultViewHint")}
+            testID="auto-open-explorer-sidebar-view"
+            options={AUTO_OPEN_VIEW_OPTIONS.map((view) => ({
+              value: view,
+              label: t(`settings.layout.explorerSidebar.views.${view}`),
+            }))}
+            value={settings.autoOpenExplorerSidebarView}
+            first={false}
+            onSelect={handleAutoOpenExplorerSidebarViewChange}
+          />
+          <SettingsOptionRow<number>
+            label={t("settings.layout.explorerSidebar.defaultWidth")}
+            hint={t("settings.layout.explorerSidebar.defaultWidthHint")}
+            testID="explorer-sidebar-width-percent"
+            options={WIDTH_PERCENT_OPTIONS.map((percent) => ({
+              value: percent,
+              label: t("settings.layout.explorerSidebar.widthPercent", { percent }),
+            }))}
+            value={settings.explorerSidebarWidthPercent}
+            first={false}
+            menuWidth={120}
+            onSelect={handleExplorerSidebarWidthPercentChange}
+          />
+        </View>
+      </SettingsSection>
+    </>
   );
 }
 

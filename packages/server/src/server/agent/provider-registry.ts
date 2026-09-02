@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { z } from "zod";
 
 import type {
@@ -110,11 +111,12 @@ export interface BuildProviderRegistryOptions {
   isDev?: boolean;
   ompRuntime?: OmpRuntime;
   openCodeBridge?: OpenCodeBridge;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 interface ProviderClientFactoryOptions extends Pick<
   BuildProviderRegistryOptions,
-  "workspaceGitService" | "managedProcesses" | "ompRuntime"
+  "workspaceGitService" | "managedProcesses" | "ompRuntime" | "getDaemonConfig"
 > {
   openCodeBridge?: OpenCodeBridge;
   providerParams?: unknown;
@@ -191,10 +193,11 @@ const HUB_E2E_PROVIDER_CONTRACT: ProviderContract = {
 };
 
 const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
-  claude: (logger, runtimeSettings) =>
+  claude: (logger, runtimeSettings, options) =>
     new ClaudeAgentClient({
       logger,
       runtimeSettings,
+      getDaemonConfig: options?.getDaemonConfig,
     }),
   codex: (logger, runtimeSettings, options) =>
     new CodexAppServerAgentClient(logger, runtimeSettings, {
@@ -704,7 +707,7 @@ function buildResolvedBuiltinProviders(
   runtimeSettings: AgentProviderRuntimeSettingsMap | undefined,
   options: Pick<
     BuildProviderRegistryOptions,
-    "workspaceGitService" | "managedProcesses" | "ompRuntime" | "openCodeBridge"
+    "workspaceGitService" | "managedProcesses" | "ompRuntime" | "openCodeBridge" | "getDaemonConfig"
   >,
   isDev: boolean,
 ): Map<string, ResolvedProvider> {
@@ -737,6 +740,7 @@ function buildResolvedBuiltinProviders(
           managedProcesses: options.managedProcesses,
           ompRuntime: options.ompRuntime,
           openCodeBridge: options.openCodeBridge,
+          getDaemonConfig: options.getDaemonConfig,
           providerParams: override?.params,
         }),
       contract: PROVIDER_CONTRACTS[definition.id] ?? UNSUPPORTED_PROVIDER_CONTRACT,
@@ -749,7 +753,10 @@ function buildResolvedBuiltinProviders(
 function addDerivedProviders(
   resolvedProviders: Map<string, ResolvedProvider>,
   providerOverrides: Record<string, ProviderOverride>,
-  options: Pick<BuildProviderRegistryOptions, "managedProcesses" | "openCodeBridge">,
+  options: Pick<
+    BuildProviderRegistryOptions,
+    "managedProcesses" | "openCodeBridge" | "getDaemonConfig"
+  >,
 ): void {
   for (const [providerId, override] of Object.entries(providerOverrides)) {
     if (resolvedProviders.has(providerId) || BUILTIN_PROVIDER_IDS.includes(providerId)) {
@@ -846,6 +853,7 @@ function addDerivedProviders(
         baseFactory(logger, mergedRuntimeSettings, {
           managedProcesses: options.managedProcesses,
           openCodeBridge: options.openCodeBridge,
+          getDaemonConfig: options.getDaemonConfig,
           providerParams,
           customProvider: {
             id: providerId,
@@ -872,12 +880,14 @@ export function buildProviderRegistry(
       managedProcesses: options?.managedProcesses,
       ompRuntime: options?.ompRuntime,
       openCodeBridge: options?.openCodeBridge,
+      getDaemonConfig: options?.getDaemonConfig,
     },
     options?.isDev === true,
   );
   addDerivedProviders(resolvedProviders, providerOverrides, {
     managedProcesses: options?.managedProcesses,
     openCodeBridge: options?.openCodeBridge,
+    getDaemonConfig: options?.getDaemonConfig,
   });
 
   return Object.fromEntries(

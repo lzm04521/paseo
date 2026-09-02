@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useSettings } from "@/hooks/use-settings";
 import {
   DndContext,
   DragOverlay,
@@ -427,17 +428,22 @@ export function SplitContainer({
     null,
   );
   const requestedExplorerSidebarWidth = previewExplorerSidebarWidth ?? storedExplorerSidebarWidth;
+  const explorerSidebarWidthRatio = useSettings(
+    (settings) => settings.explorerSidebarWidthPercent / 100,
+  );
   const explorerSidebarWidth = resolveExplorerSidebarWidth({
     requestedWidth: requestedExplorerSidebarWidth,
     containerWidth: workspaceShellWidth,
+    defaultWidthRatio: explorerSidebarWidthRatio,
   });
   const explorerSidebarDockSizes = useMemo(
     () =>
       resolveExplorerSidebarDockSizes({
         requestedWidth: requestedExplorerSidebarWidth,
         containerWidth: workspaceShellWidth,
+        defaultWidthRatio: explorerSidebarWidthRatio,
       }),
-    [requestedExplorerSidebarWidth, workspaceShellWidth],
+    [requestedExplorerSidebarWidth, workspaceShellWidth, explorerSidebarWidthRatio],
   );
   const renderExplorerSidebarDock = Boolean(
     !focusModeEnabled && explorerSidebarPane && explorerSidebarPane.hidden !== true,
