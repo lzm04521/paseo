@@ -2191,6 +2191,12 @@ export const es: TranslationResources = {
         defaultWidth: "Ancho predeterminado",
         defaultWidthHint:
           "Porción del ancho del espacio de trabajo usada hasta que se cambie el tamaño del panel",
+        fileOpenMode: "Apertura de archivos desde la barra lateral",
+        fileOpenModeHint: "La vista previa reutiliza la pestaña actual sin modificar; la pestaña nueva abre una por archivo",
+        fileOpenModes: {
+          preview: "En la pestaña actual (vista previa)",
+          tab: "En una pestaña nueva",
+        },
         views: {
           files: "Archivos",
           changes: "Cambios",

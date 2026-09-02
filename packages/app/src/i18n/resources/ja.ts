@@ -2164,6 +2164,12 @@ export const ja: TranslationResources = {
         defaultViewHint: "サイドバーを自動的に開いたときに表示するタブ",
         defaultWidth: "既定の幅",
         defaultWidthHint: "サイドバーのサイズを変更するまでのワークスペース幅に対する割合",
+        fileOpenMode: "サイドバーからのファイルを開く方法",
+        fileOpenModeHint: "プレビューは未編集の間アクティブなタブを再利用します。新しいタブはファイルごとにタブを開きます",
+        fileOpenModes: {
+          preview: "現在のタブ（プレビュー）",
+          tab: "新しいタブ",
+        },
         views: {
           files: "ファイル",
           changes: "変更",

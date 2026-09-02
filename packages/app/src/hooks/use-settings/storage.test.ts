@@ -228,6 +228,28 @@ describe("loadAppSettingsFromStorage", () => {
     expect(legacySide.openInSidePane).not.toHaveProperty("pullRequests");
   });
 
+  it("defaults explorer file opens to preview and keeps an explicit tab mode", async () => {
+    const defaults = await loadAppSettingsFromStorage(makeDeps());
+    const tabMode = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ explorerFileOpenMode: "tab" }),
+        }),
+      }),
+    );
+    const invalid = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ explorerFileOpenMode: "beside" }),
+        }),
+      }),
+    );
+
+    expect(defaults.explorerFileOpenMode).toBe("preview");
+    expect(tabMode.explorerFileOpenMode).toBe("tab");
+    expect(invalid.explorerFileOpenMode).toBe("preview");
+  });
+
   it("uses the native terminal renderer by default", async () => {
     const deps = makeDeps();
 

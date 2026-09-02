@@ -2155,6 +2155,12 @@ export const en = {
         defaultViewHint: "Which Explorer tab the sidebar lands on when auto-opened",
         defaultWidth: "Default width",
         defaultWidthHint: "Share of the workspace width used until the sidebar is resized",
+        fileOpenMode: "Open files from the sidebar",
+        fileOpenModeHint: "Preview reuses the current tab while it is unmodified; new tab gives every file its own tab",
+        fileOpenModes: {
+          preview: "In current tab (preview)",
+          tab: "In new tab",
+        },
         views: {
           files: "Files",
           changes: "Changes",

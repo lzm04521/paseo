@@ -7,6 +7,7 @@ import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Switch } from "@/components/ui/switch";
 import {
   useAppSettings,
+  type ExplorerFileOpenMode,
   type ExplorerSidebarViewPreference,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
@@ -28,6 +29,11 @@ const AUTO_OPEN_VIEW_OPTIONS = [
   "files",
   "changes",
 ] as const satisfies readonly ExplorerSidebarViewPreference[];
+
+const FILE_OPEN_MODE_OPTIONS = [
+  "preview",
+  "tab",
+] as const satisfies readonly ExplorerFileOpenMode[];
 
 const WIDTH_PERCENT_OPTIONS = [10, 15, 20, 25, 30, 35, 40, 45, 50];
 
@@ -175,6 +181,11 @@ export function LayoutSection() {
       void updateSettings({ autoOpenExplorerSidebarView }),
     [updateSettings],
   );
+  const handleExplorerFileOpenModeChange = useCallback(
+    (explorerFileOpenMode: ExplorerFileOpenMode) =>
+      void updateSettings({ explorerFileOpenMode }),
+    [updateSettings],
+  );
   const handleExplorerSidebarWidthPercentChange = useCallback(
     (explorerSidebarWidthPercent: number) => void updateSettings({ explorerSidebarWidthPercent }),
     [updateSettings],
@@ -231,6 +242,18 @@ export function LayoutSection() {
             value={settings.autoOpenExplorerSidebarView}
             first={false}
             onSelect={handleAutoOpenExplorerSidebarViewChange}
+          />
+          <SettingsOptionRow<ExplorerFileOpenMode>
+            label={t("settings.layout.explorerSidebar.fileOpenMode")}
+            hint={t("settings.layout.explorerSidebar.fileOpenModeHint")}
+            testID="explorer-file-open-mode"
+            options={FILE_OPEN_MODE_OPTIONS.map((mode) => ({
+              value: mode,
+              label: t(`settings.layout.explorerSidebar.fileOpenModes.${mode}`),
+            }))}
+            value={settings.explorerFileOpenMode}
+            first={false}
+            onSelect={handleExplorerFileOpenModeChange}
           />
           <SettingsOptionRow<number>
             label={t("settings.layout.explorerSidebar.defaultWidth")}

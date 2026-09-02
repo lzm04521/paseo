@@ -1979,6 +1979,12 @@ export const ko: TranslationResources = {
         defaultViewHint: "사이드바가 자동으로 열릴 때 표시할 탭",
         defaultWidth: "기본 너비",
         defaultWidthHint: "사이드바 크기를 조정하기 전까지 사용되는 작업 공간 너비 비율",
+        fileOpenMode: "사이드바에서 파일 여는 방식",
+        fileOpenModeHint: "미리 보기는 수정되지 않은 동안 현재 탭을 재사용합니다. 새 탭은 파일마다 탭을 엽니다",
+        fileOpenModes: {
+          preview: "현재 탭(미리 보기)",
+          tab: "새 탭",
+        },
         views: {
           files: "파일",
           changes: "변경 사항",

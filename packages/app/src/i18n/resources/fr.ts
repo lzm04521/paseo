@@ -2195,6 +2195,12 @@ export const fr: TranslationResources = {
         defaultWidth: "Largeur par défaut",
         defaultWidthHint:
           "Part de la largeur de l'espace de travail utilisée avant tout redimensionnement du panneau",
+        fileOpenMode: "Ouverture des fichiers depuis la barre latérale",
+        fileOpenModeHint: "L'aperçu réutilise l'onglet actuel tant qu'il n'est pas modifié ; le nouvel onglet en ouvre un par fichier",
+        fileOpenModes: {
+          preview: "Dans l'onglet actuel (aperçu)",
+          tab: "Dans un nouvel onglet",
+        },
         views: {
           files: "Fichiers",
           changes: "Modifications",

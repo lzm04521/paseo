@@ -1868,6 +1868,7 @@ function WorkspaceScreenContent({
     [openTab],
   );
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
+  const explorerFileOpenMode = useSettings((settings) => settings.explorerFileOpenMode);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
@@ -3563,17 +3564,28 @@ function WorkspaceScreenContent({
         },
         onOpenPreferredTarget: (target, source) => {
           if (!persistenceKey) return;
-          const tabId = openPreferredWorkspacePreview({
-            isCompact: isMobile,
-            workspaceKey: persistenceKey,
-            serverId: normalizedServerId,
-            workspaceId: normalizedWorkspaceId,
-            explorerSidebarPaneId,
-            lastMainPaneId,
-            target,
-            source,
-            preferences: openInSidePane,
-          });
+          // "tab" mode skips preview-tab reuse: an open file is revealed, a new
+          // file gets its own tab instead of replacing the pane's preview.
+          const tabId =
+            explorerFileOpenMode === "tab" && target.kind === "file"
+              ? openPreferredWorkspaceTarget({
+                  isCompact: isMobile,
+                  workspaceKey: persistenceKey,
+                  target,
+                  source,
+                  preferences: openInSidePane,
+                })
+              : openPreferredWorkspacePreview({
+                  isCompact: isMobile,
+                  workspaceKey: persistenceKey,
+                  serverId: normalizedServerId,
+                  workspaceId: normalizedWorkspaceId,
+                  explorerSidebarPaneId,
+                  lastMainPaneId,
+                  target,
+                  source,
+                  preferences: openInSidePane,
+                });
           if (tabId && target.kind === "file") requestFileNavigation(tabId);
           if (tabId) navigateToTabId(tabId);
         },
@@ -3626,6 +3638,7 @@ function WorkspaceScreenContent({
       canRenderDesktopPaneSplits,
       openImportSheet,
       openInSidePane,
+      explorerFileOpenMode,
       isMobile,
       requestFileNavigation,
       revealWorkspaceChildTab,

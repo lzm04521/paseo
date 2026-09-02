@@ -2124,6 +2124,12 @@ export const zhCN: TranslationResources = {
         defaultViewHint: "自动展开侧栏时定位到的标签",
         defaultWidth: "默认打开宽度",
         defaultWidthHint: "侧栏未记忆宽度时占工作区宽度的比例",
+        fileOpenMode: "侧栏打开文件方式",
+        fileOpenModeHint: "预览模式在当前选项卡未修改时复用它；新选项卡为每个文件单独打开",
+        fileOpenModes: {
+          preview: "当前选项卡（预览）",
+          tab: "新选项卡",
+        },
         views: {
           files: "文件",
           changes: "变更",

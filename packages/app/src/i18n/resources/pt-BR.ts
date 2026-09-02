@@ -2176,6 +2176,12 @@ export const ptBR: TranslationResources = {
         defaultWidth: "Largura padrão",
         defaultWidthHint:
           "Fração da largura do espaço de trabalho usada até o painel ser redimensionado",
+        fileOpenMode: "Abertura de arquivos da barra lateral",
+        fileOpenModeHint: "A pré-visualização reutiliza a aba atual enquanto não modificada; a nova aba abre uma por arquivo",
+        fileOpenModes: {
+          preview: "Na aba atual (pré-visualização)",
+          tab: "Em uma nova aba",
+        },
         views: {
           files: "Arquivos",
           changes: "Alterações",
