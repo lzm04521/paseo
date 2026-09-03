@@ -704,7 +704,8 @@ export const ptBR: TranslationResources = {
         copyResumeCommand: "Copiar comando de retomada",
         copyAgentId: "Copiar ID do agente",
         copyTerminalId: "Copiar ID do terminal",
-        copyFilePath: "Copiar caminho do arquivo",
+        copyFileRelativePath: "Copiar caminho relativo do arquivo",
+        copyFileFullPath: "Copiar caminho completo do arquivo",
         rename: "Renomear",
         closeAbove: "Fechar abas acima",
         closeBelow: "Fechar abas abaixo",
@@ -2177,7 +2178,8 @@ export const ptBR: TranslationResources = {
         defaultWidthHint:
           "Fração da largura do espaço de trabalho usada até o painel ser redimensionado",
         fileOpenMode: "Abertura de arquivos da barra lateral",
-        fileOpenModeHint: "A pré-visualização reutiliza a aba atual enquanto não modificada; a nova aba abre uma por arquivo",
+        fileOpenModeHint:
+          "A pré-visualização reutiliza a aba atual enquanto não modificada; a nova aba abre uma por arquivo",
         fileOpenModes: {
           preview: "Na aba atual (pré-visualização)",
           tab: "Em uma nova aba",

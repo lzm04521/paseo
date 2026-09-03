@@ -698,7 +698,8 @@ export const en = {
         copyResumeCommand: "Copy resume command",
         copyAgentId: "Copy agent id",
         copyTerminalId: "Copy terminal id",
-        copyFilePath: "Copy file path",
+        copyFileRelativePath: "Copy relative file path",
+        copyFileFullPath: "Copy full file path",
         rename: "Rename",
         closeAbove: "Close tabs above",
         closeBelow: "Close tabs below",
@@ -2156,7 +2157,8 @@ export const en = {
         defaultWidth: "Default width",
         defaultWidthHint: "Share of the workspace width used until the sidebar is resized",
         fileOpenMode: "Open files from the sidebar",
-        fileOpenModeHint: "Preview reuses the current tab while it is unmodified; new tab gives every file its own tab",
+        fileOpenModeHint:
+          "Preview reuses the current tab while it is unmodified; new tab gives every file its own tab",
         fileOpenModes: {
           preview: "In current tab (preview)",
           tab: "In new tab",

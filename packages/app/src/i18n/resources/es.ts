@@ -704,7 +704,8 @@ export const es: TranslationResources = {
         copyResumeCommand: "Copiar comando de reanudación",
         copyAgentId: "Copiar ID del agente",
         copyTerminalId: "Copiar ID del terminal",
-        copyFilePath: "Copy file path",
+        copyFileRelativePath: "Copy relative file path",
+        copyFileFullPath: "Copy full file path",
         rename: "Rebautizar",
         closeAbove: "Cerrar pestañas arriba",
         closeBelow: "Cerrar pestañas a continuación",
@@ -2192,7 +2193,8 @@ export const es: TranslationResources = {
         defaultWidthHint:
           "Porción del ancho del espacio de trabajo usada hasta que se cambie el tamaño del panel",
         fileOpenMode: "Apertura de archivos desde la barra lateral",
-        fileOpenModeHint: "La vista previa reutiliza la pestaña actual sin modificar; la pestaña nueva abre una por archivo",
+        fileOpenModeHint:
+          "La vista previa reutiliza la pestaña actual sin modificar; la pestaña nueva abre una por archivo",
         fileOpenModes: {
           preview: "En la pestaña actual (vista previa)",
           tab: "En una pestaña nueva",

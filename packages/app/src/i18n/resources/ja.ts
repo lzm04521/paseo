@@ -704,7 +704,8 @@ export const ja: TranslationResources = {
         copyResumeCommand: "再開コマンドをコピー",
         copyAgentId: "エージェントIDをコピー",
         copyTerminalId: "ターミナルIDをコピー",
-        copyFilePath: "ファイルパスをコピー",
+        copyFileRelativePath: "ファイルの相対パスをコピー",
+        copyFileFullPath: "ファイルの完全パスをコピー",
         rename: "名前を変更",
         closeAbove: "上のタブを閉じる",
         closeBelow: "下のタブを閉じる",
@@ -2165,7 +2166,8 @@ export const ja: TranslationResources = {
         defaultWidth: "既定の幅",
         defaultWidthHint: "サイドバーのサイズを変更するまでのワークスペース幅に対する割合",
         fileOpenMode: "サイドバーからのファイルを開く方法",
-        fileOpenModeHint: "プレビューは未編集の間アクティブなタブを再利用します。新しいタブはファイルごとにタブを開きます",
+        fileOpenModeHint:
+          "プレビューは未編集の間アクティブなタブを再利用します。新しいタブはファイルごとにタブを開きます",
         fileOpenModes: {
           preview: "現在のタブ（プレビュー）",
           tab: "新しいタブ",

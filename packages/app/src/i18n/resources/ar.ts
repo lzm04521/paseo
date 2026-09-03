@@ -700,7 +700,8 @@ export const ar: TranslationResources = {
         copyResumeCommand: "نسخ أمر السيرة الذاتية",
         copyAgentId: "نسخ معرف الوكيل",
         copyTerminalId: "نسخ معرف المحطة",
-        copyFilePath: "Copy file path",
+        copyFileRelativePath: "Copy relative file path",
+        copyFileFullPath: "Copy full file path",
         rename: "إعادة تسمية",
         closeAbove: "إغلاق علامات التبويب أعلاه",
         closeBelow: "إغلاق علامات التبويب أدناه",
@@ -2146,7 +2147,8 @@ export const ar: TranslationResources = {
         defaultWidth: "العرض الافتراضي",
         defaultWidthHint: "نسبة من عرض مساحة العمل تُستخدم حتى يتم تغيير حجم الشريط",
         fileOpenMode: "طريقة فتح الملفات من الشريط الجانبي",
-        fileOpenModeHint: "المعاينة تعيد استخدام علامة التبويب الحالية ما دامت غير معدلة؛ علامة التبويب الجديدة تفتح لكل ملف",
+        fileOpenModeHint:
+          "المعاينة تعيد استخدام علامة التبويب الحالية ما دامت غير معدلة؛ علامة التبويب الجديدة تفتح لكل ملف",
         fileOpenModes: {
           preview: "في علامة التبويب الحالية (معاينة)",
           tab: "في علامة تبويب جديدة",

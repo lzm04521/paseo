@@ -54,7 +54,7 @@ function source(gitActions: GitActions): {
         copyResumeCommand: "Copy resume command",
         copyAgentId: "Copy agent id",
         copyTerminalId: "Copy terminal id",
-        copyFilePath: "Copy file path",
+        copyFileRelativePath: "Copy relative file path",
         closeTabsLeft: "Close tabs left",
         closeTabsRight: "Close tabs right",
         closeOtherTabs: "Close other tabs",

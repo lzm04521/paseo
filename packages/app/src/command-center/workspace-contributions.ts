@@ -35,7 +35,7 @@ export interface WorkspaceCommandCenterLabels {
   copyResumeCommand: string;
   copyAgentId: string;
   copyTerminalId: string;
-  copyFilePath: string;
+  copyFileRelativePath: string;
   closeTabsLeft: string;
   closeTabsRight: string;
   closeOtherTabs: string;
@@ -339,7 +339,7 @@ function buildActiveTabContributions(
       buildQueryAction(source, {
         id: "tab:copy-file-path",
         rank: 37,
-        title: source.labels.copyFilePath,
+        title: source.labels.copyFileRelativePath,
         keywords: ["tab", "file", "copy", "path"],
         icon: source.icons.copy,
         action: { id: "workspace.tab.copy-file-path", scope: "workspace" },

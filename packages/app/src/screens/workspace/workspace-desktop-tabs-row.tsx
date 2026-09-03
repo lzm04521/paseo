@@ -453,10 +453,12 @@ interface WorkspaceDesktopTabsRowProps {
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -941,10 +943,12 @@ function ResolvedWorkspaceDesktopTabsRow({
   setHoveredCloseTabKey,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1022,7 +1026,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
-      copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+      copyFileRelativePath: t("workspace.tabs.menu.copyFileRelativePath"),
+      copyFileFullPath: t("workspace.tabs.menu.copyFileFullPath"),
       rename: t("workspace.tabs.menu.rename"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
@@ -1196,10 +1201,12 @@ function ResolvedWorkspaceDesktopTabsRow({
           isDragging={isActive}
           index={index}
           tabCount={displayedTabs.length}
+          workspaceRoot={workspaceRoot}
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
           onCopyTerminalId={onCopyTerminalId}
-          onCopyFilePath={onCopyFilePath}
+          onCopyFileRelativePath={onCopyFileRelativePath}
+          onCopyFileFullPath={onCopyFileFullPath}
           onReloadAgent={onReloadAgent}
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
@@ -1229,7 +1236,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyTerminalId,
-      onCopyFilePath,
+      onCopyFileRelativePath,
+      onCopyFileFullPath,
       onCopyResumeCommand,
       onNavigateTab,
       onReloadAgent,
@@ -1238,6 +1246,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       tabMenuLabels,
       tabDropPreviewIndex,
       displayedTabs.length,
+      workspaceRoot,
     ],
   );
 
@@ -1341,10 +1350,12 @@ function ResolvedDesktopTabChip({
   isDragging,
   index,
   tabCount,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1366,10 +1377,12 @@ function ResolvedDesktopTabChip({
   isDragging: boolean;
   index: number;
   tabCount: number;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -1394,10 +1407,12 @@ function ResolvedDesktopTabChip({
         tab: item.tab,
         index,
         tabCount,
+        workspaceRoot,
         onCopyResumeCommand,
         onCopyAgentId,
         onCopyTerminalId,
-        onCopyFilePath,
+        onCopyFileRelativePath,
+        onCopyFileFullPath,
         onReloadAgent,
         onRenameTab,
         onCloseTab,
@@ -1415,12 +1430,14 @@ function ResolvedDesktopTabChip({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyTerminalId,
-      onCopyFilePath,
+      onCopyFileRelativePath,
+      onCopyFileFullPath,
       onCopyResumeCommand,
       labels,
       onReloadAgent,
       onRenameTab,
       tabCount,
+      workspaceRoot,
     ],
   );
 

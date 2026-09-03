@@ -255,7 +255,7 @@ export function useWorkspaceCommandCenterActions(): void {
           copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
           copyAgentId: t("workspace.tabs.menu.copyAgentId"),
           copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
-          copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+          copyFileRelativePath: t("workspace.tabs.menu.copyFileRelativePath"),
           closeTabsLeft: t("workspace.tabs.menu.closeLeft"),
           closeTabsRight: t("workspace.tabs.menu.closeRight"),
           closeOtherTabs: t("workspace.tabs.menu.closeOthers"),

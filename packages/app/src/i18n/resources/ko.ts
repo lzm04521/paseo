@@ -581,7 +581,8 @@ export const ko: TranslationResources = {
         copyResumeCommand: "재개 명령 복사",
         copyAgentId: "에이전트 ID 복사",
         copyTerminalId: "터미널 ID 복사",
-        copyFilePath: "파일 경로 복사",
+        copyFileRelativePath: "파일 상대 경로 복사",
+        copyFileFullPath: "파일 전체 경로 복사",
         rename: "이름 변경",
         closeAbove: "위쪽 탭 닫기",
         closeBelow: "아래쪽 탭 닫기",
@@ -1980,7 +1981,8 @@ export const ko: TranslationResources = {
         defaultWidth: "기본 너비",
         defaultWidthHint: "사이드바 크기를 조정하기 전까지 사용되는 작업 공간 너비 비율",
         fileOpenMode: "사이드바에서 파일 여는 방식",
-        fileOpenModeHint: "미리 보기는 수정되지 않은 동안 현재 탭을 재사용합니다. 새 탭은 파일마다 탭을 엽니다",
+        fileOpenModeHint:
+          "미리 보기는 수정되지 않은 동안 현재 탭을 재사용합니다. 새 탭은 파일마다 탭을 엽니다",
         fileOpenModes: {
           preview: "현재 탭(미리 보기)",
           tab: "새 탭",

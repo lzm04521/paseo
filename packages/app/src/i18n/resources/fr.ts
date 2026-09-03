@@ -704,7 +704,8 @@ export const fr: TranslationResources = {
         copyResumeCommand: "Copier la commande de reprise",
         copyAgentId: "Copier l'identifiant de l'agent",
         copyTerminalId: "Copier l'identifiant du terminal",
-        copyFilePath: "Copy file path",
+        copyFileRelativePath: "Copy relative file path",
+        copyFileFullPath: "Copy full file path",
         rename: "Rebaptiser",
         closeAbove: "Fermer les onglets ci-dessus",
         closeBelow: "Fermer les onglets ci-dessous",
@@ -2196,7 +2197,8 @@ export const fr: TranslationResources = {
         defaultWidthHint:
           "Part de la largeur de l'espace de travail utilisée avant tout redimensionnement du panneau",
         fileOpenMode: "Ouverture des fichiers depuis la barre latérale",
-        fileOpenModeHint: "L'aperçu réutilise l'onglet actuel tant qu'il n'est pas modifié ; le nouvel onglet en ouvre un par fichier",
+        fileOpenModeHint:
+          "L'aperçu réutilise l'onglet actuel tant qu'il n'est pas modifié ; le nouvel onglet en ouvre un par fichier",
         fileOpenModes: {
           preview: "Dans l'onglet actuel (aperçu)",
           tab: "Dans un nouvel onglet",
