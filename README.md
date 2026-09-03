@@ -34,7 +34,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.7.2-local.2-x64.exe`）安装。仅支持 Windows x64。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.7.2-local.3-x64.exe`）安装。仅支持 Windows x64。
 
 已安装旧版时，应用启动后自动检查新版本并升级，无需手动重装。
 
@@ -76,7 +76,7 @@
 
 ## 版本与更新
 
-- 版本号 = 对应上游版本 + `-local.N`（如 `0.7.2-local.2`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
+- 版本号 = 对应上游版本 + `-local.N`（如 `0.7.2-local.3`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
 - 应用内自动更新指向本仓库 Release；跨上游版本的升级链无缝（如 `0.5.x-local.N → 0.6.x-local.1`）。
 - 不运行上游的 CI / Android / Docker / 网站等构建流程，仅构建 Windows x64 桌面版。
 
