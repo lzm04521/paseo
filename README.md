@@ -34,7 +34,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.7.2-local.2-x64.exe`）安装。仅支持 Windows x64。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.7.2-local.3-x64.exe`）安装。仅支持 Windows x64。
 
 已安装旧版时，应用启动后自动检查新版本并升级，无需手动重装。
 
@@ -68,6 +68,7 @@
 - **文件夹「在Explorer中显示」打开自身**：文件浏览器右键文件夹选「在Explorer中显示」时打开该文件夹本身（Directory Opus 安装时在最近活动窗口开新标签），而非定位到其父目录；文件条目行为不变（仍在所在目录中定位）。
 - **文件链接错误提示增强**：对话中点击文件链接未找到文件时，错误提示附带尝试打开的完整路径，便于分析。
 - **workspace tab 保护**：禁止关闭 workspace 内最后一个 agent（对话）tab，其他类型 tab 照常关闭。
+- **文件 tab 复制路径拆分**：文件选项卡右键菜单的「复制文件路径」改为「复制文件相对路径」（相对 workspace 根目录，文件位于工作区外时该项自动隐藏），并新增「复制文件完整路径」（绝对路径）；键盘快捷键与命令中心条目同步生效。
 - **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
 - **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
 - **空闲自动重启（idle auto-restart）**：daemon「连续运行 ≥ 运行阈值 且 空闲 ≥ 空闲阈值」双条件同时满足时自动重启（默认 120 / 20 分钟），开关与阈值在 Settings → Host → Daemon 配置、即改即生效（watchdog 每 30s tick 动态读配置）；设置卡片显示「本次启动于 · 已运行 · 已空闲」，与触发判定同源，每次自动重启后如实归零。
@@ -76,7 +77,7 @@
 
 ## 版本与更新
 
-- 版本号 = 对应上游版本 + `-local.N`（如 `0.7.2-local.2`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
+- 版本号 = 对应上游版本 + `-local.N`（如 `0.7.2-local.3`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
 - 应用内自动更新指向本仓库 Release；跨上游版本的升级链无缝（如 `0.5.x-local.N → 0.6.x-local.1`）。
 - 不运行上游的 CI / Android / Docker / 网站等构建流程，仅构建 Windows x64 桌面版。
 
