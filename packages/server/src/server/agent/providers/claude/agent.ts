@@ -1602,7 +1602,12 @@ export class ClaudeAgentClient implements AgentClient {
       const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
         fetchAnthropicCompatModels(providerEnv, this.logger, context?.signal),
       );
-      models = mergeClaudeRemoteModels(settingsModels, remoteModels);
+      // 补思考等级：settings/远端来源不带 thinkingOptions，不补则 UI 不显示思考等级选择器。
+      // resolveConfiguredClaudeModel 会把可归一到 manifest 的 id（如 claude-opus-5[1M]）继承
+      // 官方思考选项，其余（网关自定义模型）给通用 custom 兜底——与手写 models 条目同款语义。
+      models = mergeClaudeRemoteModels(settingsModels, remoteModels).map((model) =>
+        resolveConfiguredClaudeModel(model),
+      );
     } else {
       models = await runProviderRefreshActivity(context, "settings", () =>
         getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),

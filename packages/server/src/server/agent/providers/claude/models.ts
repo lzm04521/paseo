@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 
 import type { AgentModelDefinition } from "../../agent-sdk-types.js";
 import {
+  CLAUDE_DEFAULT_THINKING_OPTION_ID,
   getClaudeCustomModelThinkingOptions,
   getClaudeManifestModels,
   normalizeClaudeManifestModelId,
@@ -32,10 +33,19 @@ export function resolveConfiguredClaudeModel(model: AgentModelDefinition): Agent
     : undefined;
   if (manifestModel) {
     return manifestModel.thinkingOptions
-      ? { ...model, thinkingOptions: manifestModel.thinkingOptions }
+      ? {
+          ...model,
+          thinkingOptions: manifestModel.thinkingOptions,
+          defaultThinkingOptionId:
+            manifestModel.defaultThinkingOptionId ?? model.defaultThinkingOptionId,
+        }
       : model;
   }
-  return { ...model, thinkingOptions: getClaudeCustomModelThinkingOptions() };
+  return {
+    ...model,
+    thinkingOptions: getClaudeCustomModelThinkingOptions(),
+    defaultThinkingOptionId: CLAUDE_DEFAULT_THINKING_OPTION_ID,
+  };
 }
 
 export function findClaudeModel(

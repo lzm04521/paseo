@@ -3125,7 +3125,10 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
     try {
       await fs.writeFile(
         path.join(configDir, "settings.json"),
-        JSON.stringify({ model: "settings-declared-model" }),
+        JSON.stringify({
+          model: "settings-declared-model",
+          env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-sonnet-5" },
+        }),
         "utf8",
       );
       const client = new ClaudeAgentClient({
@@ -3147,8 +3150,19 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
       const modelIds = catalog.models.map((model) => model.id);
       expect(modelIds).toContain("glm-4.7");
       expect(modelIds).toContain("settings-declared-model");
+      expect(modelIds).toContain("claude-sonnet-5");
       expect(modelIds).not.toContain("claude-opus-5");
-      expect(modelIds.length).toBe(2);
+      expect(modelIds.length).toBe(3);
+      // 思考等级：非 Anthropic id（远端/自定义）拿 custom 兜底，可归一 manifest 的 id 继承官方选项
+      const remoteModel = catalog.models.find((model) => model.id === "glm-4.7");
+      expect(remoteModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      const settingsCustomModel = catalog.models.find(
+        (model) => model.id === "settings-declared-model",
+      );
+      expect(settingsCustomModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      const manifestModel = catalog.models.find((model) => model.id === "claude-sonnet-5");
+      expect(manifestModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      expect(manifestModel?.defaultThinkingOptionId).toBeTruthy();
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }
@@ -3177,6 +3191,7 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
       const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
 
       expect(catalog.models.map((model) => model.id)).toEqual(["settings-declared-model"]);
+      expect(catalog.models[0]?.thinkingOptions?.length).toBeGreaterThan(0);
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }
