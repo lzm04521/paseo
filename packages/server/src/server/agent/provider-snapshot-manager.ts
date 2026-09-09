@@ -109,6 +109,34 @@ function omitProviderOverrides(
   return Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined;
 }
 
+/**
+ * Apply a provider-level defaultModelId override to catalog models: the model
+ * whose id matches becomes the only isDefault entry; every other entry loses
+ * the flag. matched=false when the override is unset (models untouched) or set
+ * but absent from the catalog (dynamic remote lists change — caller keeps the
+ * untouched list and logs).
+ */
+export function applyProviderDefaultModelId(
+  models: AgentModelDefinition[],
+  defaultModelId: string | null | undefined,
+): { models: AgentModelDefinition[]; matched: boolean } {
+  const target = defaultModelId?.trim();
+  if (!target) {
+    return { models, matched: false };
+  }
+  const index = models.findIndex((model) => model.id === target);
+  if (index === -1) {
+    return { models, matched: false };
+  }
+  const next = models.map((model, position) => {
+    if (position === index) {
+      return model.isDefault ? model : { ...model, isDefault: true };
+    }
+    return model.isDefault === undefined ? model : { ...model, isDefault: undefined };
+  });
+  return { models: next, matched: true };
+}
+
 type ProviderSnapshotChangeListener = (entries: ProviderSnapshotEntry[], cwd: string) => void;
 
 export interface ProviderSnapshotManagerOptions {
@@ -989,13 +1017,20 @@ export class ProviderSnapshotManager {
         return;
       }
 
+      const appliedModels = applyProviderDefaultModelId(catalog.models, definition.defaultModelId);
+      if (definition.defaultModelId && !appliedModels.matched) {
+        this.logger.warn(
+          { provider, defaultModelId: definition.defaultModelId },
+          "Configured default model not found in provider catalog; keeping first-listed default",
+        );
+      }
       setEntry({
         ...base,
         defaultModeId:
           catalog.defaultModeId === undefined ? definition.defaultModeId : catalog.defaultModeId,
         status: "ready",
         enabled: true,
-        models: catalog.models,
+        models: appliedModels.models,
         modes: catalog.modes,
         fetchedAt: new Date().toISOString(),
       });

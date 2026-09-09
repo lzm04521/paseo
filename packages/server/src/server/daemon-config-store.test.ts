@@ -87,6 +87,31 @@ describe("applyMutableProviderConfigToOverrides", () => {
       },
     });
   });
+
+  test("sets defaultModelId from a patch and keeps it when a later patch omits it", () => {
+    const first = applyMutableProviderConfigToOverrides(
+      { "my-relay": { extends: "claude", label: "My Relay" } },
+      { "my-relay": { defaultModelId: "glm-4.7" } },
+    );
+    expect(first?.["my-relay"]?.defaultModelId).toBe("glm-4.7");
+
+    const second = applyMutableProviderConfigToOverrides(first, {
+      "my-relay": { label: "Renamed" },
+    });
+    expect(second?.["my-relay"]?.label).toBe("Renamed");
+    expect(second?.["my-relay"]?.defaultModelId).toBe("glm-4.7");
+  });
+
+  test("clears defaultModelId when the patch sends an empty string", () => {
+    expect(
+      applyMutableProviderConfigToOverrides(
+        { "my-relay": { extends: "claude", label: "My Relay", defaultModelId: "glm-4.7" } },
+        { "my-relay": { defaultModelId: "" } },
+      ),
+    ).toEqual({
+      "my-relay": { extends: "claude", label: "My Relay" },
+    });
+  });
 });
 
 describe("DaemonConfigStore", () => {

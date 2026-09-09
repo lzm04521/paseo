@@ -56,6 +56,9 @@ export const ProviderOverrideSchema = z.object({
   enabled: z.boolean().optional(),
   order: z.number().optional(),
   fetchModels: z.boolean().optional(),
+  // 供应商级默认模型 id：快照刷新时把它标到模型列表的 isDefault 上（未命中则忽略）。
+  // 允许空串——patch 通道用空串表示清除该键（JSON 里 undefined 键不可达），读取侧统一按未设置处理。
+  defaultModelId: z.string().optional(),
 });
 
 const BUILTIN_PROVIDER_IDS = ["claude", "codex", "copilot", "opencode", "pi", "omp"] as const;

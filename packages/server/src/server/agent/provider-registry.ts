@@ -78,6 +78,12 @@ export interface ProviderDefinition extends AgentProviderDefinition {
    * generic ACP providers (which only extend the literal "acp" sentinel).
    */
   derivedFromProviderId: string | null;
+  /**
+   * Provider-level default model id from the provider override. The snapshot
+   * manager applies it to the catalog's models as the isDefault flag; null
+   * means "no configured default" (first-listed model wins, as before).
+   */
+  defaultModelId: string | null;
   optionsSchema: z.ZodType<ProviderOptions>;
   supportsExactMcpPreapproval: boolean;
   validateOptions: (options: ProviderOptions | undefined) => ProviderOptions | undefined;
@@ -142,6 +148,7 @@ interface ResolvedProvider {
   profileModelsAreAdditive: boolean;
   enabled: boolean;
   derivedFromProviderId: string | null;
+  defaultModelId?: string;
   providerParams?: unknown;
   createBaseClient: (logger: Logger) => AgentClient;
   contract: ProviderContract;
@@ -616,6 +623,7 @@ function createRegistryEntry(
     ...resolved.definition,
     enabled: resolved.enabled,
     derivedFromProviderId: resolved.derivedFromProviderId,
+    defaultModelId: resolved.defaultModelId?.trim() || null,
     optionsSchema: resolved.contract.optionsSchema,
     supportsExactMcpPreapproval: resolved.contract.supportsExactMcpPreapproval,
     validateOptions: (options) =>
@@ -735,6 +743,7 @@ function buildResolvedBuiltinProviders(
       profileModelsAreAdditive: false,
       enabled: override?.enabled ?? definition.enabledByDefault ?? true,
       derivedFromProviderId: null,
+      defaultModelId: override?.defaultModelId,
       providerParams: override?.params,
       createBaseClient: (logger) =>
         factory(logger, mergedRuntimeSettings, {
@@ -794,6 +803,7 @@ function addDerivedProviders(
         profileModelsAreAdditive: false,
         enabled: override.enabled !== false,
         derivedFromProviderId: null,
+        defaultModelId: override.defaultModelId,
         providerParams: override.params,
         createBaseClient: (logger) => {
           const acpOptions = {
@@ -850,6 +860,7 @@ function addDerivedProviders(
       profileModelsAreAdditive: false,
       enabled: override.enabled !== false,
       derivedFromProviderId: baseProviderId,
+      defaultModelId: override.defaultModelId,
       providerParams,
       createBaseClient: (logger) =>
         baseFactory(logger, mergedRuntimeSettings, {

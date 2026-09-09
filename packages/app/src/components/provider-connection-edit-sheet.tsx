@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { isWeb } from "@/constants/platform";
 
 function readProviderOverride(
@@ -58,6 +59,32 @@ export interface ProviderConnectionEditSheetProps {
   onSaved: () => void;
 }
 
+interface DefaultModelOptionRowProps {
+  optionId: string;
+  label: string;
+  selected: boolean;
+  onSelect: (modelId: string) => void;
+}
+
+function DefaultModelOptionRow({
+  optionId,
+  label,
+  selected,
+  onSelect,
+}: DefaultModelOptionRowProps) {
+  const handleSelect = useCallback(() => onSelect(optionId), [onSelect, optionId]);
+  return (
+    <Pressable
+      onPress={handleSelect}
+      style={[styles.optionRow, selected && styles.optionRowSelected]}
+      testID={`connection-default-model-${optionId}`}
+    >
+      <Text style={styles.optionLabel}>{label}</Text>
+      {optionId && optionId !== label ? <Text style={styles.optionHint}>{optionId}</Text> : null}
+    </Pressable>
+  );
+}
+
 export function ProviderConnectionEditSheet({
   provider,
   serverId,
@@ -67,6 +94,7 @@ export function ProviderConnectionEditSheet({
 }: ProviderConnectionEditSheetProps) {
   const { t } = useTranslation();
   const { config, patchConfig } = useDaemonConfig(serverId);
+  const { entries } = useProvidersSnapshot(serverId);
   const override = useMemo(() => readProviderOverride(config, provider), [config, provider]);
 
   const [label, setLabel] = useState(() => readStringField(override, "label"));
@@ -74,8 +102,27 @@ export function ProviderConnectionEditSheet({
   const [authToken, setAuthToken] = useState(() => readEnvString(override, "ANTHROPIC_AUTH_TOKEN"));
   const [apiKey, setApiKey] = useState(() => readEnvString(override, "ANTHROPIC_API_KEY"));
   const [fetchModels, setFetchModels] = useState(() => override?.fetchModels === true);
+  const [defaultModelId, setDefaultModelId] = useState(() =>
+    readStringField(override, "defaultModelId").trim(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 选项来自该供应商的快照模型列表；已配置的默认模型若不在列表里（远端列表变化）
+  // 仍保留为独立选项，避免"看不见就被悄悄清除"。
+  const modelOptions = useMemo(() => {
+    const models = entries?.find((entry) => entry.provider === provider)?.models ?? [];
+    const options = models.map((model) => ({ id: model.id, label: model.label }));
+    if (defaultModelId && !options.some((option) => option.id === defaultModelId)) {
+      options.unshift({ id: defaultModelId, label: defaultModelId });
+    }
+    return options;
+  }, [defaultModelId, entries, provider]);
+
+  const handleSelectDefaultModel = useCallback((modelId: string) => {
+    setDefaultModelId(modelId);
+  }, []);
+  const handleSelectNoDefault = useCallback(() => setDefaultModelId(""), []);
 
   useEffect(() => {
     if (!visible) {
@@ -101,12 +148,15 @@ export function ProviderConnectionEditSheet({
     if (trimmedToken) env.ANTHROPIC_AUTH_TOKEN = trimmedToken;
     const trimmedApiKey = apiKey.trim();
     if (trimmedApiKey) env.ANTHROPIC_API_KEY = trimmedApiKey;
+    const trimmedDefaultModelId = defaultModelId.trim();
     void patchConfig({
       providers: {
         [provider]: {
           label: trimmedLabel,
           env,
           fetchModels,
+          // 空串 = 清除默认模型（服务端 patch 语义：defaultModelId === "" 删键）。
+          defaultModelId: trimmedDefaultModelId,
         },
       },
     })
@@ -120,6 +170,7 @@ export function ProviderConnectionEditSheet({
     authToken,
     baseUrl,
     canSave,
+    defaultModelId,
     fetchModels,
     onSaved,
     override,
@@ -193,6 +244,27 @@ export function ProviderConnectionEditSheet({
             testID="connection-fetch-models"
           />
         </View>
+        <Text style={styles.formLabel}>{t("settings.providers.connection.defaultModel")}</Text>
+        <View style={styles.optionList}>
+          <Pressable
+            onPress={handleSelectNoDefault}
+            style={[styles.optionRow, defaultModelId === "" && styles.optionRowSelected]}
+            testID="connection-default-model-unset"
+          >
+            <Text style={styles.optionLabel}>
+              {t("settings.providers.connection.defaultModelUnset")}
+            </Text>
+          </Pressable>
+          {modelOptions.map((option) => (
+            <DefaultModelOptionRow
+              key={option.id}
+              optionId={option.id}
+              label={option.label}
+              selected={defaultModelId === option.id}
+              onSelect={handleSelectDefaultModel}
+            />
+          ))}
+        </View>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <View style={styles.formActions}>
           <Button variant="secondary" size="sm" onPress={onClose} disabled={saving}>
@@ -226,6 +298,16 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     paddingVertical: theme.spacing[2],
   },
+  optionList: { gap: theme.spacing[1] },
+  optionRow: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing[2],
+  },
+  optionRowSelected: { borderColor: theme.colors.primary },
+  optionLabel: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
+  optionHint: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   errorText: { color: theme.colors.statusDanger, fontSize: theme.fontSize.sm },
   formActions: { flexDirection: "row", gap: theme.spacing[2], marginTop: theme.spacing[2] },
 }));

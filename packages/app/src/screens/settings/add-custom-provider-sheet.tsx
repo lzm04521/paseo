@@ -38,6 +38,7 @@ export function AddCustomProviderSheet({
   const [authToken, setAuthToken] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [fetchModels, setFetchModels] = useState(true);
+  const [defaultModelId, setDefaultModelId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -49,6 +50,7 @@ export function AddCustomProviderSheet({
       setAuthToken("");
       setApiKey("");
       setFetchModels(true);
+      setDefaultModelId("");
       setError(null);
     }
   }, [visible]);
@@ -78,6 +80,7 @@ export function AddCustomProviderSheet({
     if (trimmedToken) env.ANTHROPIC_AUTH_TOKEN = trimmedToken;
     const trimmedApiKey = apiKey.trim();
     if (trimmedApiKey) env.ANTHROPIC_API_KEY = trimmedApiKey;
+    const trimmedDefaultModelId = defaultModelId.trim();
     void patchConfig({
       providers: {
         [trimmedId]: {
@@ -85,6 +88,8 @@ export function AddCustomProviderSheet({
           label: trimmedLabel,
           env,
           fetchModels,
+          // 留空不设默认模型（新建会话落到列表第一个）；空串在 patch 语义里表示清除。
+          ...(trimmedDefaultModelId ? { defaultModelId: trimmedDefaultModelId } : {}),
         },
       },
     })
@@ -97,6 +102,7 @@ export function AddCustomProviderSheet({
     apiKey,
     authToken,
     baseUrl,
+    defaultModelId,
     existingProviderIds,
     fetchModels,
     onAdded,
@@ -184,6 +190,18 @@ export function AddCustomProviderSheet({
           <Text style={styles.formLabel}>{t("settings.providers.addCustom.fetchModels")}</Text>
           <Switch value={fetchModels} onValueChange={setFetchModels} />
         </View>
+        <Text style={styles.formLabel}>{t("settings.providers.addCustom.defaultModel")}</Text>
+        <AdaptiveTextInput
+          initialValue={defaultModelId}
+          resetKey={`add-provider-default-model-${visible}`}
+          onChangeText={setDefaultModelId}
+          placeholder={t("settings.providers.addCustom.defaultModelPlaceholder")}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="add-provider-default-model"
+          // @ts-expect-error - outlineStyle is web-only
+          style={[styles.formInput, isWeb && { outlineStyle: "none" }]}
+        />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <View style={styles.formActions}>
           <Button variant="secondary" size="sm" onPress={onClose} disabled={saving}>

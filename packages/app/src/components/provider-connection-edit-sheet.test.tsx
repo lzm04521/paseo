@@ -6,7 +6,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { patchConfigMock, configState } = vi.hoisted(() => ({
+const { patchConfigMock, configState, snapshotState } = vi.hoisted(() => ({
   patchConfigMock: vi.fn(async () => undefined),
   configState: {
     config: {
@@ -25,10 +25,26 @@ const { patchConfigMock, configState } = vi.hoisted(() => ({
       },
     },
   },
+  snapshotState: {
+    entries: [
+      {
+        provider: "my-relay",
+        status: "ready",
+        enabled: true,
+        models: [
+          { provider: "my-relay", id: "glm-4.7", label: "GLM-4.7" },
+          { provider: "my-relay", id: "glm-4.8", label: "GLM-4.8" },
+        ],
+      },
+    ],
+  },
 }));
 
 vi.mock("@/hooks/use-daemon-config", () => ({
   useDaemonConfig: () => ({ config: configState.config, patchConfig: patchConfigMock }),
+}));
+vi.mock("@/hooks/use-providers-snapshot", () => ({
+  useProvidersSnapshot: () => snapshotState,
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -39,8 +55,15 @@ vi.mock("react-native", () => ({
     React.createElement("div", null, children),
   Text: ({ children }: { children?: React.ReactNode }) =>
     React.createElement("span", null, children),
-  Pressable: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
-    React.createElement("div", { onClick: onPress }, children),
+  Pressable: ({
+    children,
+    onPress,
+    testID,
+  }: {
+    children?: React.ReactNode;
+    onPress?: () => void;
+    testID?: string;
+  }) => React.createElement("div", { "data-testid": testID, onClick: onPress }, children),
   StyleSheet: { create: () => ({}) },
 }));
 vi.mock("react-native-unistyles", () => ({
@@ -188,6 +211,7 @@ describe("ProviderConnectionEditSheet", () => {
             ANTHROPIC_MODEL: "claude-x",
           },
           fetchModels: true,
+          defaultModelId: "",
         },
       },
     });
@@ -209,8 +233,57 @@ describe("ProviderConnectionEditSheet", () => {
             ANTHROPIC_MODEL: "claude-x",
           },
           fetchModels: true,
+          defaultModelId: "",
         },
       },
     });
+  });
+
+  it("lists snapshot models as default-model options and patches the selection", async () => {
+    renderSheet();
+    expect(document.querySelector('[data-testid="connection-default-model-unset"]')).not.toBeNull();
+    const option = document.querySelector(
+      '[data-testid="connection-default-model-glm-4.8"]',
+    ) as HTMLElement;
+    expect(option).not.toBeNull();
+    act(() => option.click());
+    clickSave();
+    await act(async () => {});
+
+    expect(patchConfigMock).toHaveBeenCalledWith({
+      providers: {
+        "my-relay": {
+          label: "My Relay",
+          env: {
+            ANTHROPIC_BASE_URL: "https://relay.example.com",
+            ANTHROPIC_AUTH_TOKEN: "old-token",
+            ANTHROPIC_MODEL: "claude-x",
+          },
+          fetchModels: true,
+          defaultModelId: "glm-4.8",
+        },
+      },
+    });
+  });
+
+  it("prefills a configured default model and keeps an unknown id selectable", async () => {
+    const override = configState.config.providers["my-relay"] as Record<string, unknown>;
+    override.defaultModelId = "hidden-model";
+    try {
+      renderSheet();
+      const option = document.querySelector(
+        '[data-testid="connection-default-model-hidden-model"]',
+      ) as HTMLElement;
+      expect(option).not.toBeNull();
+      clickSave();
+      await act(async () => {});
+
+      const calls = patchConfigMock.mock.calls as unknown as Array<
+        [{ providers: Record<string, Record<string, unknown>> }]
+      >;
+      expect(calls[0]?.[0]?.providers["my-relay"]?.defaultModelId).toBe("hidden-model");
+    } finally {
+      delete override.defaultModelId;
+    }
   });
 });
