@@ -672,7 +672,13 @@ export function ProviderDiagnosticSheet({
   const handleOpenDiagSheet = useCallback(() => setDiagSheetOpen(true), []);
   const handleCloseDiagSheet = useCallback(() => setDiagSheetOpen(false), []);
 
-  const isCustomProvider = providerEntry?.source === "custom";
+  // 连接编辑表单字段均为 ANTHROPIC_*（仅适配 claude 派生）：非 claude 派生的自定义供应商
+  // （如 extends: "acp"）不显示入口。override 值经 passthrough 索引签名为 unknown，需 inline narrow。
+  const providerOverrideEntry = config?.providers?.[provider] as
+    | Record<string, unknown>
+    | undefined;
+  const isClaudeDerivedCustomProvider =
+    providerEntry?.source === "custom" && providerOverrideEntry?.extends === "claude";
   const handleOpenConnectionSheet = useCallback(() => setConnectionSheetOpen(true), []);
   const handleCloseConnectionSheet = useCallback(() => setConnectionSheetOpen(false), []);
   const handleConnectionSaved = useCallback(() => {
@@ -724,7 +730,9 @@ export function ProviderDiagnosticSheet({
           t,
           onOpenAddSheet: handleOpenAddSheet,
           onOpenDiagSheet: handleOpenDiagSheet,
-          onOpenConnectionSheet: isCustomProvider ? handleOpenConnectionSheet : undefined,
+          onOpenConnectionSheet: isClaudeDerivedCustomProvider
+            ? handleOpenConnectionSheet
+            : undefined,
           onRefreshModels: handleRefreshModels,
         })}
         snapPoints={MAIN_SNAP_POINTS}
@@ -757,7 +765,7 @@ export function ProviderDiagnosticSheet({
         visible={diagSheetOpen}
         onClose={handleCloseDiagSheet}
       />
-      {isCustomProvider ? (
+      {isClaudeDerivedCustomProvider ? (
         <ProviderConnectionEditSheet
           provider={provider}
           serverId={serverId}

@@ -36,6 +36,20 @@ function readEnvString(source: Record<string, unknown> | undefined, key: string)
   return typeof value === "string" ? value : "";
 }
 
+// 服务端按 provider 浅合并，patch env 会整体替换落盘 env，
+// 保存前先把现有 env（含用户手写的非托管键）拷出来做基底，避免整包替换丢键。
+function readEnvRecord(source: Record<string, unknown> | undefined): Record<string, string> {
+  const env = source?.env;
+  if (env === undefined || env === null || typeof env !== "object" || Array.isArray(env)) {
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env as Record<string, unknown>)) {
+    if (typeof value === "string") result[key] = value;
+  }
+  return result;
+}
+
 export interface ProviderConnectionEditSheetProps {
   provider: string;
   serverId: string;
@@ -76,7 +90,11 @@ export function ProviderConnectionEditSheet({
     if (!canSave) return;
     setError(null);
     setSaving(true);
-    const env: Record<string, string> = {};
+    // 托管键（三个 ANTHROPIC_*）先删后写：清空的托管键做属性删除（不写空串），其余非托管键原样保留。
+    const env = readEnvRecord(override);
+    delete env.ANTHROPIC_BASE_URL;
+    delete env.ANTHROPIC_AUTH_TOKEN;
+    delete env.ANTHROPIC_API_KEY;
     const trimmedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
     if (trimmedBaseUrl) env.ANTHROPIC_BASE_URL = trimmedBaseUrl;
     const trimmedToken = authToken.trim();
@@ -104,6 +122,7 @@ export function ProviderConnectionEditSheet({
     canSave,
     fetchModels,
     onSaved,
+    override,
     patchConfig,
     provider,
     trimmedLabel,

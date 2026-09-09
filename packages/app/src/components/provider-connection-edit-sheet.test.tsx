@@ -17,6 +17,8 @@ const { patchConfigMock, configState } = vi.hoisted(() => ({
           env: {
             ANTHROPIC_BASE_URL: "https://relay.example.com",
             ANTHROPIC_AUTH_TOKEN: "old-token",
+            // 非托管键：用户手写在 config.json 里的额外 env，保存连接时必须原样保留。
+            ANTHROPIC_MODEL: "claude-x",
           },
           fetchModels: true,
         },
@@ -183,6 +185,28 @@ describe("ProviderConnectionEditSheet", () => {
           env: {
             ANTHROPIC_BASE_URL: "https://relay.example.com",
             ANTHROPIC_AUTH_TOKEN: "new-token",
+            ANTHROPIC_MODEL: "claude-x",
+          },
+          fetchModels: true,
+        },
+      },
+    });
+  });
+
+  it("drops the cleared managed token key but keeps other env keys", async () => {
+    renderSheet();
+    setInput("connection-auth-token", "");
+    clickSave();
+    await act(async () => {});
+
+    expect(patchConfigMock).toHaveBeenCalledTimes(1);
+    expect(patchConfigMock).toHaveBeenCalledWith({
+      providers: {
+        "my-relay": {
+          label: "My Relay",
+          env: {
+            ANTHROPIC_BASE_URL: "https://relay.example.com",
+            ANTHROPIC_MODEL: "claude-x",
           },
           fetchModels: true,
         },
