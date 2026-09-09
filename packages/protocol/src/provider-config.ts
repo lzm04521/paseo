@@ -55,6 +55,7 @@ export const ProviderOverrideSchema = z.object({
   disallowedTools: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
   order: z.number().optional(),
+  fetchModels: z.boolean().optional(),
 });
 
 const BUILTIN_PROVIDER_IDS = ["claude", "codex", "copilot", "opencode", "pi", "omp"] as const;
@@ -89,6 +90,17 @@ export const ProviderOverridesSchema = z
           code: z.ZodIssueCode.custom,
           path: [providerId, "label"],
           message: `Custom provider "${providerId}" must declare label.`,
+        });
+      }
+
+      if (
+        provider.fetchModels === true &&
+        (provider.models !== undefined || provider.additionalModels !== undefined)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [providerId, "fetchModels"],
+          message: `Provider "${providerId}" cannot combine fetchModels with static models.`,
         });
       }
 
