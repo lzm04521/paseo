@@ -24,6 +24,7 @@ import {
 import { ProviderCatalogList } from "@/components/provider-catalog-list";
 import { getProviderIcon } from "@/components/provider-icons";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
@@ -32,10 +33,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SettingsSection } from "@/screens/settings/settings-section";
+import { AddCustomProviderSheet } from "@/screens/settings/add-custom-provider-sheet";
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
-import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
+import { ChevronRight, MoreHorizontal, Plus, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
@@ -332,6 +334,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const removingProviderIdRef = useRef<string | null>(null);
   const [installingProviderId, setInstallingProviderId] = useState<string | null>(null);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
   const hasServer = serverId.length > 0;
@@ -411,6 +414,16 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
     [installingProviderId, patchConfig, refresh, t],
   );
 
+  const handleOpenAddSheet = useCallback(() => setAddSheetOpen(true), []);
+  const handleCloseAddSheet = useCallback(() => setAddSheetOpen(false), []);
+  const handleProviderAdded = useCallback(
+    async (providerId: string) => {
+      setAddSheetOpen(false);
+      await refresh([providerId]);
+    },
+    [refresh],
+  );
+
   return (
     <>
       <SettingsSection
@@ -459,6 +472,17 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           testID="host-page-add-provider-card"
           style={styles.addProviderSection}
         >
+          <View style={styles.manualAddRow}>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={Plus}
+              onPress={handleOpenAddSheet}
+              testID="add-custom-provider-button"
+            >
+              {t("settings.providers.addCustom.button")}
+            </Button>
+          </View>
           <ProviderCatalogList
             serverId={serverId}
             installingProviderId={installingProviderId}
@@ -466,6 +490,14 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           />
         </SettingsSection>
       ) : null}
+
+      <AddCustomProviderSheet
+        serverId={serverId}
+        visible={addSheetOpen}
+        onClose={handleCloseAddSheet}
+        existingProviderIds={(providerDefinitions ?? []).map((def) => def.id)}
+        onAdded={handleProviderAdded}
+      />
     </>
   );
 }
@@ -476,6 +508,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   addProviderSection: {
     marginTop: theme.spacing[4],
+  },
+  manualAddRow: {
+    padding: theme.spacing[3],
   },
   emptyCard: {
     padding: theme.spacing[4],
