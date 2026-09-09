@@ -323,16 +323,10 @@ export function applyMutableProviderConfigToOverrides(
 
   const nextOverrides: Record<string, ProviderOverride> = { ...baseOverrides };
   for (const [providerId, providerConfig] of Object.entries(mutableProviders ?? {})) {
-    const parsedPatch = ProviderOverrideSchema.strip().parse(providerConfig) as ProviderOverride;
-    const merged: ProviderOverride = {
+    nextOverrides[providerId] = {
       ...nextOverrides[providerId],
-      ...parsedPatch,
+      ...ProviderOverrideSchema.strip().parse(providerConfig),
     };
-    // defaultModelId 用空串表示清除（JSON patch 无法表达"删除键"）；其余键保持浅合并语义。
-    if (parsedPatch.defaultModelId === "") {
-      delete merged.defaultModelId;
-    }
-    nextOverrides[providerId] = merged;
   }
 
   return nextOverrides;

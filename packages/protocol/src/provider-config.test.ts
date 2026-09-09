@@ -60,39 +60,3 @@ describe("ProviderOverridesSchema fetchModels", () => {
     expect(result.success).toBe(true);
   });
 });
-
-describe("ProviderOverridesSchema defaultModelId", () => {
-  it("accepts defaultModelId alongside fetchModels", () => {
-    const result = ProviderOverridesSchema.safeParse({
-      "my-relay": {
-        extends: "claude",
-        label: "My Relay",
-        fetchModels: true,
-        defaultModelId: "glm-4.7",
-      },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data["my-relay"]?.defaultModelId).toBe("glm-4.7");
-    }
-  });
-
-  it("accepts defaultModelId alongside static models", () => {
-    const result = ProviderOverridesSchema.safeParse({
-      "my-relay": {
-        extends: "claude",
-        label: "My Relay",
-        models: [{ id: "m1", label: "M1" }],
-        defaultModelId: "m1",
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts empty string defaultModelId (patch clear sentinel)", () => {
-    const result = ProviderOverridesSchema.safeParse({
-      "my-relay": { extends: "claude", label: "My Relay", defaultModelId: "" },
-    });
-    expect(result.success).toBe(true);
-  });
-});

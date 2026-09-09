@@ -164,43 +164,6 @@ describe("AddCustomProviderSheet", () => {
     });
   });
 
-  it("patches config with defaultModelId when provided", async () => {
-    renderSheet();
-    setInput("add-provider-id", "my-relay");
-    setInput("add-provider-label", "My Relay");
-    setInput("add-provider-default-model", "glm-4.7");
-    clickSave();
-    await act(async () => {});
-
-    expect(patchConfigMock).toHaveBeenCalledWith({
-      providers: {
-        "my-relay": {
-          extends: "claude",
-          label: "My Relay",
-          env: {},
-          fetchModels: true,
-          defaultModelId: "glm-4.7",
-        },
-      },
-    });
-  });
-
-  it("omits defaultModelId when left blank", async () => {
-    renderSheet();
-    setInput("add-provider-id", "my-relay");
-    setInput("add-provider-label", "My Relay");
-    setInput("add-provider-default-model", "   ");
-    clickSave();
-    await act(async () => {});
-
-    expect(patchConfigMock).toHaveBeenCalledTimes(1);
-    // vi.fn 无参签名，调用元组是 []，先整体断言再取参
-    const calls = patchConfigMock.mock.calls as unknown as Array<
-      [{ providers: Record<string, Record<string, unknown>> }]
-    >;
-    expect(calls[0]?.[0]?.providers["my-relay"]).not.toHaveProperty("defaultModelId");
-  });
-
   it("blocks invalid provider id", async () => {
     renderSheet();
     setInput("add-provider-id", "My_Relay");

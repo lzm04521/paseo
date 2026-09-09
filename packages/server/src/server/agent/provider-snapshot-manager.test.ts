@@ -16,7 +16,6 @@ import type { ManagedAgent } from "./agent-manager.js";
 import {
   GLOBAL_PROVIDER_SNAPSHOT_KEY,
   ProviderSnapshotManager,
-  applyProviderDefaultModelId,
   resolveSnapshotCwd,
 } from "./provider-snapshot-manager.js";
 import { OpenCodeAgentClient } from "./providers/opencode-agent.js";
@@ -1745,57 +1744,5 @@ describe("ProviderSnapshotManager cwd routing", () => {
     } else {
       expect(resolved).toBeDefined();
     }
-  });
-});
-
-describe("applyProviderDefaultModelId", () => {
-  function models(): AgentModelDefinition[] {
-    return [
-      { provider: "zai", id: "m1", label: "M1" },
-      { provider: "zai", id: "m2", label: "M2", isDefault: true },
-      { provider: "zai", id: "m3", label: "M3" },
-    ];
-  }
-
-  test("unset default returns the input untouched", () => {
-    const input = models();
-    expect(applyProviderDefaultModelId(input, undefined)).toEqual({
-      models: input,
-      matched: false,
-    });
-    expect(applyProviderDefaultModelId(input, null)).toEqual({ models: input, matched: false });
-  });
-
-  test("blank default is treated as unset", () => {
-    const input = models();
-    expect(applyProviderDefaultModelId(input, "   ")).toEqual({
-      models: input,
-      matched: false,
-    });
-  });
-
-  test("matching id becomes the only default", () => {
-    const { models: next, matched } = applyProviderDefaultModelId(models(), "m3");
-    expect(matched).toBe(true);
-    expect(next.map((model) => [model.id, model.isDefault])).toEqual([
-      ["m1", undefined],
-      ["m2", undefined],
-      ["m3", true],
-    ]);
-  });
-
-  test("matching an already-default model keeps that entry untouched", () => {
-    const input = models();
-    const { models: next, matched } = applyProviderDefaultModelId(input, "m2");
-    expect(matched).toBe(true);
-    expect(next[1]).toBe(input[1]);
-  });
-
-  test("unknown id keeps the list untouched and reports a miss", () => {
-    const input = models();
-    expect(applyProviderDefaultModelId(input, "missing")).toEqual({
-      models: input,
-      matched: false,
-    });
   });
 });

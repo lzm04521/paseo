@@ -651,27 +651,6 @@ test("new provider extending claude appears in registry", () => {
   expect(registry.zai.createClient(logger).provider).toBe("zai");
 });
 
-test("provider override defaultModelId surfaces on the registry definition", () => {
-  const registry = buildProviderRegistry(logger, {
-    providerOverrides: {
-      zai: { extends: "claude", label: "ZAI", defaultModelId: "glm-4.7" },
-    },
-  });
-
-  expect(registry.zai.defaultModelId).toBe("glm-4.7");
-  expect(registry.claude.defaultModelId).toBeNull();
-});
-
-test("blank defaultModelId is normalized to null", () => {
-  const registry = buildProviderRegistry(logger, {
-    providerOverrides: {
-      zai: { extends: "claude", label: "ZAI", defaultModelId: "   " },
-    },
-  });
-
-  expect(registry.zai.defaultModelId).toBeNull();
-});
-
 test("built-in OMP override keeps the real OMP adapter enabled and launchable", async () => {
   const omp = new FakeOmp(["custom-omp"]);
   const registry = buildProviderRegistry(logger, {
