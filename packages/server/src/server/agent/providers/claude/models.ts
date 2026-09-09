@@ -76,7 +76,10 @@ export async function getClaudeModelsWithSettings(
   return models;
 }
 
-async function readClaudeSettingsModels(
+/**
+ * Models declared in Claude settings.json (model field + env model keys), without the builtin manifest.
+ */
+export async function readClaudeSettingsModels(
   logger: Logger,
   configDir?: string,
 ): Promise<AgentModelDefinition[]> {

@@ -3111,7 +3111,7 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
     vi.unstubAllGlobals();
   });
 
-  test("merges remote models for custom providers with fetchModels enabled", async () => {
+  test("lists only settings + remote models (no manifest) for fetchModels providers", async () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(JSON.stringify({ data: [{ id: "glm-4.7", display_name: "GLM 4.7" }] }), {
@@ -3123,6 +3123,11 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
 
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
     try {
+      await fs.writeFile(
+        path.join(configDir, "settings.json"),
+        JSON.stringify({ model: "settings-declared-model" }),
+        "utf8",
+      );
       const client = new ClaudeAgentClient({
         logger,
         configDir,
@@ -3139,8 +3144,39 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock.mock.calls[0]?.[0]).toBe("https://relay.example.com/v1/models");
-      const remoteModel = catalog.models.find((model) => model.id === "glm-4.7");
-      expect(remoteModel?.label).toBe("GLM 4.7");
+      const modelIds = catalog.models.map((model) => model.id);
+      expect(modelIds).toContain("glm-4.7");
+      expect(modelIds).toContain("settings-declared-model");
+      expect(modelIds).not.toContain("claude-opus-5");
+      expect(modelIds.length).toBe(2);
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to settings-only list when remote fetch fails for fetchModels providers", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      await fs.writeFile(
+        path.join(configDir, "settings.json"),
+        JSON.stringify({ model: "settings-declared-model" }),
+        "utf8",
+      );
+      const client = new ClaudeAgentClient({
+        logger,
+        configDir,
+        runtimeSettings: { env: { ANTHROPIC_AUTH_TOKEN: "tok" } },
+        customProvider: { id: "my-relay", label: "My Relay", extends: "claude", fetchModels: true },
+      });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(catalog.models.map((model) => model.id)).toEqual(["settings-declared-model"]);
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }

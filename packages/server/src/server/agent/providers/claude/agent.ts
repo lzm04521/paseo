@@ -34,6 +34,7 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
+  readClaudeSettingsModels,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -1587,10 +1588,13 @@ export class ClaudeAgentClient implements AgentClient {
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
-    let models = await runProviderRefreshActivity(context, "settings", () =>
-      getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),
-    );
+    let models: AgentModelDefinition[];
     if (this.customProvider?.fetchModels) {
+      // 动态拉取模式：列表只含 settings.json 声明的模型 + 远端发现的模型。
+      // 内置 manifest 的 Anthropic 官方模型不适用于派生供应商（relay/兼容网关背后没有它们）。
+      const settingsModels = await runProviderRefreshActivity(context, "settings", () =>
+        readClaudeSettingsModels(this.logger, this.configDir),
+      );
       const providerEnv = createProviderEnv({
         baseEnv: process.env,
         runtimeSettings: this.runtimeSettings,
@@ -1598,7 +1602,11 @@ export class ClaudeAgentClient implements AgentClient {
       const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
         fetchAnthropicCompatModels(providerEnv, this.logger, context?.signal),
       );
-      models = mergeClaudeRemoteModels(models, remoteModels);
+      models = mergeClaudeRemoteModels(settingsModels, remoteModels);
+    } else {
+      models = await runProviderRefreshActivity(context, "settings", () =>
+        getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),
+      );
     }
     const modeCatalog = claudeModeCatalog(
       createProviderEnv({ baseEnv: process.env, runtimeSettings: this.runtimeSettings }),
