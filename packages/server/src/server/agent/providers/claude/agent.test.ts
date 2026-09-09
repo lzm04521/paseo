@@ -3103,3 +3103,63 @@ describe("Claude question permission notifications", () => {
     expect(request.description).toBeUndefined();
   });
 });
+
+describe("ClaudeAgentClient fetchCatalog remote models", () => {
+  const logger = createTestLogger();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("merges remote models for custom providers with fetchModels enabled", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ id: "glm-4.7", display_name: "GLM 4.7" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      const client = new ClaudeAgentClient({
+        logger,
+        configDir,
+        runtimeSettings: {
+          env: {
+            ANTHROPIC_BASE_URL: "https://relay.example.com",
+            ANTHROPIC_AUTH_TOKEN: "tok",
+          },
+        },
+        customProvider: { id: "my-relay", label: "My Relay", extends: "claude", fetchModels: true },
+      });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://relay.example.com/v1/models");
+      const remoteModel = catalog.models.find((model) => model.id === "glm-4.7");
+      expect(remoteModel?.label).toBe("GLM 4.7");
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("skips remote fetch for builtin claude provider", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      const client = new ClaudeAgentClient({ logger, configDir });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(catalog.models.length).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
+  });
+});

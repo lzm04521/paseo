@@ -42,6 +42,7 @@ import {
   parseClaudeCodeVersion,
   resolveClaudeDisabledThinkingForModel,
 } from "./model-manifest.js";
+import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
 import { ClaudeTaskState } from "./task-state.js";
@@ -401,6 +402,12 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   configDir?: string;
+  customProvider?: {
+    id: string;
+    label: string;
+    extends: string;
+    fetchModels?: boolean;
+  };
   getDaemonConfig?: () => MutableDaemonConfig;
 }
 
@@ -1498,6 +1505,7 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly configDir?: string;
+  private readonly customProvider?: ClaudeAgentClientOptions["customProvider"];
   private readonly getDaemonConfig?: () => MutableDaemonConfig;
 
   constructor(options: ClaudeAgentClientOptions) {
@@ -1510,6 +1518,7 @@ export class ClaudeAgentClient implements AgentClient {
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.configDir = options.configDir;
+    this.customProvider = options.customProvider;
     this.getDaemonConfig = options.getDaemonConfig;
   }
 
@@ -1578,9 +1587,19 @@ export class ClaudeAgentClient implements AgentClient {
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
-    const models = await runProviderRefreshActivity(context, "settings", () =>
+    let models = await runProviderRefreshActivity(context, "settings", () =>
       getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),
     );
+    if (this.customProvider?.fetchModels) {
+      const providerEnv = createProviderEnv({
+        baseEnv: process.env,
+        runtimeSettings: this.runtimeSettings,
+      });
+      const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
+        fetchAnthropicCompatModels(providerEnv, this.logger, context?.signal),
+      );
+      models = mergeClaudeRemoteModels(models, remoteModels);
+    }
     const modeCatalog = claudeModeCatalog(
       createProviderEnv({ baseEnv: process.env, runtimeSettings: this.runtimeSettings }),
     );

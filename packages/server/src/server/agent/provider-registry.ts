@@ -124,6 +124,7 @@ interface ProviderClientFactoryOptions extends Pick<
     id: string;
     label: string;
     extends: string;
+    fetchModels?: boolean;
   };
 }
 
@@ -197,6 +198,7 @@ const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
     new ClaudeAgentClient({
       logger,
       runtimeSettings,
+      customProvider: options?.customProvider,
       getDaemonConfig: options?.getDaemonConfig,
     }),
   codex: (logger, runtimeSettings, options) =>
@@ -859,6 +861,7 @@ function addDerivedProviders(
             id: providerId,
             label: override.label ?? providerId,
             extends: baseProviderId,
+            fetchModels: override.fetchModels === true,
           },
         }),
       contract: baseProvider.contract,
