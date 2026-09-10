@@ -11,6 +11,7 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { buildSelectableProviderSelectorProviders } from "@/provider-selection/provider-selection";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { MetadataGenerationDefaultsCard } from "@/screens/settings/metadata-generation-defaults-card";
 import { settingsStyles } from "@/styles/settings";
 
 const METADATA_GENERATION_DOCS_URL = "https://paseo.sh/docs/metadata-generation";
@@ -159,6 +160,8 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
           </View>
         ) : null}
       </View>
+
+      <MetadataGenerationDefaultsCard serverId={serverId} />
     </SettingsSection>
   );
 }

@@ -1,3 +1,4 @@
+import { tryLaunchOpus } from "./opus.js";
 import type { EditorTarget } from "../target.js";
 
 const launchFileManager: EditorTarget["launch"] = async (input, runtime) => {
@@ -6,6 +7,13 @@ const launchFileManager: EditorTarget["launch"] = async (input, runtime) => {
     return;
   }
   await runtime.openPath(input.workspacePath);
+};
+
+// Windows "Explorer": prefer Directory Opus when installed, otherwise fall back to Windows
+// Explorer via the OS reveal/open helpers.
+const launchExplorer: EditorTarget["launch"] = async (input, runtime) => {
+  if (await tryLaunchOpus(input, runtime)) return;
+  await launchFileManager(input, runtime);
 };
 
 export const finderTarget: EditorTarget = {
@@ -37,7 +45,7 @@ export const explorerTarget: EditorTarget = {
   async isInstalled(runtime) {
     return runtime.platform === "win32";
   },
-  launch: launchFileManager,
+  launch: launchExplorer,
 };
 
 export const fileManagerTarget: EditorTarget = {

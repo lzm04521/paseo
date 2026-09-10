@@ -3,16 +3,39 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type { ReactElement, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Pressable, StyleSheet as RNStyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet as RNStyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import type { PressableStateCallbackType } from "react-native";
+import ReanimatedAnimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { Gesture } from "react-native-gesture-handler";
+import { scheduleOnRN } from "react-native-worklets";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Folder, FolderPlus, GitBranch, GitPullRequest } from "lucide-react-native";
+import {
+  ChevronDown,
+  ChevronLeft,
+  Folder,
+  FolderPlus,
+  GitBranch,
+  GitPullRequest,
+  PanelRight,
+} from "lucide-react-native";
 import { Composer } from "@/composer";
 import { KeyboardTranslateView } from "@/components/keyboard-translate-view";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
+import { FileExplorerPane } from "@/components/file-explorer-pane";
+import { FilePane } from "@/file-pane/pane";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
@@ -27,8 +50,10 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
+import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
+import { isWeb } from "@/constants/platform";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
@@ -55,6 +80,12 @@ import {
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { normalizeWorkspaceDescriptor, type WorkspaceDescriptor } from "@/stores/session-store";
+import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
+import {
+  SIDEBAR_RESIZE_ACTIVATION_OFFSET,
+  SIDEBAR_RESIZE_FAIL_OFFSET,
+} from "@/components/sidebar-resize-handle-layout";
+import { usePanelStore, MIN_FILE_NAV_WIDTH, MAX_FILE_NAV_WIDTH } from "@/stores/panel-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -70,6 +101,7 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { generateMessageId } from "@/types/stream";
 import { toErrorMessage } from "@/utils/error-messages";
+import type { ShortcutKey } from "@/utils/format-shortcut";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
   getHostProjectSourceDirectory,
@@ -135,7 +167,13 @@ import {
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
 
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedPanelRight = withUnistyles(PanelRight);
+const ThemedChevronLeft = withUnistyles(ChevronLeft);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundExtraMutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundExtraMuted,
+});
 const addProjectIcon = (
   <ThemedFolderPlus size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
@@ -219,9 +257,211 @@ const metaChevron = <MetaChevron />;
 
 // Stable reference so the keyboard-action handler doesn't re-register each render.
 const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pick"];
+const NAV_TOGGLE_ACTIONS: readonly KeyboardActionId[] = ["sidebar.toggle.right"];
+// Mirrors the workspace side-panel toggle (Ctrl/Cmd+E), shown in the button tooltip.
+const FILE_NAV_TOGGLE_KEYS: ShortcutKey[] = ["mod", "E"];
 // Height of a single picker-trigger badge. The Base-row spacer reserves exactly
 // this so toggling Isolation to Local hides the row without shifting the form.
 const BADGE_HEIGHT = 28;
+// Leaves at least this much room for the centered form when clamping the nav
+// column's drag width on narrow windows.
+const FILE_NAV_FORM_RESERVE_WIDTH = 520;
+
+// Worklet: clamps the nav column's drag width, keeping the centered form usable.
+function resolveFileNavWidth(requestedWidth: number, viewportWidth: number): number {
+  "worklet";
+  return Math.max(
+    MIN_FILE_NAV_WIDTH,
+    Math.min(MAX_FILE_NAV_WIDTH, requestedWidth, viewportWidth - FILE_NAV_FORM_RESERVE_WIDTH),
+  );
+}
+
+// Desktop-only navigation column state: open flag, drag-to-resize gesture, and
+// the file preview stack. Extracted so its callbacks don't count against the
+// screen component's complexity budget.
+function useNewWorkspaceFileNav(input: {
+  isCompact: boolean;
+  hasSourceDirectory: boolean;
+  sourceDirectory: string | null;
+}) {
+  const fileNavOpen = usePanelStore((state) => state.newWorkspaceFileNavOpen);
+  const toggleFileNav = usePanelStore((state) => state.toggleNewWorkspaceFileNav);
+  const fileNavWidth = usePanelStore((state) => state.newWorkspaceFileNavWidth);
+  const setNewWorkspaceFileNavWidth = usePanelStore((state) => state.setNewWorkspaceFileNavWidth);
+  const showNavPanel = !input.isCompact && input.hasSourceDirectory && fileNavOpen;
+  const workspaceRoot = input.sourceDirectory ?? "";
+  const { width: viewportWidth } = useWindowDimensions();
+  const visibleFileNavWidth = resolveFileNavWidth(fileNavWidth, viewportWidth);
+
+  // Clicking a file previews it inside the column (push/pop over the tree, tree
+  // expansion state survives). Any project switch resets to the tree.
+  const [navPreviewPath, setNavPreviewPath] = useState<string | null>(null);
+  useEffect(() => {
+    setNavPreviewPath(null);
+  }, [input.sourceDirectory]);
+  const closeNavPreview = useCallback(() => setNavPreviewPath(null), []);
+
+  const fileNavStartWidthRef = useRef(visibleFileNavWidth);
+  const fileNavResizeWidth = useSharedValue(visibleFileNavWidth);
+  const [fileNavResizePressed, setFileNavResizePressed] = useState(false);
+  const showFileNavGrip = useCallback(() => setFileNavResizePressed(true), []);
+  const hideFileNavGrip = useCallback(() => setFileNavResizePressed(false), []);
+
+  useEffect(() => {
+    fileNavResizeWidth.value = visibleFileNavWidth;
+  }, [fileNavResizeWidth, visibleFileNavWidth]);
+
+  // Mirror of the left sidebar's gesture: the handle sits on the column's LEFT
+  // edge, so dragging left (negative translationX) widens it — the anchor is
+  // offset accordingly. Width persists to panel-store on release.
+  const fileNavResizeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .hitSlop({ left: 8, right: 8, top: 0, bottom: 0 })
+        .onBegin(() => {
+          scheduleOnRN(showFileNavGrip);
+        })
+        .activeOffsetX([-SIDEBAR_RESIZE_ACTIVATION_OFFSET, SIDEBAR_RESIZE_ACTIVATION_OFFSET])
+        .failOffsetY([-SIDEBAR_RESIZE_FAIL_OFFSET, SIDEBAR_RESIZE_FAIL_OFFSET])
+        .onStart((event) => {
+          fileNavStartWidthRef.current = visibleFileNavWidth + event.translationX;
+          fileNavResizeWidth.value = visibleFileNavWidth;
+        })
+        .onUpdate((event) => {
+          fileNavResizeWidth.value = resolveFileNavWidth(
+            fileNavStartWidthRef.current - event.translationX,
+            viewportWidth,
+          );
+        })
+        .onEnd(() => {
+          runOnJS(setNewWorkspaceFileNavWidth)(fileNavResizeWidth.value);
+        })
+        .onFinalize(() => {
+          scheduleOnRN(hideFileNavGrip);
+        }),
+    [
+      fileNavResizeWidth,
+      hideFileNavGrip,
+      setNewWorkspaceFileNavWidth,
+      showFileNavGrip,
+      viewportWidth,
+      visibleFileNavWidth,
+    ],
+  );
+
+  const fileNavPanelStyle = useAnimatedStyle(() => ({
+    width: fileNavResizeWidth.value,
+  }));
+  const contentNavPadStyle = useAnimatedStyle(
+    () => ({
+      paddingRight: showNavPanel ? fileNavResizeWidth.value : 0,
+    }),
+    [showNavPanel],
+  );
+
+  return {
+    showNavPanel,
+    workspaceRoot,
+    toggleFileNav,
+    navPreviewPath,
+    setNavPreviewPath,
+    closeNavPreview,
+    fileNavResizeGesture,
+    fileNavResizePressed,
+    fileNavPanelStyle,
+    contentNavPadStyle,
+  };
+}
+
+// The navigation column itself. Rendered only while `showNavPanel` holds; lives
+// outside the screen component so its preview/tree branching stays off the
+// screen's complexity budget.
+function NewWorkspaceFileNavPanel(input: {
+  serverId: string;
+  workspaceRoot: string;
+  navPreviewPath: string | null;
+  panelStyle: React.ComponentProps<typeof ReanimatedAnimated.View>["style"];
+  resizeGesture: React.ComponentProps<typeof SidebarResizeHandle>["gesture"];
+  resizePressed: boolean;
+  onClosePreview: () => void;
+  onOpenFile: (path: string) => void;
+}) {
+  const { t } = useTranslation();
+  const {
+    serverId,
+    workspaceRoot,
+    navPreviewPath,
+    panelStyle,
+    resizeGesture,
+    resizePressed,
+    onClosePreview,
+    onOpenFile,
+  } = input;
+  const previewTitle = useMemo(
+    () => navPreviewPath?.split("/").findLast(Boolean) ?? navPreviewPath,
+    [navPreviewPath],
+  );
+  const previewLocation = useMemo(
+    () => (navPreviewPath === null ? null : { path: navPreviewPath }),
+    [navPreviewPath],
+  );
+  return (
+    <ReanimatedAnimated.View style={[styles.fileNavPanel, panelStyle]}>
+      {navPreviewPath ? (
+        <>
+          <View style={styles.fileNavPreviewHeader}>
+            <Pressable
+              onPress={onClosePreview}
+              testID="new-workspace-file-nav-back"
+              accessibilityRole="button"
+              accessibilityLabel={t("common.actions.back")}
+              style={styles.fileNavBackButton}
+            >
+              <ThemedChevronLeft size={16} uniProps={foregroundMutedColorMapping} />
+            </Pressable>
+            <Text style={styles.fileNavPreviewTitle} numberOfLines={1}>
+              {previewTitle}
+            </Text>
+          </View>
+          {previewLocation ? (
+            <FilePane
+              serverId={serverId}
+              workspaceRoot={workspaceRoot}
+              location={previewLocation}
+              navigationRevision={0}
+              readOnly
+            />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
+          <FileExplorerPane
+            serverId={serverId}
+            workspaceId={null}
+            workspaceRoot={workspaceRoot}
+            onOpenFile={onOpenFile}
+          />
+        </>
+      )}
+      <SidebarResizeHandle
+        edge="left"
+        gesture={resizeGesture}
+        pressed={resizePressed}
+        testID="new-workspace-file-nav-resize-handle"
+      />
+    </ReanimatedAnimated.View>
+  );
+}
+
+function FileNavToggleIcon({ hovered }: { hovered: boolean }) {
+  return (
+    <ThemedPanelRight
+      size={16}
+      uniProps={hovered ? foregroundColorMapping : foregroundExtraMutedColorMapping}
+    />
+  );
+}
 
 function RefPickerBadgeContent({
   selectedItem,
@@ -1772,6 +2012,26 @@ export function NewWorkspaceScreen({
     cwd: selectedSourceDirectory ?? "",
   });
 
+  // Desktop-only navigation column for the directory being configured. Without
+  // a workspaceId the pane keys its explorer state by `root:<dir>`, so switching
+  // projects re-keys the tree and it re-initializes on its own.
+  const {
+    showNavPanel,
+    workspaceRoot: fileNavWorkspaceRoot,
+    toggleFileNav: toggleNewWorkspaceFileNav,
+    navPreviewPath,
+    setNavPreviewPath,
+    closeNavPreview,
+    fileNavResizeGesture,
+    fileNavResizePressed,
+    fileNavPanelStyle,
+    contentNavPadStyle,
+  } = useNewWorkspaceFileNav({
+    isCompact,
+    hasSourceDirectory: hasSelectedSourceDirectory,
+    sourceDirectory: selectedSourceDirectory,
+  });
+
   const worktreeSupport = selectedProject
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
@@ -1926,6 +2186,20 @@ export function NewWorkspaceScreen({
     enabled: projectPickerOptions.length > 0,
     priority: 0,
     handle: handleProjectPick,
+  });
+
+  // Same binding as the workspace side panel (Ctrl/Cmd+E). The workspace screen
+  // registers its own handler while mounted; this screen's registration is
+  // newer, so the dispatcher reaches it first while /new is up.
+  useKeyboardActionHandler({
+    handlerId: "new-workspace-file-nav-toggle",
+    actions: NAV_TOGGLE_ACTIONS,
+    enabled: !isCompact,
+    priority: 0,
+    handle: () => {
+      toggleNewWorkspaceFileNav();
+      return true;
+    },
   });
 
   const openIsolationPicker = useCallback(() => {
@@ -2367,10 +2641,59 @@ export function NewWorkspaceScreen({
 
   const screenHeaderLeft = useMemo(() => <SidebarMenuToggle />, []);
 
+  const sidePanelToggleLabel = t("workspace.tabs.sidePanel.toggle");
+  const sidePanelAccessibilityState = useMemo(() => ({ expanded: showNavPanel }), [showNavPanel]);
+  const fileNavPanelElement = useMemo(
+    () =>
+      showNavPanel ? (
+        <NewWorkspaceFileNavPanel
+          serverId={selectedServerId}
+          workspaceRoot={fileNavWorkspaceRoot}
+          navPreviewPath={navPreviewPath}
+          panelStyle={fileNavPanelStyle}
+          resizeGesture={fileNavResizeGesture}
+          resizePressed={fileNavResizePressed}
+          onClosePreview={closeNavPreview}
+          onOpenFile={setNavPreviewPath}
+        />
+      ) : null,
+    [
+      showNavPanel,
+      selectedServerId,
+      fileNavWorkspaceRoot,
+      navPreviewPath,
+      fileNavPanelStyle,
+      fileNavResizeGesture,
+      fileNavResizePressed,
+      closeNavPreview,
+      setNavPreviewPath,
+    ],
+  );
+  const screenHeaderRight = useMemo(() => {
+    if (isCompact) {
+      return null;
+    }
+    return (
+      <HeaderToggleButton
+        testID="new-workspace-file-nav-toggle"
+        onPress={toggleNewWorkspaceFileNav}
+        tooltipLabel={sidePanelToggleLabel}
+        tooltipKeys={FILE_NAV_TOGGLE_KEYS}
+        tooltipSide="left"
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={sidePanelToggleLabel}
+        accessibilityState={sidePanelAccessibilityState}
+      >
+        {({ hovered }) => <FileNavToggleIcon hovered={hovered} />}
+      </HeaderToggleButton>
+    );
+  }, [isCompact, sidePanelAccessibilityState, sidePanelToggleLabel, toggleNewWorkspaceFileNav]);
+
   return (
     <FileDropZone style={styles.container}>
-      <ScreenHeader left={screenHeaderLeft} borderless />
-      <View style={contentStyle}>
+      <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
+      <ReanimatedAnimated.View style={[...contentStyle, contentNavPadStyle]}>
         <TitlebarDragRegion />
         <KeyboardTranslateView style={animatedStaticStyles.centered}>
           <View style={styles.composerTitleContainer}>
@@ -2439,7 +2762,8 @@ export function NewWorkspaceScreen({
           )}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </KeyboardTranslateView>
-      </View>
+        {fileNavPanelElement}
+      </ReanimatedAnimated.View>
     </FileDropZone>
   );
 }
@@ -2468,6 +2792,46 @@ const styles = StyleSheet.create((theme) => ({
   },
   contentCompact: {
     justifyContent: "flex-end",
+  },
+  // Absolute-positioned nav column; its width (and the content's matching
+  // paddingRight) come from the animated resize style, not a static value.
+  fileNavPanel: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
+    // The titlebar drag overlay covers the whole content area; the nav column
+    // must opt out so file previews scroll and their text stays selectable.
+    ...(isWeb ? { WebkitAppRegion: "no-drag" } : null),
+    userSelect: "text",
+  },
+  fileNavHeader: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foregroundMuted,
+  },
+  fileNavPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingLeft: theme.spacing[1],
+    paddingRight: theme.spacing[3],
+    minHeight: 32,
+  },
+  fileNavBackButton: {
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+  },
+  fileNavPreviewTitle: {
+    flex: 1,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
   },
   composerTitleContainer: {
     marginBottom: theme.spacing[8],

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import os from "node:os";
 import path, { join } from "node:path";
 import type pino from "pino";
+import { ForgeAuthenticationError, ForgeCliMissingError } from "../services/forge-cli-command.js";
 import type { ForgeService } from "../services/forge-service.js";
 import type {
   CheckoutSnapshotFacts,
@@ -9,10 +10,21 @@ import type {
   PullRequestStatusResult,
 } from "../utils/checkout-git.js";
 import {
+  classifyForgePollFailure,
+  computeBackgroundFetchDelayMs,
+  computeDegradedPollIntervalMs,
+  computeGenericForgeNextInterval,
+  computeInitialGitActivityDelayMs,
+  FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS,
+  isWatchDiagnosticsEnabled,
+  loadWorkspaceGitObservationSchedulePolicy,
+  shouldRefreshMetadataAfterFetchFailure,
+  shouldWarnOnFetchFailure,
   WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY,
   WORKSPACE_GIT_REFRESH_CONCURRENCY,
   WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS,
   WorkspaceGitServiceImpl,
+  type WorkspaceGitObservationSchedulePolicy,
   type WorkspaceGitRuntimeSnapshot,
 } from "./workspace-git-service.js";
 
@@ -206,6 +218,32 @@ function createAsyncSubscription() {
   };
 }
 
+// 供嵌套 describe（回调深度受限）复用的桩工厂：定义提升到模块顶层，
+// 避免测试体内的嵌套 vi.fn 回调触发 max-nested-callbacks。
+const createNoopAsyncMock = () => vi.fn(async () => {});
+
+const createWorkspaceSubscriptionStub = () =>
+  vi.fn(async () => ({
+    updateIgnore: createNoopAsyncMock(),
+    unsubscribe: createNoopAsyncMock(),
+  }));
+
+// watch target 以 rev-parse --show-toplevel 结果为键；返回常量 REPO_CWD 的默认
+// mock 会让多个 workspace 合并到同一 target，必须按 cwd 区分。
+const createCwdEchoRunGitCommand = () =>
+  vi.fn(async (_args: string[], context: { cwd: string }) => ({
+    stdout: `${context.cwd}\n`,
+    stderr: "",
+    truncated: false,
+    exitCode: 0,
+    signal: null,
+  }));
+
+const createNoopFetchMock = () => vi.fn(async () => ({ changes: [], error: null }));
+
+const createSuffixedCwds = (prefix: string, count: number) =>
+  Array.from({ length: count }, (_, index) => `${prefix}-${index}`);
+
 function createGitHubServiceStub(): ForgeService {
   return {
     listPullRequests: vi.fn(async () => []),
@@ -247,6 +285,13 @@ function createGitHubServiceStub(): ForgeService {
   };
 }
 
+function createEnvironmentFailingRetain(unsubscribe: ReturnType<typeof vi.fn>) {
+  return vi.fn((input: { onError?: (error: unknown) => void }) => {
+    setTimeout(() => input.onError?.(new ForgeCliMissingError()), 0);
+    return { unsubscribe };
+  });
+}
+
 interface CreateServiceTestOptions {
   subscribe?: ReturnType<typeof vi.fn>;
   getCheckoutStatus?: ReturnType<typeof vi.fn>;
@@ -261,6 +306,10 @@ interface CreateServiceTestOptions {
   runGitCommand?: ReturnType<typeof vi.fn>;
   getWorkspaceGitSelfHealPhaseMs?: (cwd: string) => number;
   now?: () => Date;
+  observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
+  watchDiagnostics?: boolean;
+  degradedPollRandom?: () => number;
+  logger?: pino.Logger;
 }
 
 function buildDefaultTestServiceDeps() {
@@ -317,8 +366,13 @@ function createService(options?: CreateServiceTestOptions) {
       };
     });
   return new WorkspaceGitServiceImpl({
-    logger: createLogger() as unknown as pino.Logger,
+    logger: (options?.logger ?? createLogger()) as unknown as pino.Logger,
     paseoHome: "/tmp/paseo-test",
+    ...(options?.observationSchedulePolicy
+      ? { observationSchedulePolicy: options.observationSchedulePolicy }
+      : {}),
+    watchDiagnostics: options?.watchDiagnostics,
+    degradedPollRandom: options?.degradedPollRandom,
     deps,
   });
 }
@@ -605,7 +659,11 @@ describe("WorkspaceGitServiceImpl", () => {
       exitCode: 0,
       signal: null,
     }));
-    const service = createService({ subscribe, runGitCommand });
+    const service = createService({
+      subscribe,
+      runGitCommand,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
+    });
 
     await Promise.all(cwds.map((cwd) => service.getSnapshot(cwd, { includeForge: false })));
     const subscriptions = cwds.map((cwd) => service.registerWorkspace({ cwd }, vi.fn()));
@@ -653,7 +711,11 @@ describe("WorkspaceGitServiceImpl", () => {
       exitCode: 0,
       signal: null,
     }));
-    const service = createService({ subscribe, runGitCommand });
+    const service = createService({
+      subscribe,
+      runGitCommand,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
+    });
 
     await Promise.all(cwds.map((cwd) => service.getSnapshot(cwd, { includeForge: false })));
     const subscriptions = cwds.map((cwd) => service.registerWorkspace({ cwd }, vi.fn()));
@@ -701,7 +763,12 @@ describe("WorkspaceGitServiceImpl", () => {
       exitCode: 0,
       signal: null,
     }));
-    const service = createService({ getCheckoutStatus, subscribe, runGitCommand });
+    const service = createService({
+      getCheckoutStatus,
+      subscribe,
+      runGitCommand,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
+    });
 
     cwds.forEach((cwd) => service.registerWorkspace({ cwd }, vi.fn()));
     await vi.waitFor(() => {
@@ -720,9 +787,12 @@ describe("WorkspaceGitServiceImpl", () => {
 
     service.dispose();
 
+    // F5b：getSnapshot 并入待定的首轮刷新（pendingInitialRefresh）；dispose 唤醒
+    // join 等待方后由 assertNotDisposed 快速失败（语义见 observation 套件
+    // "dispose during grace fails the joined getSnapshot fast instead of hanging"）。
     await expect(queuedRefreshSettlement).resolves.toMatchObject({
       status: "rejected",
-      error: { name: "AbortError" },
+      error: { name: "WorkspaceGitServiceDisposedError" },
     });
     await vi.waitFor(() => {
       expect(service.getMetrics()).toMatchObject({
@@ -750,7 +820,10 @@ describe("WorkspaceGitServiceImpl", () => {
       .fn()
       .mockImplementationOnce(() => lateWatcher.promise)
       .mockResolvedValue(createAsyncSubscription());
-    const service = createService({ subscribe });
+    const service = createService({
+      subscribe,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
+    });
 
     await service.getSnapshot(REPO_CWD, { includeForge: false });
     const workspaceSubscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
@@ -815,7 +888,13 @@ describe("WorkspaceGitServiceImpl", () => {
     const second = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     await flushPromises();
 
-    expect(getPullRequestStatus).toHaveBeenCalledTimes(0);
+    // F5b：首轮快照刷新进入启动宽限槽位（默认策略 30s±500ms），观察 setup 在其后
+    // 一个错峰槽位（32s±500ms）。推进 31s：刷新槽已过、setup 槽未到——两个监听者
+    // 只触发同一轮首轮刷新（facts 与 forge 状态各恰 1 次；F4 时代此处在刷新链
+    // 尚未推进到 forge 步骤时采样，PR 恒为 0），且无 watcher 工作。
+    await vi.advanceTimersByTimeAsync(31_000);
+
+    expect(getPullRequestStatus).toHaveBeenCalledTimes(1);
     expect(getCheckoutSnapshotFacts).toHaveBeenCalledTimes(1);
     expect(resolveAbsoluteGitDir).toHaveBeenCalledTimes(0);
 
@@ -837,9 +916,11 @@ describe("WorkspaceGitServiceImpl", () => {
 
     const subscription = service.registerWorkspace({ cwd: join(REPO_CWD, ".") }, vi.fn());
 
-    await expect(service.getSnapshot(join(REPO_CWD, "."))).resolves.toEqual(
-      createSnapshot(REPO_CWD),
-    );
+    // F5b：宽限期内非强制 getSnapshot 并入待定的首轮刷新（默认策略槽位 30s±500ms），
+    // 需推进虚拟时钟越过槽位后 join 才结算。
+    const snapshotPromise = service.getSnapshot(join(REPO_CWD, "."));
+    await vi.advanceTimersByTimeAsync(31_000);
+    await expect(snapshotPromise).resolves.toEqual(createSnapshot(REPO_CWD));
     expect(service.peekSnapshot(REPO_CWD)).toEqual(createSnapshot(REPO_CWD));
 
     nowMs += 3_000;
@@ -882,6 +963,7 @@ describe("WorkspaceGitServiceImpl", () => {
       resolveAbsoluteGitDir,
       hasOriginRemote,
       runGitFetch,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
 
     const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
@@ -942,6 +1024,7 @@ describe("WorkspaceGitServiceImpl", () => {
       resolveAbsoluteGitDir: vi.fn(async () => join(REPO_CWD, ".git")),
       hasOriginRemote: vi.fn(async () => true),
       runGitFetch,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
     const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     const second = service.registerWorkspace(
@@ -1005,6 +1088,7 @@ describe("WorkspaceGitServiceImpl", () => {
         await releaseFetch.promise;
         return result;
       }),
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
     const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     const second = service.registerWorkspace(
@@ -1055,6 +1139,7 @@ describe("WorkspaceGitServiceImpl", () => {
           error: null,
         };
       }),
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
     const listener = vi.fn();
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, listener);
@@ -1379,6 +1464,7 @@ describe("WorkspaceGitServiceImpl", () => {
         return { changes: [], error: null };
       }),
       subscribe,
+      observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 },
     });
     const workspaceListener = vi.fn();
 
@@ -1435,6 +1521,826 @@ describe("WorkspaceGitServiceImpl", () => {
     await service.getCheckoutDiff("/tmp/repo-0", { mode: "uncommitted" });
     expect(getCheckoutDiff).toHaveBeenCalledTimes(CACHE_MAX + OVERFLOW + 1);
 
+    service.dispose();
+  });
+
+  describe("initial observation grace and stagger", () => {
+    // 观察链独有观测点：仅 setupWorkspaceObservation 链路会调用 subscribe（初始快照
+    // 刷新不调用）。每个 workspace 的观察链有两次 subscribe（worktree 根 + .git
+    // 元数据根），故断言"特定 worktree 根是否出现"，而非调用次数。
+    const createSubscribeStub = createWorkspaceSubscriptionStub;
+    const subscribedRoots = (subscribe: ReturnType<typeof createSubscribeStub>) =>
+      subscribe.mock.calls.map((call) => call[0]);
+
+    test("observation setup waits out the boot grace after registration", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(subscribe).not.toHaveBeenCalled();
+
+      // F5b：注册先占序列 0 的首轮快照刷新槽（30s，不订阅），观察 setup 顺延至
+      // 序列 1 槽位（32s）——31_999 时刷新已过而 setup 未到。
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(subscribe).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
+
+      subscription.unsubscribe();
+      service.dispose();
+    });
+
+    test("grace 0 keeps the immediate behavior (kill switch)", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        observationSchedulePolicy: { bootGraceMs: 0, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
+
+      subscription.unsubscribe();
+      service.dispose();
+    });
+
+    test("dispose during grace cancels pending setup", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(1_000);
+      service.dispose();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(subscribe).not.toHaveBeenCalled();
+      subscription.unsubscribe();
+    });
+
+    test("dispose during grace clears pending stagger timers", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      service.dispose();
+      // dispose 必须 clearTimeout 清掉宽限期内的错峰计时器，而非依赖回调内的
+      // disposed 检查兜底——未清的句柄会把 daemon 退出拖延至 grace+N×stagger。
+      expect(vi.getTimerCount()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(subscribe).not.toHaveBeenCalled();
+      subscription.unsubscribe();
+    });
+
+    test("stagger spaces two workspaces apart", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        runGitCommand: createCwdEchoRunGitCommand(),
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const s1 = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      const s2 = service.registerWorkspace({ cwd: `${REPO_CWD}-2` }, vi.fn());
+      // F5b：每个注册占两个槽位（序列 0/1=ws1 刷新+setup，序列 2/3=ws2 刷新+
+      // setup），ws1 setup 槽 32s、ws2 setup 槽 36s。
+      await vi.advanceTimersByTimeAsync(32_999);
+      expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
+      expect(subscribedRoots(subscribe)).not.toContain(`${REPO_CWD}-2`);
+      await vi.advanceTimersByTimeAsync(3_001);
+      expect(subscribedRoots(subscribe)).toContain(`${REPO_CWD}-2`);
+
+      s1.unsubscribe();
+      s2.unsubscribe();
+      service.dispose();
+    });
+
+    test("first background fetch is staggered, not immediate at registration", async () => {
+      const runGitFetch = createNoopFetchMock();
+      const service = createService({
+        runGitFetch,
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      // F5b：序列 0=首轮刷新（30s）、序列 1=观察 setup（32s），首 fetch 由 setup 完成后
+      // 的 ensureRepoTarget 占序列 2 槽位（34s）——32s~34s 这段窗口是本测试的区分度所在
+      await vi.advanceTimersByTimeAsync(32_999);
+      expect(runGitFetch).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(runGitFetch).toHaveBeenCalledTimes(1);
+
+      subscription.unsubscribe();
+      service.dispose();
+    });
+
+    test("a reconnect batch after a quiet window restarts grace and stagger", async () => {
+      const subscribe = createSubscribeStub();
+      const service = createService({
+        subscribe,
+        runGitCommand: createCwdEchoRunGitCommand(),
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const first = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      // 批次 1：刷新槽 30s + setup 槽 32s + fetch 槽 34s；推进 70s 越过整个批次并
+      // 静默超过宽限（70−34=36s > 30s），锚点重置
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(subscribedRoots(subscribe)).toContain(REPO_CWD);
+
+      const second = service.registerWorkspace({ cwd: `${REPO_CWD}-2` }, vi.fn());
+      // F5b：批次 2 的 setup 在自身批次序列 1 槽位（102s=70+30+2），而非刷新槽 100s
+      await vi.advanceTimersByTimeAsync(31_999);
+      expect(subscribedRoots(subscribe)).not.toContain(`${REPO_CWD}-2`);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(subscribedRoots(subscribe)).toContain(`${REPO_CWD}-2`);
+
+      first.unsubscribe();
+      second.unsubscribe();
+      service.dispose();
+    });
+
+    test("six-workspace connect burst stays silent during grace, then staggers out", async () => {
+      const cwds = createSuffixedCwds(`${REPO_CWD}-burst`, 6);
+      const subscribe = createSubscribeStub();
+      const runGitFetch = createNoopFetchMock();
+      const service = createService({
+        subscribe,
+        runGitFetch,
+        runGitCommand: createCwdEchoRunGitCommand(),
+        observationSchedulePolicy: { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 0 },
+      });
+
+      const subs: Array<ReturnType<typeof service.registerWorkspace>> = [];
+      for (const cwd of cwds) {
+        subs.push(service.registerWorkspace({ cwd }, vi.fn()));
+      }
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(runGitFetch).not.toHaveBeenCalled();
+
+      // F5b：6 个注册各占刷新+setup 两个槽位（序列 0~11 → 30s~42s），首 fetch 由
+      // 各自 setup 完成后占序列 12~17 槽位（54s~64s）；推进至 65s 全部就绪
+      await vi.advanceTimersByTimeAsync(35_001);
+      const roots = subscribedRoots(subscribe);
+      for (const cwd of cwds) {
+        expect(roots).toContain(cwd);
+      }
+      expect(runGitFetch).toHaveBeenCalledTimes(6);
+
+      for (const sub of subs) {
+        sub.unsubscribe();
+      }
+      service.dispose();
+    });
+  });
+
+  describe("background fetch backoff", () => {
+    const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+    function buildFetchDeps() {
+      return {
+        hasOriginRemote: vi.fn(async () => true),
+        getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+        runGitFetch: vi.fn(),
+      };
+    }
+
+    async function registerOriginRepo(
+      service: WorkspaceGitServiceImpl,
+      runGitFetch: ReturnType<typeof vi.fn>,
+    ) {
+      void service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runGitFetch).toHaveBeenCalledTimes(1);
+    }
+
+    test("fetch failures back off exponentially and reset on success", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockResolvedValueOnce({ changes: null, error: new Error("boom") });
+      fetchDeps.runGitFetch.mockResolvedValueOnce({ changes: null, error: new Error("boom") });
+      fetchDeps.runGitFetch.mockResolvedValue({ changes: [], error: null });
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(360_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(4);
+      service.dispose();
+    });
+
+    test("delay caps at 30 minutes after five consecutive failures", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockRejectedValue(new Error("network down"));
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      let calls = 1;
+      for (const delayMs of [180_000, 360_000, 720_000, 1_440_000, 1_800_000]) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+        calls += 1;
+        expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls);
+      }
+      await vi.advanceTimersByTimeAsync(1_799_999);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(calls + 1);
+      service.dispose();
+    });
+
+    test("failure warnings aggregate to 1st, 5th, then every 20th", async () => {
+      const logger = createLogger();
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockRejectedValue(new Error("network down"));
+      const service = createService({
+        ...fetchDeps,
+        observationSchedulePolicy: graceZeroPolicy,
+        logger: logger as unknown as pino.Logger,
+      });
+
+      await registerOriginRepo(service, fetchDeps.runGitFetch);
+
+      let failures = 1;
+      for (const delayMs of [180_000, 360_000, 720_000, 1_440_000]) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+        failures += 1;
+      }
+      expect(failures).toBe(5);
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+      service.dispose();
+    });
+
+    test("fetch timer stops when the repo target closes", async () => {
+      const fetchDeps = buildFetchDeps();
+      fetchDeps.runGitFetch.mockResolvedValue({ changes: [], error: null });
+      const service = createService({ ...fetchDeps, observationSchedulePolicy: graceZeroPolicy });
+      const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(1);
+
+      subscription.unsubscribe();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(fetchDeps.runGitFetch).toHaveBeenCalledTimes(1);
+      service.dispose();
+    });
+  });
+});
+
+describe("workspace git observation schedule policy", () => {
+  test("defaults to 30s grace, 2s stagger, 500ms jitter", () => {
+    const policy = loadWorkspaceGitObservationSchedulePolicy({});
+    expect(policy).toEqual({ bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 });
+  });
+
+  test("env overrides and invalid values fall back", () => {
+    expect(
+      loadWorkspaceGitObservationSchedulePolicy({
+        PASEO_WS_GIT_BOOT_GRACE_MS: "0",
+        PASEO_WS_GIT_OBSERVATION_STAGGER_MS: "100",
+        PASEO_WS_GIT_OBSERVATION_JITTER_MS: "0",
+      }),
+    ).toEqual({ bootGraceMs: 0, staggerMs: 100, jitterMs: 0 });
+    expect(
+      loadWorkspaceGitObservationSchedulePolicy({
+        PASEO_WS_GIT_BOOT_GRACE_MS: "-5",
+        PASEO_WS_GIT_OBSERVATION_STAGGER_MS: "abc",
+      }),
+    ).toEqual({ bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 });
+  });
+
+  test("grace 0 disables delay entirely (kill switch)", () => {
+    expect(
+      computeInitialGitActivityDelayMs({
+        sequence: 5,
+        policy: { bootGraceMs: 0, staggerMs: 2_000, jitterMs: 500 },
+        random: 0.99,
+      }),
+    ).toBe(0);
+  });
+
+  test("delay = grace + sequence*stagger, jitter clamped to ±jitterMs", () => {
+    const policy = { bootGraceMs: 30_000, staggerMs: 2_000, jitterMs: 500 };
+    expect(computeInitialGitActivityDelayMs({ sequence: 0, policy, random: 0 })).toBe(30_000 - 500);
+    expect(computeInitialGitActivityDelayMs({ sequence: 0, policy, random: 1 })).toBe(30_000 + 500);
+    expect(computeInitialGitActivityDelayMs({ sequence: 2, policy, random: 0.5 })).toBe(
+      30_000 + 4_000,
+    );
+    expect(
+      computeInitialGitActivityDelayMs({
+        sequence: 1,
+        policy: { ...policy, jitterMs: 0 },
+        random: 0.9,
+      }),
+    ).toBe(32_000);
+  });
+});
+
+describe("background git fetch backoff policy", () => {
+  test("delay follows 180s * 2^(n-1) capped at 30min", () => {
+    expect(computeBackgroundFetchDelayMs(0)).toBe(180_000);
+    expect(computeBackgroundFetchDelayMs(1)).toBe(180_000);
+    expect(computeBackgroundFetchDelayMs(2)).toBe(360_000);
+    expect(computeBackgroundFetchDelayMs(3)).toBe(720_000);
+    expect(computeBackgroundFetchDelayMs(4)).toBe(1_440_000);
+    expect(computeBackgroundFetchDelayMs(5)).toBe(1_800_000);
+    expect(computeBackgroundFetchDelayMs(50)).toBe(1_800_000);
+    expect(computeBackgroundFetchDelayMs(-1)).toBe(180_000);
+  });
+
+  test("warn aggregation fires on 1st, 5th, 20th, then every 20th failure", () => {
+    expect(shouldWarnOnFetchFailure(1)).toBe(true);
+    expect(shouldWarnOnFetchFailure(2)).toBe(false);
+    expect(shouldWarnOnFetchFailure(5)).toBe(true);
+    expect(shouldWarnOnFetchFailure(6)).toBe(false);
+    expect(shouldWarnOnFetchFailure(19)).toBe(false);
+    expect(shouldWarnOnFetchFailure(20)).toBe(true);
+    expect(shouldWarnOnFetchFailure(21)).toBe(false);
+    expect(shouldWarnOnFetchFailure(40)).toBe(true);
+    expect(shouldWarnOnFetchFailure(41)).toBe(false);
+  });
+
+  test("metadata refresh on failure is skipped once errors reach 3", () => {
+    expect(shouldRefreshMetadataAfterFetchFailure(1)).toBe(true);
+    expect(shouldRefreshMetadataAfterFetchFailure(2)).toBe(true);
+    expect(shouldRefreshMetadataAfterFetchFailure(3)).toBe(false);
+    expect(shouldRefreshMetadataAfterFetchFailure(30)).toBe(false);
+  });
+});
+
+describe("forge poll failure classification", () => {
+  test("classifies CLI-missing, auth, and transient errors", () => {
+    expect(classifyForgePollFailure(new ForgeCliMissingError())).toBe("environment");
+    expect(
+      classifyForgePollFailure(new ForgeAuthenticationError("bad creds", { stderr: "x" })),
+    ).toBe("auth");
+    expect(classifyForgePollFailure(new Error("ETIMEDOUT"))).toBe("transient");
+    expect(classifyForgePollFailure("string error")).toBe("transient");
+    expect(classifyForgePollFailure(null)).toBe("transient");
+  });
+
+  test("degraded threshold is 8 and backoff cap is 15 minutes", () => {
+    expect(FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS).toBe(8);
+    expect(computeGenericForgeNextInterval(null, 1)).toBe(120_000);
+    expect(computeGenericForgeNextInterval(null, 2)).toBe(240_000);
+    expect(computeGenericForgeNextInterval(null, 3)).toBe(480_000);
+    expect(computeGenericForgeNextInterval(null, 4)).toBe(900_000);
+    expect(computeGenericForgeNextInterval(null, 50)).toBe(900_000);
+  });
+});
+
+describe("forge pr status poll degraded", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  function createForgeThrowingDeps(makeError: () => Error) {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(async () => {
+        throw makeError();
+      }),
+    } as unknown as ForgeService;
+    return {
+      deps: {
+        hasOriginRemote: vi.fn(async () => true),
+        getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      },
+      github,
+    };
+  }
+
+  test("environment failure stops polling after the first attempt", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new ForgeCliMissingError());
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("self-heal reensure does not resubscribe a degraded poll", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new ForgeCliMissingError());
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("eight transient failures degrade the poll", async () => {
+    const { deps, github } = createForgeThrowingDeps(() => new Error("ETIMEDOUT"));
+    const service = createService({
+      ...deps,
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    const delays = [120_000, 120_000, 240_000, 480_000, 900_000, 900_000, 900_000, 900_000];
+    let expected = 0;
+    for (const delayMs of delays) {
+      await vi.advanceTimersByTimeAsync(delayMs);
+      expected += 1;
+      expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(expected);
+    }
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(8);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("adapter-path environment failure unsubscribes the retained poll", async () => {
+    const unsubscribe = vi.fn();
+    const retain = createEnvironmentFailingRetain(unsubscribe);
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(async () => null),
+      retainCurrentPullRequestStatusPoll: retain,
+    } as unknown as ForgeService;
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(retain).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(retain).toHaveBeenCalledTimes(1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("a success between failures resets the counter", async () => {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(),
+    } as unknown as { getCurrentPullRequestStatus: ReturnType<typeof vi.fn> };
+    github.getCurrentPullRequestStatus
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")))
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")))
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(() => Promise.reject(new Error("ETIMEDOUT")));
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github: github as unknown as ForgeService },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(240_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(5);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("explicit refresh recovers a degraded poll immediately", async () => {
+    const github = {
+      getCurrentPullRequestStatus: vi.fn(),
+    } as unknown as { getCurrentPullRequestStatus: ReturnType<typeof vi.fn> };
+    github.getCurrentPullRequestStatus
+      .mockImplementationOnce(async () => {
+        throw new ForgeCliMissingError();
+      })
+      .mockResolvedValue(null);
+    const service = createService({
+      hasOriginRemote: vi.fn(async () => true),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      forgeOverrides: { github: github as unknown as ForgeService },
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(1);
+
+    await service.refresh(REPO_CWD);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(github.getCurrentPullRequestStatus).toHaveBeenCalledTimes(2);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+});
+
+describe("workspace git watch diagnostics", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  test("isWatchDiagnosticsEnabled reads the env flag", () => {
+    expect(isWatchDiagnosticsEnabled({})).toBe(false);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "1" })).toBe(true);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "0" })).toBe(false);
+    expect(isWatchDiagnosticsEnabled({ PASEO_WS_GIT_WATCH_DIAG: "yes" })).toBe(false);
+  });
+
+  test("deadline and late-settle diagnostics record real durations", async () => {
+    const logger = createLogger();
+    const subscribeSettlers: Array<(value: unknown) => void> = [];
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(
+        (_watchPath: string, _callback: unknown, _options: unknown) =>
+          new Promise((resolve) => {
+            subscribeSettlers.push(resolve);
+          }),
+      ),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+      watchDiagnostics: true,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    const deadlineLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_deadline",
+    );
+    expect(deadlineLogs.length).toBeGreaterThanOrEqual(1);
+    const deadlineFields = deadlineLogs[0][0] as Record<string, unknown>;
+    expect(deadlineFields["deadlineMs"]).toBe(10_000);
+    expect(deadlineFields["fileObserver"]).toBeDefined();
+
+    // Settle only the first subscription — the one opened at t=0 whose deadline
+    // expired. Later subscriptions opened after that deadline stay pending here.
+    subscribeSettlers[0]?.({
+      updateIgnore: async () => {},
+      unsubscribe: async () => {},
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const settleLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_settled",
+    );
+    expect(settleLogs.length).toBeGreaterThanOrEqual(1);
+    const settleFields = settleLogs[settleLogs.length - 1][0] as Record<string, unknown>;
+    expect(settleFields["durationMs"]).toBeGreaterThanOrEqual(10_000);
+    expect(settleFields["outcome"]).toBe("expired");
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("successful subscribes settle with outcome accepted", async () => {
+    const logger = createLogger();
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(async () => createAsyncSubscription()),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+      watchDiagnostics: true,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    const settleLogs = logger.warn.mock.calls.filter(
+      ([, msg]) => msg === "watch_diag_subscribe_settled",
+    );
+    // Both the working-tree and repo-metadata chains subscribe and settle here.
+    expect(settleLogs.length).toBeGreaterThanOrEqual(2);
+    for (const [fields] of settleLogs) {
+      expect(fields).toMatchObject({ outcome: "accepted" });
+    }
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("diagnostics are silent when disabled", async () => {
+    const logger = createLogger();
+    const deps = {
+      ...buildDefaultTestServiceDeps(),
+      subscribe: vi.fn(
+        (_watchPath: string, _callback: unknown, _options: unknown) => new Promise<void>(() => {}),
+      ),
+    };
+    const service = createService({
+      ...deps,
+      logger: logger as unknown as pino.Logger,
+      observationSchedulePolicy: graceZeroPolicy,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(
+      logger.warn.mock.calls.filter(([, msg]) => msg === "watch_diag_subscribe_settled").length,
+    ).toBe(0);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+});
+
+describe("degraded git poll relief", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const graceZeroPolicy = { bootGraceMs: 0, staggerMs: 0, jitterMs: 0 };
+
+  test("interval math: base 60s, idle 120s after 3 polls, jitter within ±20%", () => {
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 2, random: 0.5 })).toBe(60_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0.5 })).toBe(120_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 30, random: 0.5 })).toBe(120_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 0 })).toBe(48_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 0, random: 1 })).toBe(72_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 0 })).toBe(96_000);
+    expect(computeDegradedPollIntervalMs({ idlePolls: 3, random: 1 })).toBe(144_000);
+  });
+
+  function createFallbackDeps() {
+    return {
+      hasOriginRemote: vi.fn(async () => false),
+      getCheckoutSnapshotFacts: vi.fn(async (cwd: string) => createCheckoutSnapshotFacts(cwd)),
+      // Must agree with the clean getCheckoutWorktreeState below: the repo-metadata
+      // fallback chain rewrites diffStat from shortstat on its own polls, and a
+      // mismatch would oscillate the fingerprint every tick, defeating the idle ramp.
+      getCheckoutShortstat: vi.fn(async () => ({
+        additions: 0,
+        deletions: 0,
+      })),
+      subscribe: vi.fn(async () => {
+        throw new Error("fs.watch unavailable");
+      }),
+    };
+  }
+
+  // Baseline note (F1 Task 2, R3 ruling): observation setup does NOT invoke
+  // getCheckoutWorktreeState (the initial refresh reads shortstat instead), so the
+  // count starts at 0 and each fallback poll adds exactly 1 — hence every expected
+  // count below sits one below the brief's literal draft.
+  test("fallback polls at 60s cadence and slows to 120s after idle polls", async () => {
+    const deps = createFallbackDeps();
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: false,
+      diffStat: { additions: 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0.5,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  // F1 review: pins the repo-metadata fallback chain (startRepoMetadataFallback)
+  // to the 60s degraded baseline. Its polls drive getCheckoutShortstat (structural
+  // refresh rewrites diffStat from shortstat), while working-tree chain polls drive
+  // getCheckoutWorktreeState — so shortstat isolates this chain's counter.
+  test("repo-metadata fallback polls at the degraded cadence, not legacy 5s", async () => {
+    const deps = createFallbackDeps();
+    // Must agree with the shortstat mock above (see createFallbackDeps comment):
+    // shared fingerprint state means a mismatch would oscillate every tick.
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: false,
+      diffStat: { additions: 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const baseline = deps.getCheckoutShortstat.mock.calls.length;
+
+    // random()=0 → first degraded interval is 48s (60s − 20% jitter floor).
+    // A regression to the legacy 5s tail would poll at ~4s and trip these.
+    for (let second = 2; second <= 47; second++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(deps.getCheckoutShortstat.mock.calls.length).toBe(baseline);
+    }
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(deps.getCheckoutShortstat.mock.calls.length).toBe(baseline + 1);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("a changed fingerprint resets the idle counter", async () => {
+    const deps = createFallbackDeps();
+    let dirty = false;
+    const getCheckoutWorktreeState = vi.fn(async () => ({
+      isDirty: dirty,
+      diffStat: { additions: dirty ? 5 : 0, deletions: 0 },
+    }));
+    const service = createService({
+      ...deps,
+      getCheckoutWorktreeState,
+      observationSchedulePolicy: graceZeroPolicy,
+      degradedPollRandom: () => 0.5,
+    });
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(1);
+    dirty = true;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(2);
+    dirty = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCheckoutWorktreeState).toHaveBeenCalledTimes(4);
+
+    subscription.unsubscribe();
     service.dispose();
   });
 });

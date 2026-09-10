@@ -19,4 +19,41 @@ describe("Explorer sidebar layout", () => {
     expect(resolveExplorerSidebarWidth({ requestedWidth: 900, containerWidth: 1200 })).toBe(800);
     expect(resolveExplorerSidebarWidth({ requestedWidth: 600, containerWidth: 750 })).toBe(350);
   });
+
+  it("derives the default width from the configured ratio when no width is remembered", () => {
+    expect(resolveExplorerSidebarWidth({ containerWidth: 1600, defaultWidthRatio: 0.25 })).toBe(
+      400,
+    );
+    expect(resolveExplorerSidebarWidth({ containerWidth: 1600, defaultWidthRatio: 0.4 })).toBe(640);
+  });
+
+  it("prefers the remembered width over the configured default ratio", () => {
+    expect(
+      resolveExplorerSidebarWidth({
+        requestedWidth: 320,
+        containerWidth: 1600,
+        defaultWidthRatio: 0.4,
+      }),
+    ).toBe(320);
+  });
+
+  it("still clamps the ratio-derived width to the sidebar and body minimums", () => {
+    // 10% of 1200 = 120 → the 240px sidebar floor wins.
+    expect(resolveExplorerSidebarWidth({ containerWidth: 1200, defaultWidthRatio: 0.1 })).toBe(240);
+    // 50% of 700 = 350 → capped to keep 400px for the workspace body.
+    expect(resolveExplorerSidebarWidth({ containerWidth: 700, defaultWidthRatio: 0.5 })).toBe(300);
+  });
+
+  it("falls back to the fixed default while the container width is unknown", () => {
+    expect(resolveExplorerSidebarWidth({ containerWidth: 0, defaultWidthRatio: 0.25 })).toBe(320);
+    expect(resolveExplorerSidebarDockSizes({ containerWidth: 0, defaultWidthRatio: 0.25 })).toEqual(
+      [1, 0],
+    );
+  });
+
+  it("uses the ratio-derived width for dock sizes", () => {
+    expect(
+      resolveExplorerSidebarDockSizes({ containerWidth: 1600, defaultWidthRatio: 0.25 }),
+    ).toEqual([0.75, 0.25]);
+  });
 });

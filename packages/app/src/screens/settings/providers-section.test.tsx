@@ -95,10 +95,15 @@ vi.mock("react-native-unistyles", () => ({
 }));
 
 vi.mock("lucide-react-native", () => {
-  const icon = (name: string) => () => React.createElement("span", { "data-icon": name });
+  const icon = (name: string) => {
+    const Icon = () => React.createElement("span", { "data-icon": name });
+    Icon.displayName = name;
+    return Icon;
+  };
   return {
     ChevronRight: icon("ChevronRight"),
     MoreHorizontal: icon("MoreHorizontal"),
+    Plus: icon("Plus"),
     Trash2: icon("Trash2"),
   };
 });
@@ -132,6 +137,29 @@ vi.mock("react-i18next", () => ({
         .replaceAll("{{name}}", String(values?.name ?? ""))
         .replaceAll("{{count}}", String(values?.count ?? "")),
   }),
+}));
+
+vi.mock("@/components/ui/button", () => ({
+  Button: ({
+    children,
+    onPress,
+    disabled,
+    testID,
+  }: {
+    children?: React.ReactNode;
+    onPress?: () => void;
+    disabled?: boolean;
+    testID?: string;
+  }) =>
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        "data-testid": testID,
+        onClick: disabled ? undefined : onPress,
+      },
+      children,
+    ),
 }));
 
 vi.mock("@/components/ui/switch", () => ({
@@ -246,6 +274,10 @@ vi.mock("@/components/provider-catalog-list", () => ({
   ProviderCatalogList: () => null,
 }));
 
+vi.mock("@/screens/settings/add-custom-provider-sheet", () => ({
+  AddCustomProviderSheet: () => null,
+}));
+
 vi.mock("@/hooks/use-providers-snapshot", () => ({
   useProvidersSnapshot: () => ({
     entries: snapshotState.entries,
@@ -316,6 +348,7 @@ function makeConfig(providers: MutableDaemonConfig["providers"] = {}): MutableDa
     autoArchiveAfterMerge: false,
     enableTerminalAgentHooks: false,
     appendSystemPrompt: "",
+    claudeImageDowngrade: "off",
   };
 }
 

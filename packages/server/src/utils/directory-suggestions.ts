@@ -32,6 +32,12 @@ export interface SearchDirectoryEntriesOptions {
   maxEntriesScanned?: number;
   confidentResultScanThreshold?: number;
   respectGitIgnore?: boolean;
+  /**
+   * Top-level workspace directory names whose `.gitignore` exclusion is bypassed for `@`-mention
+   * discovery. Defaults to {@link DEFAULT_GIT_IGNORE_PATH_OVERRIDES}; an explicit array (even
+   * empty) fully replaces it.
+   */
+  gitIgnorePathOverrides?: readonly string[];
 }
 
 interface QueryPlan {
@@ -110,6 +116,18 @@ export const WORKSPACE_SEARCH_HIDDEN_DIRECTORIES = [
   ".paseo",
   ".vscode",
 ] as const;
+/**
+ * Built-in code default for `@`-mention file suggestions: top-level workspace directory names
+ * whose `.gitignore` exclusion is bypassed so files under them stay selectable even when a
+ * workspace has chosen to ignore them. Matched case-insensitively against the first path segment
+ * below the workspace root — only a workspace-rooted `doc/`, `docs/`, or `handoff/` is overridden,
+ * never a nested directory of the same name.
+ *
+ * Callers override this list via `SearchDirectoryEntriesOptions.gitIgnorePathOverrides`. The daemon
+ * resolves the effective list from `$PASEO_HOME/config.json` `fileSearch.gitIgnoreOverrides`; an
+ * explicit array (even empty) fully replaces this default, and omitting the option keeps it.
+ */
+export const DEFAULT_GIT_IGNORE_PATH_OVERRIDES = ["doc", "docs", "handoff"] as const;
 const IGNORED_DIRECTORY_NAMES = new Set([
   "node_modules",
   "venv",
@@ -192,6 +210,7 @@ function buildSearchInput(
     maxEntriesScanned: options.maxEntriesScanned ?? DEFAULT_MAX_ENTRIES_SCANNED,
     confidentResultScanThreshold: options.confidentResultScanThreshold,
     gitIgnoredPaths,
+    gitIgnorePathOverrides: options.gitIgnorePathOverrides ?? DEFAULT_GIT_IGNORE_PATH_OVERRIDES,
   };
 }
 
@@ -226,6 +245,7 @@ interface SearchInput {
   maxEntriesScanned: number;
   confidentResultScanThreshold: number | undefined;
   gitIgnoredPaths: Set<string>;
+  gitIgnorePathOverrides: readonly string[];
 }
 
 async function searchChildren(input: SearchInput): Promise<RankedEntry[]> {
@@ -340,12 +360,35 @@ function shouldDiscover(entry: ChildEntry, input: SearchInput): boolean {
 }
 
 function isGitIgnoredPath(absolutePath: string, input: SearchInput): boolean {
+  if (isGitIgnoreOverridePath(absolutePath, input)) return false;
   let candidate = absolutePath;
   while (candidate !== input.root && isPathInsideRoot(input.root, candidate)) {
     if (input.gitIgnoredPaths.has(candidate)) return true;
     candidate = path.dirname(candidate);
   }
   return false;
+}
+
+function topSegmentBelowRoot(absolutePath: string, root: string): string | null {
+  const relative = path.relative(root, absolutePath);
+  if (
+    relative === "" ||
+    relative === "." ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    return null;
+  }
+  const firstSeparator = relative.indexOf(path.sep);
+  const topSegment = firstSeparator === -1 ? relative : relative.slice(0, firstSeparator);
+  return topSegment === "" ? null : topSegment;
+}
+
+function isGitIgnoreOverridePath(absolutePath: string, input: SearchInput): boolean {
+  const topSegment = topSegmentBelowRoot(absolutePath, input.root);
+  if (!topSegment) return false;
+  const lower = topSegment.toLowerCase();
+  return input.gitIgnorePathOverrides.some((override) => override.toLowerCase() === lower);
 }
 
 function shouldSuggest(entry: TraversedEntry, input: SearchInput): boolean {
