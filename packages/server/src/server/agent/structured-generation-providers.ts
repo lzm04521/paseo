@@ -13,6 +13,10 @@ export interface StructuredGenerationDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    title?: { instructions?: string };
+    branchName?: { instructions?: string };
+    commitMessage?: { instructions?: string };
+    pullRequest?: { instructions?: string };
   };
 }
 

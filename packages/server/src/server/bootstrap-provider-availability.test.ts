@@ -78,6 +78,7 @@ describe("bootstrap provider availability", () => {
       mcpDebug: false,
       agentClients: {},
       agentStoragePath,
+      skillsHome: path.join(paseoHome, "skills-home"),
       relayEnabled: false,
       appBaseUrl: "https://app.paseo.sh",
       openai: undefined,
