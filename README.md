@@ -34,7 +34,7 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.9.0-local.1-x64.exe`）安装。仅支持 Windows x64。
+从 [Releases](https://github.com/lzm04521/paseo/releases/latest) 下载 `Paseo-Setup-<版本>-x64.exe`（如 `Paseo-Setup-0.9.0-local.2-x64.exe`）安装。仅支持 Windows x64。
 
 已安装旧版时，应用启动后自动检查新版本并升级，无需手动重装。
 
@@ -71,12 +71,13 @@
 - **metadata 生成默认值 daemon 级配置**：在 Settings → Host 的 metadata 生成页统一配默认指令（git 提交信息 / worktree 分支名等），新 agent 默认继承；与上游的模型选择页正交互补。
 - **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
 - **空闲自动重启（idle auto-restart）**：daemon「连续运行 ≥ 运行阈值 且 空闲 ≥ 空闲阈值」双条件同时满足时自动重启（默认 120 / 20 分钟），开关与阈值在 Settings → Host → Daemon 配置、即改即生效（watchdog 每 30s tick 动态读配置）；设置卡片显示「本次启动于 · 已运行 · 已空闲」，与触发判定同源，每次自动重启后如实归零。
+- **「新功能」页展示本仓库更新**：设置 → 关于 → 新功能 的内容来源改为本仓库 GitHub Releases 的逐版发布说明（每个 `-local.N` 版本的中文更新内容），「已安装」徽章随本机版本正确点亮（此前对比上游版本号导致从不显示）；右上角外链指向本仓库 Releases 页。
 - **schedules / add-project flow 中文化**。
 - **全局禁止右键菜单**（desktop + web）。
 
 ## 版本与更新
 
-- 版本号 = 对应上游版本 + `-local.N`（如 `0.9.0-local.1`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
+- 版本号 = 对应上游版本 + `-local.N`（如 `0.9.0-local.2`），同名 tag 触发 GitHub Actions 在 windows-latest 上构建 NSIS 安装包并发布。
 - 应用内自动更新指向本仓库 Release；跨上游版本的升级链无缝（如 `0.5.x-local.N → 0.6.x-local.1`）。
 - 不运行上游的 CI / Android / Docker / 网站等构建流程，仅构建 Windows x64 桌面版。
 
