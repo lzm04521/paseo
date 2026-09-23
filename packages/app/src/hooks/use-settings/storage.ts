@@ -35,6 +35,19 @@ export type PullRequestOpenLocation = "main" | "side" | "explorer";
 /** What a sidebar workspace row shows in the space to the right of its title. */
 export type SidebarWorkspaceTrailing = "diff" | "timestamp" | "none";
 export type ToolCallDetailLevel = "overview" | "detailed";
+/** Which Explorer sidebar tab the auto-open reveal lands on. */
+export type ExplorerSidebarViewPreference = "files" | "changes";
+export const DEFAULT_EXPLORER_SIDEBAR_VIEW: ExplorerSidebarViewPreference = "files";
+/**
+ * How files open when clicked from a sidebar tree: "preview" reuses the
+ * destination pane's active tab while it is unmodified, "tab" always gives
+ * each file its own tab.
+ */
+export type ExplorerFileOpenMode = "preview" | "tab";
+export const DEFAULT_EXPLORER_FILE_OPEN_MODE: ExplorerFileOpenMode = "preview";
+export const DEFAULT_EXPLORER_SIDEBAR_WIDTH_PERCENT = 25;
+export const MIN_EXPLORER_SIDEBAR_WIDTH_PERCENT = 10;
+export const MAX_EXPLORER_SIDEBAR_WIDTH_PERCENT = 50;
 
 const ThemePreferenceSchema = z.enum([
   ...THEME_OPTIONS.map((option) => option.name),
@@ -92,6 +105,14 @@ export interface AppSettings {
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
   pullRequestOpenLocation: PullRequestOpenLocation;
+  /** Reveal the Explorer sidebar when a workspace opens with it hidden. */
+  autoOpenExplorerSidebar: boolean;
+  /** Explorer tab the auto-open reveal lands on. */
+  autoOpenExplorerSidebarView: ExplorerSidebarViewPreference;
+  /** Share of the workspace width (percent) used when the sidebar has no remembered size. */
+  explorerSidebarWidthPercent: number;
+  /** How sidebar tree clicks open files: reuse the preview tab or open a dedicated tab. */
+  explorerFileOpenMode: ExplorerFileOpenMode;
 }
 
 export type AppSettingsUpdate =
@@ -144,6 +165,10 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
+  autoOpenExplorerSidebar: false,
+  autoOpenExplorerSidebarView: DEFAULT_EXPLORER_SIDEBAR_VIEW,
+  explorerSidebarWidthPercent: DEFAULT_EXPLORER_SIDEBAR_WIDTH_PERCENT,
+  explorerFileOpenMode: DEFAULT_EXPLORER_FILE_OPEN_MODE,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -260,6 +285,13 @@ const StoredAppSettingsSchema = z
         legacyPullRequestsInSidePane: undefined,
       }),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
+    autoOpenExplorerSidebar: z.boolean().catch(false),
+    autoOpenExplorerSidebarView: z.enum(["files", "changes"]).catch(DEFAULT_EXPLORER_SIDEBAR_VIEW),
+    explorerSidebarWidthPercent: clampedNumber(
+      MIN_EXPLORER_SIDEBAR_WIDTH_PERCENT,
+      MAX_EXPLORER_SIDEBAR_WIDTH_PERCENT,
+    ).catch(DEFAULT_EXPLORER_SIDEBAR_WIDTH_PERCENT),
+    explorerFileOpenMode: z.enum(["preview", "tab"]).catch(DEFAULT_EXPLORER_FILE_OPEN_MODE),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.

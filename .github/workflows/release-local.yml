@@ -1,0 +1,97 @@
+name: release-local
+
+# 自用发布：打 <版本> tag（如 0.4.0-local.3，与包版本一致）自动构建 Windows x64 exe 并挂到 fork Release。
+# fork 版本号 = 上游版本 + -local.N（prerelease）。tag 必须是合法 semver 且 prerelease
+# 首组件为 local：electron-updater 的 GitHubProvider 在 allowPrerelease=true 时按
+# semver.prerelease(tag)[0] === channel 匹配 release，非 semver tag（如旧 local-v*-lN）
+# 匹配不到任何版本，客户端报 "No published versions on GitHub"。--publish never 下
+# electron-builder 不注入 prerelease channel，产物仍是 latest.yml；复制一份
+# local.yml 给 auto-updater.ts 的 channel="local"（fork 客户端），
+# latest.yml 留给 0.4.0 及更早仍按 latest channel 检查的旧客户端。
+# electron-builder.yml 的 publish 已指向 lzm04521/paseo。
+
+on:
+  push:
+    tags:
+      - "*-local.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "完整 fork 版本号，作为 Release tag（如 0.4.0-local.3）"
+        required: true
+      branch:
+        description: "发版分支（如 local/v0.4.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout 发版分支
+        uses: actions/checkout@v4
+        with:
+          # tag 触发：用 tag commit；手动触发：checkout 指定发版分支
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
+
+      - name: "Guard: README 必须是 fork 版"
+        # fork README 曾两次被上游版冲掉（v0.4.0 port + main reset 到新 tag 基底）。
+        # 上游 README 不含 lzm04521，含则视为 fork 版。被挡时恢复：
+        #   git checkout <含 fork README 的分支> -- README.md
+        # 见 skills/paseo-version-follow/SKILL.md D 类清单。
+        run: |
+          grep -q "lzm04521" README.md || {
+            echo "::error::README.md 是上游版——fork README 被发版流程冲掉了"
+            exit 1
+          }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build app deps (highlight/relay/client/protocol)
+        run: npm run build:app-deps:clean
+
+      - name: Expo web bundle (electron)
+        run: npx expo export --platform web
+        working-directory: packages/app
+        env:
+          PASEO_WEB_PLATFORM: electron
+
+      - name: Build server + cli
+        run: npm run build:server:clean
+
+      - name: Build desktop main (tsc)
+        run: npm run build:main
+        working-directory: packages/desktop
+
+      - name: electron-builder (win nsis x64，只打 x64)
+        run: npx electron-builder --config electron-builder.yml --win nsis --x64 --publish never
+        working-directory: packages/desktop
+
+      - name: 复制 latest.yml 为 local.yml（fork channel）
+        # --publish never 下 electron-builder 不注入 prerelease channel，产物是 latest.yml；
+        # fork 客户端 channel="local" 查 local.yml，复制一份内容相同的。
+        run: cp packages/desktop/release/latest.yml packages/desktop/release/local.yml
+
+      - name: Upload exe + update yml to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # local.yml / latest.yml 都是 electron-updater 检查更新必需（fork 新客户端查 local，旧客户端查 latest）
+          files: |
+            packages/desktop/release/Paseo-Setup-*-x64.exe
+            packages/desktop/release/local.yml
+            packages/desktop/release/latest.yml
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
