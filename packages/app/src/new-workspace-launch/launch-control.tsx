@@ -22,6 +22,7 @@ import {
 } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import type { Theme } from "@/styles/theme";
 import {
   BLANK_TERMINAL_PROFILE_ID,
@@ -38,6 +39,15 @@ const ThemedChevronDown = withUnistyles(ChevronDown);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const extraMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundExtraMuted });
+
+function resolveTriggerLabel(
+  target: LaunchTarget,
+  profile: TerminalProfile | null,
+  t: (key: string) => string,
+): string {
+  if (target.kind === "chat") return t("newWorkspace.launch.chat");
+  return profile ? t("newWorkspace.launch.terminal") : t("newWorkspace.launch.cmd");
+}
 
 const chatIcon = <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const blankTerminalIcon = <ThemedSquareTerminal size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
@@ -131,8 +141,7 @@ export function LaunchControl({
   // reading "(openai logo) Codex" is indistinguishable from a chat Codex agent.
   // Leading with the noun fixes that, and de-emphasising the profile name keeps
   // "Terminal" the thing you read first.
-  const triggerLabel =
-    target.kind === "chat" ? t("newWorkspace.launch.chat") : t("newWorkspace.launch.terminal");
+  const triggerLabel = resolveTriggerLabel(target, selectedProfile, t);
 
   const selectChat = useCallback(() => onChange(CHAT_LAUNCH_TARGET), [onChange]);
   const selectBlankTerminal = useCallback(
@@ -208,8 +217,13 @@ export function LaunchControl({
           selected={isBlankTerminalTarget(target)}
           leading={blankTerminalIcon}
         >
-          {t("newWorkspace.launch.terminal")}
+          {t("newWorkspace.launch.cmd")}
         </DropdownMenuItem>
+        <LaunchProfileMenuItem
+          profile={POWERSHELL_PROFILE}
+          selected={selectedProfile?.id === POWERSHELL_PROFILE.id}
+          onSelect={selectTerminalProfile}
+        />
         {profiles.map((profile) => (
           <LaunchProfileMenuItem
             key={profile.id}

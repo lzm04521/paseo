@@ -1,5 +1,6 @@
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import type { LaunchTarget } from "@/create-agent-preferences/preferences";
+import { POWERSHELL_PROFILE, POWERSHELL_PROFILE_ID } from "@/terminal/built-in-shell-profiles";
 
 export type { LaunchTarget };
 
@@ -26,6 +27,9 @@ export function resolveLaunchProfile(
 ): TerminalProfile | null {
   if (target.kind !== "terminal" || isBlankTerminalTarget(target)) {
     return null;
+  }
+  if (target.profileId === POWERSHELL_PROFILE_ID) {
+    return POWERSHELL_PROFILE;
   }
   return profiles.find((profile) => profile.id === target.profileId) ?? null;
 }

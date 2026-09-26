@@ -81,6 +81,15 @@
         outline-offset: 2px;
       }
     </style>
+    <script>
+      // Suppress the browser's native context menu (copy/paste/select-all)
+      // across the app. App-level context menus attach via React onContextMenu
+      // and call preventDefault themselves; this listener only blocks the
+      // browser default menu and does not stop React's synthetic event dispatch.
+      document.addEventListener("contextmenu", function (event) {
+        event.preventDefault();
+      });
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
