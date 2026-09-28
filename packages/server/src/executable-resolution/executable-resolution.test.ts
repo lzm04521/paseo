@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  clearExecutableResolutionCacheForTests,
   executableExists,
   findExecutable,
   quoteWindowsArgument,
@@ -55,6 +56,7 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
+  clearExecutableResolutionCacheForTests();
 });
 
 describe("findExecutable", () => {

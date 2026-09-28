@@ -42,6 +42,7 @@ describe("daemon managed process bootstrap", () => {
         mcpDebug: false,
         agentClients: createTestAgentClients(),
         agentStoragePath: path.join(paseoHome, "agents"),
+        skillsHome: path.join(paseoHome, "skills-home"),
         relayEnabled: false,
         appBaseUrl: "https://app.paseo.sh",
         managedProcesses,
