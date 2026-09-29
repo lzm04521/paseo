@@ -238,7 +238,8 @@ export function useWorkspaceCommandCenterActions(): void {
         labels: {
           section: t("workspace.header.actions.workspaceActions"),
           newAgent: t("workspace.tabs.actions.newAgent"),
-          newTerminal: t("workspace.tabs.actions.newTerminal"),
+          newTerminal: t("workspace.tabs.actions.openCmd"),
+          openPowerShell: t("workspace.tabs.actions.openPowerShell"),
           newBrowser: t("workspace.tabs.actions.newBrowser"),
           splitRight: t("workspace.tabs.actions.splitRight"),
           splitDown: t("workspace.tabs.actions.splitDown"),
@@ -254,7 +255,7 @@ export function useWorkspaceCommandCenterActions(): void {
           copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
           copyAgentId: t("workspace.tabs.menu.copyAgentId"),
           copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
-          copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+          copyFileRelativePath: t("workspace.tabs.menu.copyFileRelativePath"),
           closeTabsLeft: t("workspace.tabs.menu.closeLeft"),
           closeTabsRight: t("workspace.tabs.menu.closeRight"),
           closeOtherTabs: t("workspace.tabs.menu.closeOthers"),

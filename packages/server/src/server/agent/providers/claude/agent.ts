@@ -33,6 +33,7 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
+  readClaudeSettingsModels,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -41,6 +42,7 @@ import {
   parseClaudeCodeVersion,
   resolveClaudeDisabledThinkingForModel,
 } from "./model-manifest.js";
+import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
 import { ClaudeTaskState } from "./task-state.js";
@@ -83,6 +85,7 @@ import {
 } from "./rewind.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
 import { claudeConfigDir, claudeProjectDirSync } from "./project-dir.js";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
 import {
   isProviderImageMarkdown,
@@ -409,6 +412,13 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
+  customProvider?: {
+    id: string;
+    label: string;
+    extends: string;
+    fetchModels?: boolean;
+  };
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 interface ClaudeAgentSessionOptions {
@@ -422,6 +432,7 @@ interface ClaudeAgentSessionOptions {
   queryFactory?: ClaudeQueryFactory;
   resolveBinary: () => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 type ClaudeThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -1505,6 +1516,8 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly rewindSdk: ClaudeRewindSdk;
+  private readonly customProvider?: ClaudeAgentClientOptions["customProvider"];
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
 
   constructor(options: ClaudeAgentClientOptions) {
     this.defaults = options.defaults;
@@ -1516,6 +1529,8 @@ export class ClaudeAgentClient implements AgentClient {
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
+    this.customProvider = options.customProvider;
+    this.getDaemonConfig = options.getDaemonConfig;
   }
 
   resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
@@ -1538,6 +1553,7 @@ export class ClaudeAgentClient implements AgentClient {
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
       rewindSdk: this.rewindSdk,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -1567,6 +1583,7 @@ export class ClaudeAgentClient implements AgentClient {
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
       rewindSdk: this.rewindSdk,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -1589,9 +1606,27 @@ export class ClaudeAgentClient implements AgentClient {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
     const env = this.buildProviderEnv();
-    const models = await runProviderRefreshActivity(context, "settings", () =>
-      getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),
-    );
+    let models: AgentModelDefinition[];
+    if (this.customProvider?.fetchModels) {
+      // 动态拉取模式：列表只含 settings.json 声明的模型 + 远端发现的模型。
+      // 内置 manifest 的 Anthropic 官方模型不适用于派生供应商（relay/兼容网关背后没有它们）。
+      const settingsModels = await runProviderRefreshActivity(context, "settings", () =>
+        readClaudeSettingsModels(this.logger, claudeConfigDir(env)),
+      );
+      const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
+        fetchAnthropicCompatModels(env, this.logger, context?.signal),
+      );
+      // 补思考等级：settings/远端来源不带 thinkingOptions，不补则 UI 不显示思考等级选择器。
+      // resolveConfiguredClaudeModel 会把可归一到 manifest 的 id（如 claude-opus-5[1M]）继承
+      // 官方思考选项，其余（网关自定义模型）给通用 custom 兜底——与手写 models 条目同款语义。
+      models = mergeClaudeRemoteModels(settingsModels, remoteModels).map((model) =>
+        resolveConfiguredClaudeModel(model),
+      );
+    } else {
+      models = await runProviderRefreshActivity(context, "settings", () =>
+        getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),
+      );
+    }
     const modeCatalog = claudeModeCatalog(env);
     return {
       models,
@@ -2050,6 +2085,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
   private query: Query | null = null;
   private childProcess: ChildProcess | null = null;
   private input: AsyncMessageInput<SDKUserMessage> | null = null;
@@ -2131,6 +2167,7 @@ class ClaudeAgentSession implements AgentSession {
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary;
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
+    this.getDaemonConfig = options.getDaemonConfig;
     this.contextUsage = new ClaudeContextUsageState(
       findClaudeModel(this.config.model)?.contextWindowMaxTokens,
     );
@@ -3381,6 +3418,22 @@ class ClaudeAgentSession implements AgentSession {
     return result;
   }
 
+  private shouldDowngradeImage(): boolean {
+    return this.getDaemonConfig?.().claudeImageDowngrade === "on";
+  }
+
+  private saveImageToTemp(chunk: { data: string; mimeType: string }): string {
+    try {
+      return materializeProviderImage({ data: chunk.data, mimeType: chunk.mimeType }).path;
+    } catch (error) {
+      this.logger.warn(
+        { err: error },
+        "Failed to materialize image for downgrade; sending placeholder path",
+      );
+      return "<保存失败>";
+    }
+  }
+
   private toSdkUserMessage(prompt: AgentPromptInput): SDKUserMessage {
     const content: Array<
       | { type: "text"; text: string }
@@ -3398,6 +3451,7 @@ class ClaudeAgentSession implements AgentSession {
     // so a "/command" sent with a pasted link or a screenshot would otherwise reach the model as
     // literal text instead of the command it names.
     let typedSlashCommandIndex = -1;
+    const downgrade = this.shouldDowngradeImage();
     if (Array.isArray(prompt)) {
       for (const chunk of prompt) {
         if (chunk.type === "text") {
@@ -3408,7 +3462,13 @@ class ClaudeAgentSession implements AgentSession {
           }
           content.push({ type: "text", text: chunk.text });
         } else if (chunk.type === "image") {
-          if (isImageMimeType(chunk.mimeType)) {
+          if (!isImageMimeType(chunk.mimeType)) {
+            continue;
+          }
+          if (downgrade) {
+            const absPath = this.saveImageToTemp(chunk);
+            content.push({ type: "text", text: `图片：${absPath}` });
+          } else {
             content.push({
               type: "image",
               source: {
