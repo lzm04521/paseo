@@ -20,6 +20,7 @@ import { streamSession } from "../test-utils/session-stream-adapter.js";
 import type {
   AgentPromptInput,
   AgentSession,
+  AgentSessionStats,
   AgentTimelineItem,
   AgentStreamEvent,
 } from "../../agent-sdk-types.js";
@@ -1870,6 +1871,39 @@ describe("ClaudeAgentSession context window usage", () => {
     return session as unknown as TestClaudeSession;
   }
 
+  function lastStatsEvent(events: AgentStreamEvent[]): AgentSessionStats | null {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === "stats_updated") {
+        return event.stats;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * `collectStreamEvents` returns the moment a terminal turn event is yielded, and the session
+   * stats for a turn are flushed just after that — once the turn has been accounted for. This
+   * collector subscribes directly so those trailing stats events are not dropped.
+   */
+  async function collectTurnEvents(session: AgentSession, prompt = "turn") {
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => {
+      events.push(event);
+    });
+    try {
+      await session.startTurn(prompt);
+      await vi.waitFor(() => {
+        expect(
+          events.some((event) => event.type === "turn_completed" || event.type === "turn_failed"),
+        ).toBe(true);
+      });
+    } finally {
+      unsubscribe();
+    }
+    return events;
+  }
+
   async function createSessionForTurns(
     turns: Array<Array<Record<string, unknown>>>,
     options?: QueryFactoryForTurnsOptions,
@@ -2734,6 +2768,149 @@ describe("ClaudeAgentSession context window usage", () => {
           },
         }),
       );
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("session stats total input as input + cache write + cache read", async () => {
+    const session = await createSessionForTurns([
+      [createInitMessage(), createMessageStartEvent(), createSuccessResult()],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 150,
+        sessionCachedInputTokens: 30,
+        sessionCacheWriteTokens: 20,
+        sessionOutputTokens: 0,
+        requestCount: 1,
+        cacheHitRate: 0.2,
+        turnCount: 1,
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("session stats accumulate across requests and message deltas", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        createMessageStartEvent(),
+        createMessageDeltaEvent(42),
+        createMessageStartEvent({ input_tokens: 10, cache_read_input_tokens: 5 }),
+        createMessageDeltaEvent(80),
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 165,
+        sessionCachedInputTokens: 35,
+        sessionOutputTokens: 122,
+        requestCount: 2,
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("result messages publish the provider-reported session cost", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        createMessageStartEvent(),
+        createSuccessResult({ total_cost_usd: 1.5 }),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)?.sessionTotalCostUsd).toBe(1.5);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("counts main-loop tool calls and errors", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-stats-1", name: "Bash", input: { command: "ls" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        {
+          type: "user",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu-stats-1",
+                content: "boom",
+                is_error: true,
+              },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 1,
+        toolCallErrors: 1,
+        toolCalls: [{ tool: "Bash", count: 1, errors: 1 }],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("attributes sidechain usage to a subagent entry", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-stats",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "child" }],
+            usage: { input_tokens: 100, cache_read_input_tokens: 50, output_tokens: 20 },
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)?.subagents).toEqual([
+        { agentId: "toolu-agent-stats", inputTokens: 150, outputTokens: 20, running: true },
+      ]);
     } finally {
       await session.close();
     }
