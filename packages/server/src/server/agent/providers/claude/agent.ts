@@ -45,7 +45,7 @@ import {
 import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
-import { createSessionStatsAggregator } from "./session-stats.js";
+import { createSessionStatsAggregator } from "../session-stats.js";
 import { ClaudeTaskState } from "./task-state.js";
 import {
   ClaudeTaskProtocolSource,

@@ -20,6 +20,7 @@ import {
 } from "./opencode/test-utils/test-opencode-harness.js";
 import type {
   AgentSessionConfig,
+  AgentSessionStats,
   AgentStreamEvent,
   ToolCallTimelineItem,
   AssistantMessageTimelineItem,
@@ -6984,4 +6985,56 @@ describe("OpenCode session permission rules", () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+});
+
+test("emits session stats accumulated across step-finish parts", async () => {
+  const { parent: session, openCode } = await createParentSession("ses_session_stats");
+  const events: AgentStreamEvent[] = [];
+  session.subscribe((event) => {
+    events.push(event);
+  });
+
+  function lastStats(): AgentSessionStats | null {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === "stats_updated") {
+        return event.stats;
+      }
+    }
+    return null;
+  }
+
+  function emitStepFinish(partId: string, messageId: string, cost: number): void {
+    openCode.emitEvent({
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: partId,
+          sessionID: "ses_session_stats",
+          messageID: messageId,
+          type: "step-finish",
+          cost,
+          tokens: { input: 100, output: 20, cache: { read: 50, write: 10 } },
+        },
+      },
+    });
+  }
+
+  try {
+    await session.startTurn("first");
+    emitStepFinish("prt_stats_1", "msg_stats_1", 0.25);
+    emitStepFinish("prt_stats_2", "msg_stats_2", 0.25);
+
+    await vi.waitFor(() => expect(lastStats()?.requestCount).toBe(2));
+    expect(lastStats()).toMatchObject({
+      sessionInputTokens: 320,
+      sessionCachedInputTokens: 100,
+      sessionCacheWriteTokens: 20,
+      sessionOutputTokens: 40,
+      requestCount: 2,
+      sessionTotalCostUsd: 0.5,
+    });
+  } finally {
+    await session.close();
+  }
 });

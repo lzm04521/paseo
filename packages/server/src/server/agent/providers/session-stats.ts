@@ -2,7 +2,7 @@ import type {
   AgentSessionStats,
   AgentSubagentUsageStat,
   AgentToolCallStat,
-} from "../../agent-sdk-types.js";
+} from "../agent-sdk-types.js";
 
 const MAX_TOOL_CALLS = 10;
 const MAX_SUBAGENTS = 50;
