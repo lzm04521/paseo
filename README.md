@@ -72,6 +72,7 @@
 - **Claude 图片多模态降级开关**：给 Claude 的图片附件降级为 `图片：<路径>` 文本、不走多模态传输，在 Settings → Host → Agents 配置，无需手动编辑 JSON。
 - **空闲自动重启（idle auto-restart）**：daemon「连续运行 ≥ 运行阈值 且 空闲 ≥ 空闲阈值」双条件同时满足时自动重启（默认 120 / 20 分钟），开关与阈值在 Settings → Host → Daemon 配置、即改即生效（watchdog 每 30s tick 动态读配置）；设置卡片显示「本次启动于 · 已运行 · 已空闲」，与触发判定同源，每次自动重启后如实归零。
 - **「新功能」页展示本仓库更新**：设置 → 关于 → 新功能 的内容来源改为本仓库 GitHub Releases 的逐版发布说明（每个 `-local.N` 版本的中文更新内容），「已安装」徽章随本机版本正确点亮（此前对比上游版本号导致从不显示）；右上角外链指向本仓库 Releases 页。
+- **subagent 幽灵卡片修复**：修复新版 Claude Code 对长时工具（SSH / MCP 调用等）的心跳上报被误投影成子代理的问题——此前会话页 subagent 轨道会凭空出现 "Claude subagent"，其工具卡展开永远显示加载骨架；该调用的完整参数与结果实际一直显示在主会话页，修复后幽灵条目不再出现。
 - **schedules / add-project flow 中文化**。
 - **全局禁止右键菜单**（desktop + web）。
 
