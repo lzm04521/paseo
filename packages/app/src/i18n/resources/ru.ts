@@ -197,6 +197,17 @@ export const ru: TranslationResources = {
       title_mr: "Прикрепить задачу или MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "Контекстное окно заполнено на {{percent}}%",
+      contextAbs: "{{used}} из {{max}} токенов контекста",
+      cost: "Стоимость сессии {{cost}}",
+      tokens: "{{input}} токенов на входе, {{output}} на выходе",
+      tools: "Вызовов инструментов: {{count}}",
+      toolsWithErrors: "Вызовов инструментов: {{count}}, сбоев: {{errors}}",
+      speed: "{{rate}} токенов в секунду",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "Провайдер",

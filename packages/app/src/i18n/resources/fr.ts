@@ -199,6 +199,17 @@ export const fr: TranslationResources = {
       title_mr: "Joindre le problème ou MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "Fenêtre de contexte utilisée à {{percent}} %",
+      contextAbs: "{{used}} sur {{max}} tokens de contexte",
+      cost: "Coût de la session {{cost}}",
+      tokens: "{{input}} tokens en entrée, {{output}} en sortie",
+      tools: "{{count}} appels d'outils",
+      toolsWithErrors: "{{count}} appels d'outils, {{errors}} en échec",
+      speed: "{{rate}} tokens par seconde",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "Fournisseur",

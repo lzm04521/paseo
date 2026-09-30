@@ -197,6 +197,17 @@ export const ja: TranslationResources = {
       title_mr: "イシューまたはMRを添付",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "コンテキストウィンドウを {{percent}}% 使用",
+      contextAbs: "コンテキスト {{used}} / {{max}} トークン",
+      cost: "セッション費用 {{cost}}",
+      tokens: "入力 {{input}} トークン、出力 {{output}} トークン",
+      tools: "ツール呼び出し {{count}} 回",
+      toolsWithErrors: "ツール呼び出し {{count}} 回、{{errors}} 回失敗",
+      speed: "毎秒 {{rate}} トークン",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "プロバイダー",

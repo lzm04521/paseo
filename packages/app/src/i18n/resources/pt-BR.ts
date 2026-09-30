@@ -196,6 +196,17 @@ export const ptBR: TranslationResources = {
       title_mr: "Anexar issue ou MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "Janela de contexto usada em {{percent}}%",
+      contextAbs: "{{used}} de {{max}} tokens de contexto",
+      cost: "Custo da sessão {{cost}}",
+      tokens: "{{input}} tokens de entrada, {{output}} de saída",
+      tools: "{{count}} chamadas de ferramenta",
+      toolsWithErrors: "{{count}} chamadas de ferramenta, {{errors}} com falha",
+      speed: "{{rate}} tokens por segundo",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "Provedor",

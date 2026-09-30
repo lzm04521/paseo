@@ -195,6 +195,17 @@ export const zhCN: TranslationResources = {
       title_mr: "附加 issue 或 MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "上下文窗口已用 {{percent}}%",
+      contextAbs: "上下文 {{used}} / {{max}} tokens",
+      cost: "会话成本 {{cost}}",
+      tokens: "输入 {{input}} tokens，输出 {{output}} tokens",
+      tools: "{{count}} 次工具调用",
+      toolsWithErrors: "{{count}} 次工具调用，{{errors}} 次失败",
+      speed: "每秒 {{rate}} tokens",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "提供商",

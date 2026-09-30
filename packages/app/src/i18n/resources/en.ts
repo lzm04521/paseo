@@ -191,6 +191,17 @@ export const en = {
       title_mr: "Attach issue or MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "Context window {{percent}}% used",
+      contextAbs: "{{used}} of {{max}} context tokens",
+      cost: "Session cost {{cost}}",
+      tokens: "{{input}} tokens in, {{output}} tokens out",
+      tools: "{{count}} tool calls",
+      toolsWithErrors: "{{count}} tool calls, {{errors}} failed",
+      speed: "{{rate}} tokens per second",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "Provider",

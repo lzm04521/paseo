@@ -197,6 +197,17 @@ export const es: TranslationResources = {
       title_mr: "Adjuntar problema o MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "Ventana de contexto usada al {{percent}}%",
+      contextAbs: "{{used}} de {{max}} tokens de contexto",
+      cost: "Coste de la sesión {{cost}}",
+      tokens: "{{input}} tokens de entrada, {{output}} de salida",
+      tools: "{{count}} llamadas a herramientas",
+      toolsWithErrors: "{{count}} llamadas a herramientas, {{errors}} fallidas",
+      speed: "{{rate}} tokens por segundo",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "Proveedor",

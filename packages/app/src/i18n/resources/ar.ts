@@ -195,6 +195,17 @@ export const ar: TranslationResources = {
       title_mr: "إرفاق المشكلة أو MR",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "نافذة السياق مستخدمة بنسبة {{percent}}%",
+      contextAbs: "{{used}} من {{max}} رمزًا في السياق",
+      cost: "تكلفة الجلسة {{cost}}",
+      tokens: "{{input}} رمزًا للإدخال، {{output}} للإخراج",
+      tools: "{{count}} استدعاء أداة",
+      toolsWithErrors: "{{count}} استدعاء أداة، {{errors}} فاشلة",
+      speed: "{{rate}} رمزًا في الثانية",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "مزود",

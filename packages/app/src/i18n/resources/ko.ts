@@ -195,6 +195,17 @@ export const ko: TranslationResources = {
       title_mr: "이슈 또는 MR 첨부",
     },
   },
+  agentStats: {
+    segments: {
+      contextPct: "컨텍스트 창 {{percent}}% 사용",
+      contextAbs: "컨텍스트 {{used}} / {{max}} 토큰",
+      cost: "세션 비용 {{cost}}",
+      tokens: "입력 {{input}} 토큰, 출력 {{output}} 토큰",
+      tools: "도구 호출 {{count}}회",
+      toolsWithErrors: "도구 호출 {{count}}회, {{errors}}회 실패",
+      speed: "초당 {{rate}} 토큰",
+    },
+  },
   agentControls: {
     provider: {
       fallback: "프로바이더",
