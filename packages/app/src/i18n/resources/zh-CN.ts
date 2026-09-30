@@ -196,6 +196,46 @@ export const zhCN: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "会话统计",
+      kpi: {
+        context: "上下文",
+        speed: "速度",
+        cacheHitRate: "缓存命中",
+        cost: "成本",
+      },
+      sections: {
+        totals: "会话累计",
+        timing: "速度与轮次",
+        tools: "工具调用",
+        subagents: "子代理",
+      },
+      rows: {
+        inputTokens: "输入",
+        cachedInputTokens: "缓存读取",
+        cacheWriteTokens: "缓存写入",
+        outputTokens: "输出",
+        cost: "成本",
+        requestsAndTurns: "请求 · 轮次",
+        firstTokenLatency: "首 token",
+        requestDuration: "请求",
+        turnDuration: "轮次",
+        toolCallTotal: "调用",
+        toolCallErrors: "失败",
+      },
+      segments: {
+        contextPct: "上下文 %",
+        cost: "成本",
+        contextAbs: "上下文用量",
+        tokens: "tokens",
+        tools: "工具",
+        speed: "速度",
+      },
+      display: {
+        title: "常显段",
+        trigger: "显示设置",
+      },
+    },
     segments: {
       contextPct: "上下文窗口已用 {{percent}}%",
       contextAbs: "上下文 {{used}} / {{max}} tokens",

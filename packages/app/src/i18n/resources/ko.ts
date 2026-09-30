@@ -196,6 +196,46 @@ export const ko: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "세션 통계",
+      kpi: {
+        context: "컨텍스트",
+        speed: "속도",
+        cacheHitRate: "캐시 적중",
+        cost: "비용",
+      },
+      sections: {
+        totals: "세션 누적",
+        timing: "속도와 턴",
+        tools: "도구 호출",
+        subagents: "서브에이전트",
+      },
+      rows: {
+        inputTokens: "입력",
+        cachedInputTokens: "캐시 읽기",
+        cacheWriteTokens: "캐시 쓰기",
+        outputTokens: "출력",
+        cost: "비용",
+        requestsAndTurns: "요청 · 턴",
+        firstTokenLatency: "첫 토큰",
+        requestDuration: "요청",
+        turnDuration: "턴",
+        toolCallTotal: "호출",
+        toolCallErrors: "실패",
+      },
+      segments: {
+        contextPct: "컨텍스트 %",
+        cost: "비용",
+        contextAbs: "컨텍스트 사용량",
+        tokens: "토큰",
+        tools: "도구",
+        speed: "속도",
+      },
+      display: {
+        title: "표시할 항목",
+        trigger: "표시 설정",
+      },
+    },
     segments: {
       contextPct: "컨텍스트 창 {{percent}}% 사용",
       contextAbs: "컨텍스트 {{used}} / {{max}} 토큰",

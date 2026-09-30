@@ -1,9 +1,10 @@
 import { Fragment, useCallback, useMemo, type ReactElement } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { AgentSessionStats, AgentUsage } from "@getpaseo/protocol/agent-types";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
+import { MenuRoot, MenuSurface, MenuTrigger, type MenuTriggerState } from "@/components/ui/menu";
 import {
   formatSessionCost,
   formatTokenCount,
@@ -14,8 +15,15 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useSessionStore } from "@/stores/session-store";
 import { useStatsPillPreferences, type StatsPillSegmentId } from "@/stores/stats-pill-preferences";
 import { composerPillStyles } from "./pill-styles";
+import { AgentStatsPanel, useStatsPanelPages } from "./stats-panel";
 
 export const AGENT_STATS_PILL_TEST_ID = "agent-stats-pill";
+
+/** Panel geometry, matching `ComposerTrackPill`: the pill is as wide as its text, the panel is not. */
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MAX_WIDTH = 620;
+const PANEL_MAX_HEIGHT = 440;
+const PANEL_OFFSET = 12;
 
 /**
  * Segment order, left to right. It is also the truncation priority: the compact pill keeps the
@@ -191,6 +199,21 @@ export interface AgentStatsPillProps {
  * nothing here subscribes to `stats_updated`: the numbers arrive with the agent row like every
  * other agent field.
  */
+/**
+ * Whether the pill would render at all.
+ *
+ * The track row asks this before the pill does, because a row whose only content is the pill still
+ * has to lay itself out. An old daemon advertises no capability and a session with no snapshot has
+ * nothing to draw, which are the same two conditions the pill gates on.
+ */
+export function useAgentStatsPillVisible(serverId: string, agentId: string): boolean {
+  const enabled = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.agentSessionStats === true,
+  );
+  const stats = useSessionStore((state) => state.sessions[serverId]?.agents?.get(agentId)?.stats);
+  return enabled && stats !== undefined;
+}
+
 export function AgentStatsPill({ serverId, agentId }: AgentStatsPillProps): ReactElement | null {
   // Gated once, on the daemon's advertised capability. An old daemon cannot produce a stats
   // snapshot, and there is no fallback worth rendering in its place.
@@ -220,14 +243,13 @@ export function AgentStatsPill({ serverId, agentId }: AgentStatsPillProps): Reac
       }),
     [stats, lastUsage, status, hiddenSegments, isCompact, t],
   );
-  const pillStyle = useCallback((state: PressableStateCallbackType) => {
-    // `hovered` is web-only and absent from the native state type, which is fine: on native this
-    // reduces to the press state, and the pill has no appearance that depends on hover alone.
-    const active = state.pressed || Boolean((state as { hovered?: boolean }).hovered);
+  const pillStyle = useCallback(({ hovered, pressed, open }: MenuTriggerState) => {
+    const active = pressed || open || Boolean(hovered);
     return active
       ? [composerPillStyles.body, composerPillStyles.bodyActive]
       : composerPillStyles.body;
   }, []);
+  const pages = useStatsPanelPages();
 
   if (!enabled || segments.length === 0) {
     return null;
@@ -236,25 +258,41 @@ export function AgentStatsPill({ serverId, agentId }: AgentStatsPillProps): Reac
   const accessibilityLabel = segments.map((segment) => segment.accessibilityLabel).join(", ");
 
   return (
-    <Pressable
-      testID={AGENT_STATS_PILL_TEST_ID}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={pillStyle}
-    >
-      <View style={styles.segments}>
-        {segments.map((segment, index) => (
-          <Fragment key={segment.id}>
-            {index > 0 ? <Text style={composerPillStyles.label}>·</Text> : null}
-            <View style={styles.segment} testID={`${AGENT_STATS_PILL_TEST_ID}-segment-${index}`}>
-              <Text style={segmentTextStyle(segment)} numberOfLines={1}>
-                {segment.text}
-              </Text>
-            </View>
-          </Fragment>
-        ))}
-      </View>
-    </Pressable>
+    <MenuRoot compactMode="sheet">
+      <MenuTrigger
+        testID={AGENT_STATS_PILL_TEST_ID}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={pillStyle}
+      >
+        <View style={styles.segments}>
+          {segments.map((segment, index) => (
+            <Fragment key={segment.id}>
+              {index > 0 ? <Text style={composerPillStyles.label}>·</Text> : null}
+              <View style={styles.segment} testID={`${AGENT_STATS_PILL_TEST_ID}-segment-${index}`}>
+                <Text style={segmentTextStyle(segment)} numberOfLines={1}>
+                  {segment.text}
+                </Text>
+              </View>
+            </Fragment>
+          ))}
+        </View>
+      </MenuTrigger>
+      <MenuSurface
+        side="top"
+        align="start"
+        offset={PANEL_OFFSET}
+        sheetTitle={t("agentStats.panel.title")}
+        minWidth={PANEL_MIN_WIDTH}
+        maxWidth={PANEL_MAX_WIDTH}
+        maxHeight={PANEL_MAX_HEIGHT}
+        scrollable
+        pages={pages}
+        testID={`${AGENT_STATS_PILL_TEST_ID}-panel`}
+      >
+        <AgentStatsPanel serverId={serverId} agentId={agentId} />
+      </MenuSurface>
+    </MenuRoot>
   );
 }
 

@@ -198,6 +198,46 @@ export const ru: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "Статистика сессии",
+      kpi: {
+        context: "Контекст",
+        speed: "Скорость",
+        cacheHitRate: "Попадания в кэш",
+        cost: "Стоимость",
+      },
+      sections: {
+        totals: "Итоги сессии",
+        timing: "Скорость и ходы",
+        tools: "Вызовы инструментов",
+        subagents: "Субагенты",
+      },
+      rows: {
+        inputTokens: "Вход",
+        cachedInputTokens: "Чтение кэша",
+        cacheWriteTokens: "Запись кэша",
+        outputTokens: "Выход",
+        cost: "Стоимость",
+        requestsAndTurns: "Запросы · ходы",
+        firstTokenLatency: "Первый токен",
+        requestDuration: "Запрос",
+        turnDuration: "Ход",
+        toolCallTotal: "Вызовы",
+        toolCallErrors: "Сбои",
+      },
+      segments: {
+        contextPct: "% контекста",
+        cost: "Стоимость",
+        contextAbs: "Использовано контекста",
+        tokens: "Токены",
+        tools: "Инструменты",
+        speed: "Скорость",
+      },
+      display: {
+        title: "Показываемые сегменты",
+        trigger: "Настройки отображения",
+      },
+    },
     segments: {
       contextPct: "Контекстное окно заполнено на {{percent}}%",
       contextAbs: "{{used}} из {{max}} токенов контекста",

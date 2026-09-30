@@ -192,6 +192,46 @@ export const en = {
     },
   },
   agentStats: {
+    panel: {
+      title: "Session stats",
+      kpi: {
+        context: "Context",
+        speed: "Speed",
+        cacheHitRate: "Cache hit",
+        cost: "Cost",
+      },
+      sections: {
+        totals: "Session totals",
+        timing: "Speed and turns",
+        tools: "Tool calls",
+        subagents: "Subagents",
+      },
+      rows: {
+        inputTokens: "Input",
+        cachedInputTokens: "Cached",
+        cacheWriteTokens: "Cache write",
+        outputTokens: "Output",
+        cost: "Cost",
+        requestsAndTurns: "Requests · turns",
+        firstTokenLatency: "First token",
+        requestDuration: "Request",
+        turnDuration: "Turn",
+        toolCallTotal: "Calls",
+        toolCallErrors: "Failed",
+      },
+      segments: {
+        contextPct: "Context %",
+        cost: "Cost",
+        contextAbs: "Context used",
+        tokens: "Tokens",
+        tools: "Tools",
+        speed: "Speed",
+      },
+      display: {
+        title: "Shown segments",
+        trigger: "Display settings",
+      },
+    },
     segments: {
       contextPct: "Context window {{percent}}% used",
       contextAbs: "{{used}} of {{max}} context tokens",

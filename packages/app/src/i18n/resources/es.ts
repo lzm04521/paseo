@@ -198,6 +198,46 @@ export const es: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "Estadísticas de la sesión",
+      kpi: {
+        context: "Contexto",
+        speed: "Velocidad",
+        cacheHitRate: "Aciertos de caché",
+        cost: "Coste",
+      },
+      sections: {
+        totals: "Totales de la sesión",
+        timing: "Velocidad y turnos",
+        tools: "Llamadas a herramientas",
+        subagents: "Subagentes",
+      },
+      rows: {
+        inputTokens: "Entrada",
+        cachedInputTokens: "Caché leída",
+        cacheWriteTokens: "Caché escrita",
+        outputTokens: "Salida",
+        cost: "Coste",
+        requestsAndTurns: "Peticiones · turnos",
+        firstTokenLatency: "Primer token",
+        requestDuration: "Petición",
+        turnDuration: "Turno",
+        toolCallTotal: "Llamadas",
+        toolCallErrors: "Fallidas",
+      },
+      segments: {
+        contextPct: "% de contexto",
+        cost: "Coste",
+        contextAbs: "Contexto usado",
+        tokens: "Tokens",
+        tools: "Herramientas",
+        speed: "Velocidad",
+      },
+      display: {
+        title: "Segmentos visibles",
+        trigger: "Ajustes de visualización",
+      },
+    },
     segments: {
       contextPct: "Ventana de contexto usada al {{percent}}%",
       contextAbs: "{{used}} de {{max}} tokens de contexto",

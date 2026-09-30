@@ -196,6 +196,46 @@ export const ar: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "إحصاءات الجلسة",
+      kpi: {
+        context: "السياق",
+        speed: "السرعة",
+        cacheHitRate: "إصابة الذاكرة المؤقتة",
+        cost: "التكلفة",
+      },
+      sections: {
+        totals: "إجماليات الجلسة",
+        timing: "السرعة والأدوار",
+        tools: "استدعاءات الأدوات",
+        subagents: "الوكلاء الفرعيون",
+      },
+      rows: {
+        inputTokens: "الإدخال",
+        cachedInputTokens: "قراءة الذاكرة",
+        cacheWriteTokens: "كتابة الذاكرة",
+        outputTokens: "الإخراج",
+        cost: "التكلفة",
+        requestsAndTurns: "الطلبات · الأدوار",
+        firstTokenLatency: "أول رمز",
+        requestDuration: "الطلب",
+        turnDuration: "الدور",
+        toolCallTotal: "الاستدعاءات",
+        toolCallErrors: "الفاشلة",
+      },
+      segments: {
+        contextPct: "نسبة السياق",
+        cost: "التكلفة",
+        contextAbs: "السياق المستخدم",
+        tokens: "الرموز",
+        tools: "الأدوات",
+        speed: "السرعة",
+      },
+      display: {
+        title: "المقاطع المعروضة",
+        trigger: "إعدادات العرض",
+      },
+    },
     segments: {
       contextPct: "نافذة السياق مستخدمة بنسبة {{percent}}%",
       contextAbs: "{{used}} من {{max}} رمزًا في السياق",

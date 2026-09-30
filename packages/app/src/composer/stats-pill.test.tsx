@@ -100,6 +100,22 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+// The menu engine and the panel body have their own files; this one is about the segments the pill
+// shows before either of them exists.
+vi.mock("@/components/ui/menu", () => ({
+  MenuRoot: ({ children }: React.PropsWithChildren) =>
+    React.createElement(React.Fragment, null, children),
+  MenuTrigger: ({ children, testID }: React.PropsWithChildren<{ testID?: string }>) =>
+    React.createElement("div", { "data-testid": testID }, children),
+  MenuSurface: ({ children }: React.PropsWithChildren) =>
+    React.createElement("div", null, children),
+}));
+
+vi.mock("./stats-panel", () => ({
+  AgentStatsPanel: () => null,
+  useStatsPanelPages: () => [],
+}));
+
 vi.mock("@/stores/session-store", () => ({
   useSessionStore: (selector: (state: typeof mockState) => unknown) => selector(mockState),
 }));

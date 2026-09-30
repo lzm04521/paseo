@@ -198,6 +198,46 @@ export const ja: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "セッション統計",
+      kpi: {
+        context: "コンテキスト",
+        speed: "速度",
+        cacheHitRate: "キャッシュ命中",
+        cost: "費用",
+      },
+      sections: {
+        totals: "セッション累計",
+        timing: "速度とターン",
+        tools: "ツール呼び出し",
+        subagents: "サブエージェント",
+      },
+      rows: {
+        inputTokens: "入力",
+        cachedInputTokens: "キャッシュ読み込み",
+        cacheWriteTokens: "キャッシュ書き込み",
+        outputTokens: "出力",
+        cost: "費用",
+        requestsAndTurns: "リクエスト · ターン",
+        firstTokenLatency: "初回トークン",
+        requestDuration: "リクエスト",
+        turnDuration: "ターン",
+        toolCallTotal: "呼び出し",
+        toolCallErrors: "失敗",
+      },
+      segments: {
+        contextPct: "コンテキスト %",
+        cost: "費用",
+        contextAbs: "コンテキスト使用量",
+        tokens: "トークン",
+        tools: "ツール",
+        speed: "速度",
+      },
+      display: {
+        title: "常時表示する項目",
+        trigger: "表示設定",
+      },
+    },
     segments: {
       contextPct: "コンテキストウィンドウを {{percent}}% 使用",
       contextAbs: "コンテキスト {{used}} / {{max}} トークン",

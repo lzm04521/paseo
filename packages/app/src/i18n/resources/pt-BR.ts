@@ -197,6 +197,46 @@ export const ptBR: TranslationResources = {
     },
   },
   agentStats: {
+    panel: {
+      title: "Estatísticas da sessão",
+      kpi: {
+        context: "Contexto",
+        speed: "Velocidade",
+        cacheHitRate: "Acertos de cache",
+        cost: "Custo",
+      },
+      sections: {
+        totals: "Totais da sessão",
+        timing: "Velocidade e turnos",
+        tools: "Chamadas de ferramenta",
+        subagents: "Subagentes",
+      },
+      rows: {
+        inputTokens: "Entrada",
+        cachedInputTokens: "Cache lido",
+        cacheWriteTokens: "Cache escrito",
+        outputTokens: "Saída",
+        cost: "Custo",
+        requestsAndTurns: "Requisições · turnos",
+        firstTokenLatency: "Primeiro token",
+        requestDuration: "Requisição",
+        turnDuration: "Turno",
+        toolCallTotal: "Chamadas",
+        toolCallErrors: "Falhas",
+      },
+      segments: {
+        contextPct: "% de contexto",
+        cost: "Custo",
+        contextAbs: "Contexto usado",
+        tokens: "Tokens",
+        tools: "Ferramentas",
+        speed: "Velocidade",
+      },
+      display: {
+        title: "Segmentos visíveis",
+        trigger: "Configurações de exibição",
+      },
+    },
     segments: {
       contextPct: "Janela de contexto usada em {{percent}}%",
       contextAbs: "{{used}} de {{max}} tokens de contexto",
