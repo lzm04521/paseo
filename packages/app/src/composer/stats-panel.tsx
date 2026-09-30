@@ -26,6 +26,8 @@ export interface AgentStatsPanelRow {
   id: string;
   label: string;
   value: string;
+  /** Subagent rows only: the session is still waiting on this child. */
+  running?: boolean;
 }
 
 export interface AgentStatsPanelSection {
@@ -232,6 +234,7 @@ function buildSubagentsSection(
       id: `subagent.${subagent.agentId}`,
       label: subagent.label ?? subagent.agentId,
       value: parts.join(" "),
+      running: subagent.running,
     };
   });
   return { id: "subagents", title: input.t("agentStats.panel.sections.subagents"), rows };
@@ -341,7 +344,7 @@ export function AgentStatsPanel({
         <View style={styles.progressTrack} testID="agent-stats-panel-progress">
           <View
             testID={`agent-stats-progress-${model.progress.tone}`}
-            style={[styles.progressFill, progressStyle(model.progress.percent)]}
+            style={progressFillStyle(model.progress)}
           />
         </View>
       ) : null}
@@ -355,6 +358,9 @@ export function AgentStatsPanel({
               style={styles.row}
               testID={`agent-stats-row-${section.id}-${row.id}`}
             >
+              {row.running ? (
+                <View testID="agent-stats-subagent-running" style={styles.runningDot} />
+              ) : null}
               <Text style={styles.rowLabel} numberOfLines={1}>
                 {row.label}
               </Text>
@@ -371,8 +377,20 @@ export function AgentStatsPanel({
   );
 }
 
-function progressStyle(percent: number): { width: `${number}%` } {
-  return { width: `${Math.max(0, Math.min(100, percent))}%` };
+function progressFillStyle(progress: { percent: number; tone: MeterTone }): {
+  width: `${number}%`;
+  backgroundColor: string;
+} {
+  // Read the stylesheet at render time rather than caching colour values at module scope: the
+  // persisted theme is applied after first paint, and a cached read keeps the light value.
+  let tone = styles.progressFill;
+  if (progress.tone === "critical") {
+    tone = styles.progressCritical;
+  } else if (progress.tone === "warning") {
+    tone = styles.progressWarning;
+  }
+  const clamped = Math.max(0, Math.min(100, progress.percent));
+  return { ...tone, width: `${clamped}%` };
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -402,6 +420,20 @@ const styles = StyleSheet.create((theme) => ({
   progressFill: {
     height: 4,
     backgroundColor: theme.colors.foregroundMuted,
+  },
+  progressWarning: {
+    height: 4,
+    backgroundColor: theme.colors.palette.amber[500],
+  },
+  progressCritical: {
+    height: 4,
+    backgroundColor: theme.colors.destructive,
+  },
+  runningDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.palette.green[500],
   },
   sectionTitle: {
     fontSize: theme.fontSize.sm,

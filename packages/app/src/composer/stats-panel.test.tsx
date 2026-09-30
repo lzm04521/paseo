@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import React, { act } from "react";
+import { renderHook } from "@testing-library/react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,7 +20,7 @@ const { theme, mockState } = vi.hoisted(() => ({
       surface1: "#surface1",
       surface2: "#surface2",
       surface3: "#surface3",
-      palette: { amber: { 500: "#amber500" } },
+      palette: { amber: { 500: "#amber500" }, green: { 500: "#green500" } },
     },
   },
   mockState: { sessions: {} as Record<string, unknown> },
@@ -27,12 +28,30 @@ const { theme, mockState } = vi.hoisted(() => ({
 
 vi.mock("react-native", () => ({
   Platform: { OS: "web", select: (options: Record<string, unknown>) => options.default },
-  View: ({ children, testID, ...props }: React.PropsWithChildren<Record<string, unknown>>) =>
-    React.createElement(
+  View: ({
+    children,
+    testID,
+    style,
+    ...props
+  }: React.PropsWithChildren<{ style?: unknown } & Record<string, unknown>>) => {
+    // jsdom drops non-CSS colour values like the mock theme's "#foregroundMuted", so the fill's
+    // colour is surfaced as an attribute instead.
+    const resolved = Array.isArray(style) ? Object.assign({}, ...style) : style;
+    const dimensions =
+      resolved && typeof resolved === "object" ? (resolved as Record<string, unknown>) : undefined;
+    return React.createElement(
       "div",
-      testID === undefined ? props : { ...props, "data-testid": testID },
+      {
+        ...props,
+        ...(testID === undefined ? {} : { "data-testid": testID }),
+        ...(typeof dimensions?.backgroundColor === "string"
+          ? { "data-background-color": dimensions.backgroundColor }
+          : {}),
+        ...(typeof dimensions?.width === "string" ? { "data-width": dimensions.width } : {}),
+      },
       children,
-    ),
+    );
+  },
   Text: ({ children, testID, ...props }: React.PropsWithChildren<Record<string, unknown>>) =>
     React.createElement(
       "span",
@@ -57,8 +76,27 @@ vi.mock("@/stores/session-store", () => ({
 }));
 
 vi.mock("@/components/ui/menu", () => ({
-  MenuItem: ({ children, testID }: React.PropsWithChildren<{ testID?: string }>) =>
-    React.createElement("div", { "data-testid": testID }, children),
+  // `onSelect` is wired to a DOM click the way the real item wires it to a press, so the
+  // display-settings page can be driven from a test.
+  MenuItem: ({
+    children,
+    testID,
+    onSelect,
+    selected,
+  }: React.PropsWithChildren<{
+    testID?: string;
+    onSelect?: () => void;
+    selected?: boolean;
+  }>) =>
+    React.createElement(
+      "div",
+      {
+        "data-testid": testID,
+        "data-selected": String(selected === true),
+        onClick: onSelect,
+      },
+      children,
+    ),
   MenuSeparator: () => React.createElement("hr"),
   MenuSubTrigger: ({ children, testID }: React.PropsWithChildren<{ testID?: string }>) =>
     React.createElement("div", { "data-testid": testID }, children),
@@ -70,8 +108,10 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 import {
   AgentStatsPanel,
   buildAgentStatsPanelModel,
+  useStatsPanelPages,
   type AgentStatsPanelTranslate,
 } from "./stats-panel";
+import { useStatsPillPreferences } from "@/stores/stats-pill-preferences";
 
 const SERVER_ID = "server-stats-panel";
 const AGENT_ID = "agent-stats-panel";
@@ -134,7 +174,7 @@ describe("buildAgentStatsPanelModel", () => {
       "Bash=12 (1✕)",
     ]);
     expect(model.sections[3]?.rows).toEqual([
-      { id: "subagent.sub-1", label: "Explore", value: "↑900 ↓120" },
+      { id: "subagent.sub-1", label: "Explore", value: "↑900 ↓120", running: false },
     ]);
   });
 
@@ -173,9 +213,19 @@ describe("AgentStatsPanel", () => {
     container.remove();
   });
 
-  function setAgent(stats: unknown): void {
+  function setAgent(stats: unknown, usedTokens = 85_000): void {
     mockState.sessions[SERVER_ID] = {
-      agents: new Map([[AGENT_ID, { id: AGENT_ID, status: "running", stats, lastUsage }]]),
+      agents: new Map([
+        [
+          AGENT_ID,
+          {
+            id: AGENT_ID,
+            status: "running",
+            stats,
+            lastUsage: { contextWindowMaxTokens: 200_000, contextWindowUsedTokens: usedTokens },
+          },
+        ],
+      ]),
     };
   }
 
@@ -201,5 +251,85 @@ describe("AgentStatsPanel", () => {
     expect(container.querySelector('[data-testid="agent-stats-section-totals"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-timing"]')).toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-tools"]')).toBeNull();
+  });
+
+  it("tones the progress bar by how full the window is", () => {
+    const fill = () =>
+      container.querySelector<HTMLElement>('[data-testid^="agent-stats-progress-"]');
+
+    setAgent(fullStats, 85_000);
+    act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
+    expect(fill()?.getAttribute("data-testid")).toBe("agent-stats-progress-muted");
+    expect(fill()?.getAttribute("data-background-color")).toBe("#foregroundMuted");
+    expect(fill()?.getAttribute("data-width")).toBe("42%");
+
+    setAgent(fullStats, 150_000);
+    act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
+    expect(fill()?.getAttribute("data-testid")).toBe("agent-stats-progress-warning");
+    expect(fill()?.getAttribute("data-background-color")).toBe("#amber500");
+
+    setAgent(fullStats, 195_000);
+    act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
+    expect(fill()?.getAttribute("data-testid")).toBe("agent-stats-progress-critical");
+    expect(fill()?.getAttribute("data-background-color")).toBe("#destructive");
+    expect(fill()?.getAttribute("data-width")).toBe("97%");
+  });
+
+  it("marks subagents that are still running", () => {
+    setAgent({
+      ...fullStats,
+      subagents: [
+        {
+          agentId: "sub-run",
+          label: "Explore",
+          inputTokens: 900,
+          outputTokens: 120,
+          running: true,
+        },
+        { agentId: "sub-done", label: "Verify", inputTokens: 10, outputTokens: 5, running: false },
+      ],
+    });
+
+    act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
+
+    const runningRow = container.querySelector(
+      '[data-testid="agent-stats-row-subagents-subagent.sub-run"]',
+    );
+    const doneRow = container.querySelector(
+      '[data-testid="agent-stats-row-subagents-subagent.sub-done"]',
+    );
+    expect(
+      runningRow?.querySelector('[data-testid="agent-stats-subagent-running"]'),
+    ).not.toBeNull();
+    expect(doneRow?.querySelector('[data-testid="agent-stats-subagent-running"]')).toBeNull();
+  });
+
+  it("keeps rendering every panel section while a pill segment is hidden", () => {
+    useStatsPillPreferences.setState({ hiddenSegments: ["speed"] });
+    setAgent(fullStats);
+
+    act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
+
+    // The switches scope to the pill; the detail panel stays complete.
+    expect(container.querySelector('[data-testid="agent-stats-kpi-speed"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="agent-stats-section-timing"]')).not.toBeNull();
+  });
+
+  it("toggles a pill segment from the display-settings page", () => {
+    useStatsPillPreferences.setState({ hiddenSegments: [] });
+    const { result } = renderHook(() => useStatsPanelPages());
+
+    act(() => root.render(result.current[0]?.content));
+
+    const costToggle = container.querySelector<HTMLElement>(
+      '[data-testid="agent-stats-segment-toggle-cost"]',
+    );
+    expect(costToggle?.getAttribute("data-selected")).toBe("true");
+
+    act(() => costToggle?.click());
+    expect(useStatsPillPreferences.getState().hiddenSegments).toEqual(["cost"]);
+
+    act(() => costToggle?.click());
+    expect(useStatsPillPreferences.getState().hiddenSegments).toEqual([]);
   });
 });
