@@ -61,11 +61,13 @@ export class ClaudeSidechainTracker {
   private readonly isDescriptorOwnedElsewhere: () => boolean;
   private readonly needsSyntheticParentToolCard: (toolUseId: string) => boolean;
   /**
-   * A subagent's tool call, reported once when it is first seen and again when it fails. Session
-   * stats count subagent work as the session's own, and this is the only place a child's tools are
+   * A subagent's tool call, reported once when the tracker first sees it. Session stats count
+   * subagent work as the session's own, and this is the only place a child's tools are
    * deduplicated — the same call arrives as a stream event and again in the finished message.
    */
-  private readonly onToolAction: (toolName: string, isError: boolean) => void;
+  private readonly onToolUse: (toolName: string) => void;
+  /** The counted call failing. The use was already reported, so only the error is news. */
+  private readonly onToolError: (toolName: string) => void;
 
   constructor(input: {
     getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
@@ -76,12 +78,14 @@ export class ClaudeSidechainTracker {
      */
     isDescriptorOwnedElsewhere?: () => boolean;
     needsSyntheticParentToolCard?: (toolUseId: string) => boolean;
-    onToolAction?: (toolName: string, isError: boolean) => void;
+    onToolUse?: (toolName: string) => void;
+    onToolError?: (toolName: string) => void;
   }) {
     this.getToolInput = input.getToolInput;
     this.isDescriptorOwnedElsewhere = input.isDescriptorOwnedElsewhere ?? (() => false);
     this.needsSyntheticParentToolCard = input.needsSyntheticParentToolCard ?? (() => true);
-    this.onToolAction = input.onToolAction ?? (() => undefined);
+    this.onToolUse = input.onToolUse ?? (() => undefined);
+    this.onToolError = input.onToolError ?? (() => undefined);
   }
 
   handleMessage(message: SDKMessage, parentToolUseId: string): AgentStreamEvent[] {
@@ -107,7 +111,7 @@ export class ClaudeSidechainTracker {
       if (state.completedActionKeys.has(action.key)) continue;
       if (this.appendSubAgentAction(state, action)) {
         actionUpdated = true;
-        this.onToolAction(action.toolName, false);
+        this.onToolUse(action.toolName);
         const toolCall = mapClaudeRunningToolCall({
           name: action.toolName,
           callId: action.key,
@@ -296,7 +300,9 @@ export class ClaudeSidechainTracker {
         : mapClaudeCompletedToolCall(params);
       if (toolCall) {
         state.completedActionKeys.add(callId);
-        this.onToolAction(toolName, block.is_error === true);
+        if (block.is_error === true) {
+          this.onToolError(toolName);
+        }
         items.push(toolCall);
       }
     }

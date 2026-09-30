@@ -2133,11 +2133,12 @@ class ClaudeAgentSession implements AgentSession {
     isDescriptorOwnedElsewhere: () => this.taskProtocolSource.isActive,
     needsSyntheticParentToolCard: (toolUseId) =>
       this.taskProtocolSource.needsSyntheticParentToolCard(toolUseId),
-    onToolAction: (toolName, isError) => {
+    onToolUse: (toolName) => {
       this.statsAggregator.recordToolUse(toolName);
-      if (isError) {
-        this.statsAggregator.recordToolResult(toolName, true);
-      }
+      this.statsDirty = true;
+    },
+    onToolError: (toolName) => {
+      this.statsAggregator.recordToolResult(toolName, true);
       this.statsDirty = true;
     },
   });

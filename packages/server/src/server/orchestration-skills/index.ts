@@ -45,4 +45,4 @@ export function createOrchestrationSkills(
 }
 
 export type { SkillsSaveResult, SkillsSnapshot } from "./internal/controller.js";
-export { resolveSkillTargets } from "./internal/paths.js";
+export { resolveSkillTargets, resolveSkillsHome } from "./internal/paths.js";
