@@ -89,7 +89,7 @@ export class ClaudeSidechainTracker {
     this.activeSidechains.set(parentToolUseId, state);
 
     const contextUpdated = this.updateSubAgentContextFromTaskInput(state, parentToolUseId);
-    const actionCandidates = this.extractSubAgentActionCandidates(message);
+    const actionCandidates = this.extractSubAgentActionCandidates(message, state);
     const childTimelineItems = [
       ...this.extractSubAgentTimelineItems(message),
       ...this.extractSubAgentToolResults(message, state),
@@ -390,7 +390,10 @@ export class ClaudeSidechainTracker {
     ];
   }
 
-  private extractSubAgentActionCandidates(message: SDKMessage): SubAgentActionCandidate[] {
+  private extractSubAgentActionCandidates(
+    message: SDKMessage,
+    state: SubAgentActivityState,
+  ): SubAgentActionCandidate[] {
     if (message.type === "assistant") {
       return this.extractAssistantMessageActions(message);
     }
@@ -404,7 +407,15 @@ export class ClaudeSidechainTracker {
       if (!toolName) {
         return [];
       }
-      const key = readTrimmedString(message.tool_use_id) ?? `progress:${toolName}`;
+      const key = readTrimmedString(message.tool_use_id);
+      // Claude Code reports long-running tools through synthetic `-heartbeat-N`
+      // progress ids that carry no input and never receive a result. Treating an
+      // unknown id as a new action materializes an empty running card that
+      // shows a loading skeleton forever. Progress may only refresh a tool the
+      // subagent already announced.
+      if (!key || !state.actionIndexByKey.has(key)) {
+        return [];
+      }
       return [{ key, toolName, input: null }];
     }
 
