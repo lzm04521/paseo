@@ -128,6 +128,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     historyPrimed: overrides.historyPrimed ?? true,
     lastUserMessageAt: overrides.lastUserMessageAt ?? core.now,
     lastUsage: overrides.lastUsage,
+    stats: overrides.stats,
     lastError: overrides.lastError,
   };
 }
@@ -494,6 +495,38 @@ describe("AgentStorage", () => {
     const records = await reloaded.list();
     expect(records).toHaveLength(1);
     expect(records[0]?.internal).toBe(true);
+  });
+
+  test("session stats survive archival and a reload", async () => {
+    await storage.applySnapshot(
+      createManagedAgent({
+        id: "agent-stats",
+        cwd: "/tmp/project",
+        stats: {
+          sessionInputTokens: 12_000,
+          sessionCachedInputTokens: 8_000,
+          requestCount: 3,
+          toolCalls: [{ tool: "Bash", count: 2, errors: 1 }],
+          subagents: [{ agentId: "sub-1", label: "Explore", running: true }],
+        },
+      }),
+    );
+
+    const record = await storage.get("agent-stats");
+    expect(record).not.toBeNull();
+    await storage.upsert({ ...record!, archivedAt: "2026-01-03T00:00:00.000Z" });
+
+    const reloaded = new AgentStorage(storagePath, logger);
+    const restored = await reloaded.get("agent-stats");
+
+    expect(restored?.archivedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect(restored?.stats).toEqual({
+      sessionInputTokens: 12_000,
+      sessionCachedInputTokens: 8_000,
+      requestCount: 3,
+      toolCalls: [{ tool: "Bash", count: 2, errors: 1 }],
+      subagents: [{ agentId: "sub-1", label: "Explore", running: true }],
+    });
   });
 
   test("Windows drive-letter paths produce valid directory names", async () => {

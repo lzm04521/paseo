@@ -49,6 +49,7 @@ import {
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentUsage,
+  type AgentSessionStats,
   type AgentRuntimeInfo,
   type ImportedTimelineEntry,
   type ImportableProviderSession,
@@ -428,6 +429,7 @@ interface ManagedAgentBase {
   activeTurnId: string | null;
   activeTurnStartedAt: Date | null;
   lastUsage?: AgentUsage;
+  stats?: AgentSessionStats;
   lastError?: string;
   attention: AttentionState;
   foregroundTurnWaiters: Set<ForegroundTurnWaiter>;
@@ -4298,6 +4300,10 @@ export class AgentManager {
         return undefined;
       case "usage_updated":
         agent.lastUsage = event.usage;
+        this.emitState(agent);
+        return undefined;
+      case "stats_updated":
+        agent.stats = event.stats;
         this.emitState(agent);
         return undefined;
       case "mode_changed":
