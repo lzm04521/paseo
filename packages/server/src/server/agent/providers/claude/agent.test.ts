@@ -2948,6 +2948,59 @@ describe("ClaudeAgentSession context window usage", () => {
     }
   });
 
+  test("counts a subagent tool call once across its use and its result", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-tools-once",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-child-ok", name: "Read", input: { file_path: "/a" } },
+              { type: "tool_use", id: "toolu-child-bad", name: "Bash", input: { command: "ls" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        {
+          type: "user",
+          parent_tool_use_id: "toolu-agent-tools-once",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu-child-ok", content: "ok" },
+              {
+                type: "tool_result",
+                tool_use_id: "toolu-child-bad",
+                content: "boom",
+                is_error: true,
+              },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 2,
+        toolCallErrors: 1,
+        toolCalls: [
+          { tool: "Read", count: 1, errors: 0 },
+          { tool: "Bash", count: 1, errors: 1 },
+        ],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
   test("does not publish a session stats snapshot per streamed content block", async () => {
     const blockStart = {
       type: "stream_event",
