@@ -288,6 +288,7 @@ import type {
   ToolCallDetail,
   ToolCallTimelineItem,
   AgentUsage,
+  AgentSessionStats,
   JsonValue,
 } from "./agent-types.js";
 
@@ -429,6 +430,37 @@ const AgentUsageSchema: z.ZodType<AgentUsage> = z.object({
   totalCostUsd: z.number().optional(),
   contextWindowMaxTokens: z.number().optional(),
   contextWindowUsedTokens: z.number().optional(),
+});
+
+const AgentSessionStatsSchema: z.ZodType<AgentSessionStats> = z.object({
+  sessionInputTokens: z.number().optional(),
+  sessionCachedInputTokens: z.number().optional(),
+  sessionOutputTokens: z.number().optional(),
+  sessionCacheWriteTokens: z.number().optional(),
+  sessionTotalCostUsd: z.number().optional(),
+  requestCount: z.number().optional(),
+  turnCount: z.number().optional(),
+  lastGenTokensPerSec: z.number().optional(),
+  lastFirstTokenLatencyMs: z.number().optional(),
+  lastRequestDurationMs: z.number().optional(),
+  lastTurnDurationMs: z.number().optional(),
+  cacheHitRate: z.number().optional(),
+  toolCallTotal: z.number().optional(),
+  toolCallErrors: z.number().optional(),
+  toolCalls: z
+    .array(z.object({ tool: z.string(), count: z.number(), errors: z.number() }))
+    .optional(),
+  subagents: z
+    .array(
+      z.object({
+        agentId: z.string(),
+        label: z.string().optional(),
+        inputTokens: z.number().optional(),
+        outputTokens: z.number().optional(),
+        running: z.boolean(),
+      }),
+    )
+    .optional(),
 });
 
 const McpStdioServerConfigSchema = z.object({
@@ -773,6 +805,12 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     turnId: z.string().optional(),
     usage: AgentUsageSchema.optional(),
   }),
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  z.object({
+    type: z.literal("stats_updated"),
+    provider: AgentProviderSchema,
+    stats: AgentSessionStatsSchema,
+  }),
   z.object({
     type: z.literal("turn_failed"),
     provider: AgentProviderSchema,
@@ -869,6 +907,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   persistence: AgentPersistenceHandleSchema.nullable(),
   runtimeInfo: AgentRuntimeInfoSchema.optional(),
   lastUsage: AgentUsageSchema.optional(),
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  stats: AgentSessionStatsSchema.optional(),
   lastError: z.string().optional(),
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()).default({}),
@@ -3586,6 +3626,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
+        // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+        agentSessionStats: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
