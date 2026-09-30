@@ -68,6 +68,8 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
   let sessionTotalCostUsd: number | undefined;
 
   let requestStartedAt: number | undefined;
+  /** Set by {@link SessionStatsAggregator.recordRequestStart}, consumed by the next message start. */
+  let pendingRequestStartedAt: number | undefined;
   let firstAssistantTokenAt: number | undefined;
   let currentRequestOutputTokens = 0;
   let turnStartedAt: number | undefined;
@@ -92,7 +94,10 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
 
   return {
     recordMessageStart(usage, at) {
-      requestStartedAt ??= at;
+      // Each request gets its own clock. Seeding it only once would measure every later request
+      // against the first one, i.e. against the age of the session.
+      requestStartedAt = pendingRequestStartedAt ?? at;
+      pendingRequestStartedAt = undefined;
       firstAssistantTokenAt = undefined;
       currentRequestOutputTokens = 0;
       requestCount += 1;
@@ -140,6 +145,7 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
 
     recordRequestStart(at) {
       requestStartedAt = at;
+      pendingRequestStartedAt = at;
       firstAssistantTokenAt = undefined;
       currentRequestOutputTokens = 0;
     },

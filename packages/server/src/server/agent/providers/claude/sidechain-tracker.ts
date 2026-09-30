@@ -60,6 +60,12 @@ export class ClaudeSidechainTracker {
   private readonly getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
   private readonly isDescriptorOwnedElsewhere: () => boolean;
   private readonly needsSyntheticParentToolCard: (toolUseId: string) => boolean;
+  /**
+   * A subagent's tool call, reported once when it is first seen and again when it fails. Session
+   * stats count subagent work as the session's own, and this is the only place a child's tools are
+   * deduplicated — the same call arrives as a stream event and again in the finished message.
+   */
+  private readonly onToolAction: (toolName: string, isError: boolean) => void;
 
   constructor(input: {
     getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
@@ -70,10 +76,12 @@ export class ClaudeSidechainTracker {
      */
     isDescriptorOwnedElsewhere?: () => boolean;
     needsSyntheticParentToolCard?: (toolUseId: string) => boolean;
+    onToolAction?: (toolName: string, isError: boolean) => void;
   }) {
     this.getToolInput = input.getToolInput;
     this.isDescriptorOwnedElsewhere = input.isDescriptorOwnedElsewhere ?? (() => false);
     this.needsSyntheticParentToolCard = input.needsSyntheticParentToolCard ?? (() => true);
+    this.onToolAction = input.onToolAction ?? (() => undefined);
   }
 
   handleMessage(message: SDKMessage, parentToolUseId: string): AgentStreamEvent[] {
@@ -99,6 +107,7 @@ export class ClaudeSidechainTracker {
       if (state.completedActionKeys.has(action.key)) continue;
       if (this.appendSubAgentAction(state, action)) {
         actionUpdated = true;
+        this.onToolAction(action.toolName, false);
         const toolCall = mapClaudeRunningToolCall({
           name: action.toolName,
           callId: action.key,
@@ -287,6 +296,7 @@ export class ClaudeSidechainTracker {
         : mapClaudeCompletedToolCall(params);
       if (toolCall) {
         state.completedActionKeys.add(callId);
+        this.onToolAction(toolName, block.is_error === true);
         items.push(toolCall);
       }
     }

@@ -2916,6 +2916,64 @@ describe("ClaudeAgentSession context window usage", () => {
     }
   });
 
+  test("counts subagent tool calls toward the session totals", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-tools",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-child-1", name: "Read", input: { file_path: "/a" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 1,
+        toolCallErrors: 0,
+        toolCalls: [{ tool: "Read", count: 1, errors: 0 }],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("does not publish a session stats snapshot per streamed content block", async () => {
+    const blockStart = {
+      type: "stream_event",
+      event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "hi" } },
+      session_id: "session-1",
+    };
+    const plain = await createSessionForTurns([[createInitMessage(), createSuccessResult()]]);
+    const streamed = await createSessionForTurns([
+      [createInitMessage(), blockStart, blockStart, blockStart, createSuccessResult()],
+    ]);
+
+    try {
+      const plainEvents = await collectTurnEvents(plain);
+      const streamedEvents = await collectTurnEvents(streamed);
+
+      const countStats = (events: AgentStreamEvent[]) =>
+        events.filter((event) => event.type === "stats_updated").length;
+
+      expect(countStats(streamedEvents)).toBe(countStats(plainEvents));
+      expect(countStats(plainEvents)).toBeGreaterThan(0);
+    } finally {
+      await plain.close();
+      await streamed.close();
+    }
+  });
+
   test("selected Claude models seed active context window usage with max tokens", async () => {
     const session = await createSessionForTurns(
       [[createInitMessage(), createMessageStartEvent(), createSuccessResult()]],

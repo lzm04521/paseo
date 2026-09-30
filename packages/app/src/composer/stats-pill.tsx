@@ -181,9 +181,15 @@ export function buildAgentStatsPillSegments(
     tools: buildToolsSegment(input),
     speed: buildSpeedSegment(input),
   };
-  const visible = SEGMENT_ORDER.filter((id) => !input.hiddenSegments.includes(id))
-    .map((id) => candidates[id])
-    .filter((segment): segment is AgentStatsPillSegment => segment !== undefined);
+  const available = SEGMENT_ORDER.map((id) => candidates[id]).filter(
+    (segment): segment is AgentStatsPillSegment => segment !== undefined,
+  );
+  const visible = available.filter((segment) => !input.hiddenSegments.includes(segment.id));
+  if (visible.length === 0) {
+    // The picker lives inside the pill's own panel, so an empty pill is a one-way door: nothing
+    // left on the row opens the list that would put a segment back. Keep the top one instead.
+    return available.slice(0, 1);
+  }
   return input.isCompact ? visible.slice(0, COMPACT_SEGMENT_COUNT) : visible;
 }
 
@@ -211,7 +217,25 @@ export function useAgentStatsPillVisible(serverId: string, agentId: string): boo
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentSessionStats === true,
   );
   const stats = useSessionStore((state) => state.sessions[serverId]?.agents?.get(agentId)?.stats);
-  return enabled && stats !== undefined;
+  const lastUsage = useSessionStore(
+    (state) => state.sessions[serverId]?.agents?.get(agentId)?.lastUsage,
+  );
+  const { t } = useTranslation();
+  if (!enabled) {
+    return false;
+  }
+  // The same builder the pill runs, so the row cannot stay empty and the pill cannot be dropped:
+  // a provider that never reports session stats still fills the context segment from `lastUsage`.
+  return (
+    buildAgentStatsPillSegments({
+      stats,
+      lastUsage,
+      status: null,
+      hiddenSegments: [],
+      isCompact: true,
+      t: t as AgentStatsTranslate,
+    }).length > 0
+  );
 }
 
 export function AgentStatsPill({ serverId, agentId }: AgentStatsPillProps): ReactElement | null {

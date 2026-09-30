@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import React, { act } from "react";
+import { renderHook } from "@testing-library/react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -124,7 +125,7 @@ vi.stubGlobal("React", React);
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 import { useStatsPillPreferences } from "@/stores/stats-pill-preferences";
-import { AgentStatsPill } from "./stats-pill";
+import { AGENT_STATS_PILL_TEST_ID, AgentStatsPill, useAgentStatsPillVisible } from "./stats-pill";
 
 function toStyleArray(style: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(style)) return style.flatMap((entry) => toStyleArray(entry));
@@ -314,6 +315,31 @@ describe("AgentStatsPill", () => {
     render();
 
     expect(segmentTexts()).toEqual(["42%", "85k/200k", "↑1k ↓3k", "🔧 24", "38 t/s"]);
+  });
+
+  it("keeps the pill on screen when every segment is hidden, so the panel stays reachable", () => {
+    enableFeature();
+    useStatsPillPreferences.setState({
+      hiddenSegments: ["contextPct", "cost", "contextAbs", "tokens", "tools", "speed"],
+    });
+
+    render();
+
+    // The display settings live inside the pill's own panel. Emptying the pill would take away the
+    // only way to put a segment back.
+    expect(container.querySelector(`[data-testid="${AGENT_STATS_PILL_TEST_ID}"]`)).not.toBeNull();
+    expect(segmentTexts()).toEqual(["42%"]);
+  });
+
+  it("is visible from context usage alone, with no session snapshot yet", () => {
+    setAgent(
+      { lastUsage: { contextWindowMaxTokens: 200_000, contextWindowUsedTokens: 85_000 } },
+      { features: { agentSessionStats: true } },
+    );
+
+    const { result } = renderHook(() => useAgentStatsPillVisible(SERVER_ID, AGENT_ID));
+
+    expect(result.current).toBe(true);
   });
 
   it("dims the generation speed once the agent stops running", () => {

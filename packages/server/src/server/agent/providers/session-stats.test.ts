@@ -71,6 +71,36 @@ describe("createSessionStatsAggregator", () => {
     expect(stats.lastRequestDurationMs).toBe(1_000);
   });
 
+  test("measures each request against that request's own start", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordMessageStart({ inputTokens: 10 }, 1_000);
+    aggregator.recordFirstAssistantToken(1_400);
+    aggregator.recordMessageDelta(300, 2_000);
+    aggregator.recordMessageComplete(3_400);
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(2_400);
+
+    // The session kept running for five minutes before the next request. That gap belongs to the
+    // session, not to this request.
+    aggregator.recordMessageStart({ inputTokens: 10 }, 300_000);
+    aggregator.recordFirstAssistantToken(300_400);
+    aggregator.recordMessageDelta(50, 300_500);
+    aggregator.recordMessageComplete(301_000);
+
+    expect(aggregator.snapshot().lastFirstTokenLatencyMs).toBe(400);
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
+  });
+
+  test("prefers an explicitly recorded request start over the message-start clock", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordRequestStart(900);
+    aggregator.recordMessageStart({ inputTokens: 10 }, 1_000);
+    aggregator.recordMessageComplete(1_900);
+
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
+  });
+
   test("reports turn count and duration", () => {
     const aggregator = createSessionStatsAggregator();
 

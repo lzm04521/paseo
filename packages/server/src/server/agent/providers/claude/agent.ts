@@ -2133,6 +2133,13 @@ class ClaudeAgentSession implements AgentSession {
     isDescriptorOwnedElsewhere: () => this.taskProtocolSource.isActive,
     needsSyntheticParentToolCard: (toolUseId) =>
       this.taskProtocolSource.needsSyntheticParentToolCard(toolUseId),
+    onToolAction: (toolName, isError) => {
+      this.statsAggregator.recordToolUse(toolName);
+      if (isError) {
+        this.statsAggregator.recordToolResult(toolName, true);
+      }
+      this.statsDirty = true;
+    },
   });
   private persistedHistory: PersistedTimelineEntry[] = [];
   private persistedProviderSubagentEvents: Extract<
@@ -4567,8 +4574,10 @@ class ClaudeAgentSession implements AgentSession {
       this.statsAggregator.recordMessageDelta(outputTokens, now);
     } else if (eventType === "content_block_start") {
       // Any block start is the model's first emission for the request — a tool-only turn never
-      // produces a text delta.
+      // produces a text delta. It is not worth a snapshot on its own: no number in the snapshot
+      // moves until the message completes, and a block per snapshot is one wire message per block.
       this.statsAggregator.recordFirstAssistantToken(now);
+      return;
     } else {
       return;
     }
