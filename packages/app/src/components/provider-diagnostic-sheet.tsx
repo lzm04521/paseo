@@ -1,5 +1,13 @@
 import * as Clipboard from "expo-clipboard";
-import { AlertTriangle, Copy, FileText, Plus, RotateCw, Trash2 } from "lucide-react-native";
+import {
+  AlertTriangle,
+  Copy,
+  FileText,
+  PencilLine,
+  Plus,
+  RotateCw,
+  Trash2,
+} from "lucide-react-native";
 import type { TFunction } from "i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +34,7 @@ import { formatTimeAgo } from "@/utils/time";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import { ProviderConnectionEditSheet } from "./provider-connection-edit-sheet";
 import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
@@ -415,6 +424,7 @@ interface ProviderSheetFooterInput {
   t: TFunction;
   onOpenAddSheet: () => void;
   onOpenDiagSheet: () => void;
+  onOpenConnectionSheet?: () => void;
   onRefreshModels: () => void;
 }
 
@@ -425,6 +435,7 @@ function renderProviderSheetFooter({
   t,
   onOpenAddSheet,
   onOpenDiagSheet,
+  onOpenConnectionSheet,
   onRefreshModels,
 }: ProviderSheetFooterInput) {
   const contentStyle = isCompact ? sheetStyles.compactFooterContent : sheetStyles.footerContent;
@@ -442,6 +453,17 @@ function renderProviderSheetFooter({
         </Text>
       ) : null}
       <View style={actionsStyle}>
+        {onOpenConnectionSheet ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={PencilLine}
+            onPress={onOpenConnectionSheet}
+            style={buttonStyle}
+          >
+            {t("settings.providers.connection.button")}
+          </Button>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"
@@ -580,6 +602,7 @@ export function ProviderDiagnosticSheet({
   const [query, setQuery] = useState("");
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [diagSheetOpen, setDiagSheetOpen] = useState(false);
+  const [connectionSheetOpen, setConnectionSheetOpen] = useState(false);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
 
   const providerLabel = resolveProviderLabel(provider, snapshotEntries);
@@ -626,6 +649,7 @@ export function ProviderDiagnosticSheet({
       setQuery("");
       setAddSheetOpen(false);
       setDiagSheetOpen(false);
+      setConnectionSheetOpen(false);
     }
   }, [visible]);
 
@@ -647,6 +671,20 @@ export function ProviderDiagnosticSheet({
   const handleCloseAddSheet = useCallback(() => setAddSheetOpen(false), []);
   const handleOpenDiagSheet = useCallback(() => setDiagSheetOpen(true), []);
   const handleCloseDiagSheet = useCallback(() => setDiagSheetOpen(false), []);
+
+  // 连接编辑表单字段均为 ANTHROPIC_*（仅适配 claude 派生）：非 claude 派生的自定义供应商
+  // （如 extends: "acp"）不显示入口。override 值经 passthrough 索引签名为 unknown，需 inline narrow。
+  const providerOverrideEntry = config?.providers?.[provider] as
+    | Record<string, unknown>
+    | undefined;
+  const isClaudeDerivedCustomProvider =
+    providerEntry?.source === "custom" && providerOverrideEntry?.extends === "claude";
+  const handleOpenConnectionSheet = useCallback(() => setConnectionSheetOpen(true), []);
+  const handleCloseConnectionSheet = useCallback(() => setConnectionSheetOpen(false), []);
+  const handleConnectionSaved = useCallback(() => {
+    setConnectionSheetOpen(false);
+    void refresh([provider]);
+  }, [refresh, provider]);
 
   const handleDeleteCustom = useCallback(
     (modelId: string) => {
@@ -692,6 +730,9 @@ export function ProviderDiagnosticSheet({
           t,
           onOpenAddSheet: handleOpenAddSheet,
           onOpenDiagSheet: handleOpenDiagSheet,
+          onOpenConnectionSheet: isClaudeDerivedCustomProvider
+            ? handleOpenConnectionSheet
+            : undefined,
           onRefreshModels: handleRefreshModels,
         })}
         snapPoints={MAIN_SNAP_POINTS}
@@ -724,6 +765,15 @@ export function ProviderDiagnosticSheet({
         visible={diagSheetOpen}
         onClose={handleCloseDiagSheet}
       />
+      {isClaudeDerivedCustomProvider ? (
+        <ProviderConnectionEditSheet
+          provider={provider}
+          serverId={serverId}
+          visible={connectionSheetOpen}
+          onClose={handleCloseConnectionSheet}
+          onSaved={handleConnectionSaved}
+        />
+      ) : null}
     </>
   );
 }

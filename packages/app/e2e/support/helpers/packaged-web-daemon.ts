@@ -60,6 +60,8 @@ export async function startPackagedWebDaemon(input: {
   const paseo = path.resolve(__dirname, "../../../../../node_modules/.bin/paseo");
   const env: NodeJS.ProcessEnv = {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PASEO_"))),
+    // Keep the packaged daemon's skill installs off the developer's home;
+    // `home` is removed again in close() and on failure.
     HOME: home,
     USERPROFILE: home,
     CI: "true",
