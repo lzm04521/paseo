@@ -18,11 +18,25 @@ export interface SessionStatsAggregator {
     at: number,
   ): void;
   recordMessageDelta(outputTokens: number, at: number): void;
+  /**
+   * Per-request input-side totals seen later on the wire, for gateways that cannot know prompt
+   * tokens when the stream opens: OpenAI→Anthropic converters emit `message_start` with zeroed
+   * usage and repeat the real numbers on `message_delta`. Absent fields keep the request's
+   * current reading, so a compliant stream (input only in `message_start`) and repeated deltas
+   * are both no-ops.
+   */
+  reconcileStreamUsage(usage: {
+    inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  }): void;
   recordFirstAssistantToken(at: number): void;
   recordMessageComplete(at: number): void;
   /**
-   * Optional: providers that cannot observe the outbound request use
-   * `recordMessageStart`'s clock instead, which is what the daemon sees anyway.
+   * Optional: providers that cannot observe the outbound request use `recordMessageStart`'s clock
+   * instead, which is what the daemon sees anyway. The time supplied here only anchors the next
+   * `message_start`; a request that never reaches the wire (client-side slash command) leaves the
+   * last request's timing untouched.
    */
   recordRequestStart(at: number): void;
   /**
@@ -70,8 +84,14 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
   let requestStartedAt: number | undefined;
   /** Set by {@link SessionStatsAggregator.recordRequestStart}, consumed by the next message start. */
   let pendingRequestStartedAt: number | undefined;
+  /** Whether a `message_start` was observed since the anchor — a result without one had no request. */
+  let streamRequestObserved = false;
   let firstAssistantTokenAt: number | undefined;
   let currentRequestOutputTokens = 0;
+  /** Input-side components already counted into the session totals for the request in flight. */
+  let currentRequestInputTokens = 0;
+  let currentRequestCacheReadTokens = 0;
+  let currentRequestCacheWriteTokens = 0;
   let turnStartedAt: number | undefined;
 
   let lastGenTokensPerSec: number | undefined;
@@ -98,13 +118,17 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
       // against the first one, i.e. against the age of the session.
       requestStartedAt = pendingRequestStartedAt ?? at;
       pendingRequestStartedAt = undefined;
+      streamRequestObserved = true;
       firstAssistantTokenAt = undefined;
       currentRequestOutputTokens = 0;
       requestCount += 1;
+      currentRequestInputTokens = usage.inputTokens;
+      currentRequestCacheReadTokens = usage.cacheReadTokens ?? 0;
+      currentRequestCacheWriteTokens = usage.cacheWriteTokens ?? 0;
       sessionInputTokens +=
-        usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
-      sessionCachedInputTokens += usage.cacheReadTokens ?? 0;
-      sessionCacheWriteTokens += usage.cacheWriteTokens ?? 0;
+        currentRequestInputTokens + currentRequestCacheReadTokens + currentRequestCacheWriteTokens;
+      sessionCachedInputTokens += currentRequestCacheReadTokens;
+      sessionCacheWriteTokens += currentRequestCacheWriteTokens;
     },
 
     recordMessageDelta(outputTokens) {
@@ -115,11 +139,41 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
       currentRequestOutputTokens = Math.max(currentRequestOutputTokens, outputTokens);
     },
 
+    reconcileStreamUsage(usage) {
+      const inputGrowth = Math.max(
+        0,
+        (usage.inputTokens ?? currentRequestInputTokens) - currentRequestInputTokens,
+      );
+      const cacheReadGrowth = Math.max(
+        0,
+        (usage.cacheReadTokens ?? currentRequestCacheReadTokens) - currentRequestCacheReadTokens,
+      );
+      const cacheWriteGrowth = Math.max(
+        0,
+        (usage.cacheWriteTokens ?? currentRequestCacheWriteTokens) - currentRequestCacheWriteTokens,
+      );
+      if (inputGrowth === 0 && cacheReadGrowth === 0 && cacheWriteGrowth === 0) {
+        return;
+      }
+      sessionInputTokens += inputGrowth + cacheReadGrowth + cacheWriteGrowth;
+      sessionCachedInputTokens += cacheReadGrowth;
+      sessionCacheWriteTokens += cacheWriteGrowth;
+      currentRequestInputTokens += inputGrowth;
+      currentRequestCacheReadTokens += cacheReadGrowth;
+      currentRequestCacheWriteTokens += cacheWriteGrowth;
+    },
+
     recordFirstAssistantToken(at) {
       firstAssistantTokenAt ??= at;
     },
 
     recordMessageComplete(at) {
+      // A result without any streamed request (client-side slash command) must not overwrite the
+      // last real request's timing.
+      if (!streamRequestObserved) {
+        return;
+      }
+      streamRequestObserved = false;
       lastFirstTokenLatencyMs = undefined;
       lastRequestDurationMs = undefined;
       lastGenTokensPerSec = undefined;
@@ -144,8 +198,8 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
     },
 
     recordRequestStart(at) {
-      requestStartedAt = at;
       pendingRequestStartedAt = at;
+      streamRequestObserved = false;
       firstAssistantTokenAt = undefined;
       currentRequestOutputTokens = 0;
     },
@@ -162,6 +216,9 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
 
     recordTurnCompleted(at) {
       turnCount += 1;
+      // A turn that never reached the wire (client-side slash command) must not lend its submit
+      // time to the next turn's first request.
+      pendingRequestStartedAt = undefined;
       lastTurnDurationMs =
         turnStartedAt !== undefined && at >= turnStartedAt ? at - turnStartedAt : undefined;
       turnStartedAt = undefined;

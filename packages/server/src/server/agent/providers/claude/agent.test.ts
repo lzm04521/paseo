@@ -2821,6 +2821,49 @@ describe("ClaudeAgentSession context window usage", () => {
     }
   });
 
+  test("session stats reconcile input totals that ride the message delta", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        // Gateway shape: message_start cannot know prompt tokens yet and reports zero; the real
+        // totals arrive with the final delta.
+        createMessageStartEvent({ input_tokens: 0, output_tokens: 0 }),
+        {
+          type: "stream_event",
+          event: {
+            type: "message_delta",
+            usage: {
+              output_tokens: 132,
+              input_tokens: 15_053,
+              cache_read_input_tokens: 640,
+            },
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 15_693,
+        sessionCachedInputTokens: 640,
+        sessionOutputTokens: 132,
+        requestCount: 1,
+      });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "usage_updated",
+          usage: expect.objectContaining({ contextWindowUsedTokens: 15_825 }),
+        }),
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
   test("result messages publish the provider-reported session cost", async () => {
     const session = await createSessionForTurns([
       [

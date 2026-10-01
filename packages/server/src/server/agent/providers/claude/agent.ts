@@ -1880,6 +1880,51 @@ function readTokenCount(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+/**
+ * Input-side usage on `message_delta`, for gateways that zero `message_start.usage` because the
+ * upstream (OpenAI-style) stream reports prompt tokens only in its final chunk. Fields the delta
+ * leaves out are omitted so the aggregator keeps the message-start reading for them.
+ */
+function readStreamDeltaUsage(event: Record<string, unknown>): {
+  inputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+} {
+  const usage = toObjectRecord(event.usage);
+  if (!usage) {
+    return {};
+  }
+  const deltaUsage: {
+    inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } = {};
+  const inputTokens = readTokenCount(usage.input_tokens);
+  if (inputTokens !== undefined) {
+    deltaUsage.inputTokens = inputTokens;
+  }
+  const cacheReadTokens = readTokenCount(usage.cache_read_input_tokens);
+  if (cacheReadTokens !== undefined) {
+    deltaUsage.cacheReadTokens = cacheReadTokens;
+  }
+  const cacheWriteTokens = readTokenCount(usage.cache_creation_input_tokens);
+  if (cacheWriteTokens !== undefined) {
+    deltaUsage.cacheWriteTokens = cacheWriteTokens;
+  }
+  return deltaUsage;
+}
+
+/** The input-side total a `message_delta` reports, or undefined when it carries none. */
+function readStreamDeltaInputTokens(event: Record<string, unknown>): number | undefined {
+  const deltaUsage = readStreamDeltaUsage(event);
+  if (deltaUsage.inputTokens === undefined) {
+    return undefined;
+  }
+  return (
+    deltaUsage.inputTokens + (deltaUsage.cacheReadTokens ?? 0) + (deltaUsage.cacheWriteTokens ?? 0)
+  );
+}
+
 function readLastUsageIteration(usage: unknown): Record<string, unknown> | undefined {
   const iterations = toObjectRecord(usage)?.iterations;
   if (!Array.isArray(iterations)) {
@@ -1990,6 +2035,15 @@ class ClaudeContextUsageState {
         return null;
       }
       this.streamRequestOutputTokens = outputTokens;
+      // Same gateway shape the session-stats reconciliation covers: real prompt totals may ride
+      // the delta while message_start reported zero.
+      const deltaInputTokens = readStreamDeltaInputTokens(streamEvent);
+      if (
+        deltaInputTokens !== undefined &&
+        deltaInputTokens > (this.streamRequestInputTokens ?? 0)
+      ) {
+        this.streamRequestInputTokens = deltaInputTokens;
+      }
     } else {
       return null;
     }
@@ -2341,6 +2395,10 @@ class ClaudeAgentSession implements AgentSession {
       this.activeForegroundQuery = this.query;
       this.activeForegroundInput = this.input;
       this.startQueryPump();
+      // Anchor the request clock at the push: a gateway that buffers the stream can deliver
+      // message_start glued to the first content block, and first-token latency measured from
+      // frame arrival would read as zero.
+      this.statsAggregator.recordRequestStart(Date.now());
       this.input.push(sdkMessage);
       setTimeout(() => {
         if (this.activeForegroundTurnId === turnId) {
@@ -4568,6 +4626,7 @@ class ClaudeAgentSession implements AgentSession {
         now,
       );
     } else if (eventType === "message_delta") {
+      this.statsAggregator.reconcileStreamUsage(readStreamDeltaUsage(streamEvent));
       const outputTokens = readStreamRequestOutputTokens(streamEvent);
       if (outputTokens === undefined) {
         return;

@@ -101,6 +101,90 @@ describe("createSessionStatsAggregator", () => {
     expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
   });
 
+  test("reconciles input totals that arrive only on message_delta", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    // Gateway shape: message_start carries zeroed usage, the real numbers ride the final delta.
+    aggregator.recordRequestStart(0);
+    aggregator.recordMessageStart({ inputTokens: 0 }, 0);
+    aggregator.reconcileStreamUsage({ inputTokens: 15_053, cacheReadTokens: 640 });
+    // Repeated deltas must not double-count.
+    aggregator.reconcileStreamUsage({ inputTokens: 15_053, cacheReadTokens: 640 });
+
+    const stats = aggregator.snapshot();
+    expect(stats.sessionInputTokens).toBe(15_693);
+    expect(stats.sessionCachedInputTokens).toBe(640);
+    expect(stats.cacheHitRate).toBeCloseTo(640 / 15_693);
+  });
+
+  test("leaves compliant streams untouched when reconciling", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordRequestStart(0);
+    aggregator.recordMessageStart(
+      { inputTokens: 1_000, cacheReadTokens: 4_000, cacheWriteTokens: 500 },
+      0,
+    );
+    // A compliant delta reports only output; input-side fields stay absent.
+    aggregator.reconcileStreamUsage({});
+    // So does one that repeats the message_start numbers.
+    aggregator.reconcileStreamUsage({ inputTokens: 1_000, cacheReadTokens: 4_000 });
+
+    const stats = aggregator.snapshot();
+    expect(stats.sessionInputTokens).toBe(5_500);
+    expect(stats.sessionCachedInputTokens).toBe(4_000);
+    expect(stats.sessionCacheWriteTokens).toBe(500);
+  });
+
+  test("resets the reconciled reading with each request", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordRequestStart(0);
+    aggregator.recordMessageStart({ inputTokens: 0 }, 0);
+    aggregator.reconcileStreamUsage({ inputTokens: 100 });
+    aggregator.recordRequestStart(1_000);
+    aggregator.recordMessageStart({ inputTokens: 0 }, 1_000);
+    aggregator.reconcileStreamUsage({ inputTokens: 30, cacheReadTokens: 70 });
+
+    const stats = aggregator.snapshot();
+    expect(stats.sessionInputTokens).toBe(200);
+    expect(stats.sessionCachedInputTokens).toBe(70);
+    expect(stats.requestCount).toBe(2);
+  });
+
+  test("does not lend a turn's submit time to a later turn's request", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    // Turn 1 submits but never reaches the wire (client-side slash command).
+    aggregator.recordRequestStart(1_000);
+    aggregator.recordTurnStarted(1_000);
+    aggregator.recordTurnCompleted(1_200);
+    // Turn 2's request starts much later; the stale anchor must be gone.
+    aggregator.recordMessageStart({ inputTokens: 10 }, 60_000);
+    aggregator.recordFirstAssistantToken(60_250);
+    aggregator.recordMessageComplete(61_000);
+
+    expect(aggregator.snapshot().lastFirstTokenLatencyMs).toBe(250);
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
+  });
+
+  test("a turn that never reaches the wire reports no request timing", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordRequestStart(1_000);
+    aggregator.recordMessageStart({ inputTokens: 10 }, 1_000);
+    aggregator.recordFirstAssistantToken(1_400);
+    aggregator.recordMessageComplete(2_000);
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
+
+    // A client-side slash command turn: submitted, completed, no model request in between.
+    aggregator.recordRequestStart(10_000);
+    aggregator.recordMessageComplete(11_000);
+
+    expect(aggregator.snapshot().lastRequestDurationMs).toBe(1_000);
+    expect(aggregator.snapshot().lastFirstTokenLatencyMs).toBe(400);
+  });
+
   test("reports turn count and duration", () => {
     const aggregator = createSessionStatsAggregator();
 
