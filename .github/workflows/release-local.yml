@@ -133,9 +133,9 @@ jobs:
     needs: ensure-release
     # 首跑教训（0.10.2-local.3，2026-10-01）：ubuntu-latest（16GB）在 bundle 完成后
     # 进入 Hermes/C++ 编译内存高峰时 runner 整体被杀（唯一 annotation
-    # "The operation was canceled"，无任何构建错误）。xlarge = 8 核 32GB，
-    # public 仓库免费。
-    runs-on: ubuntu-latest-xlarge
+    # "The operation was canceled"，无任何构建错误）。large = 4 核 32GB，
+    # public 仓库免费；xlarge（8 核 32GB）免费池排队 20+ 分钟拿不到，不选。
+    runs-on: ubuntu-latest-large
     defaults:
       run:
         shell: bash
