@@ -19,10 +19,15 @@ import { AgentStatsPanel, useStatsPanelPages } from "./stats-panel";
 
 export const AGENT_STATS_PILL_TEST_ID = "agent-stats-pill";
 
-/** Panel geometry, matching `ComposerTrackPill`: the pill is as wide as its text, the panel is not. */
-const PANEL_MIN_WIDTH = 280;
+/**
+ * Panel geometry. Wider floor than `ComposerTrackPill`: the panel is shrink-to-fit, and collapsed
+ * tool names (`server · tool`) no longer push the intrinsic width past the floor — at 280 the tool
+ * rows hit their `numberOfLines` truncation and the counter grid wraps. The taller ceiling keeps a
+ * tools-heavy session from scrolling behind the fold.
+ */
+const PANEL_MIN_WIDTH = 380;
 const PANEL_MAX_WIDTH = 620;
-const PANEL_MAX_HEIGHT = 440;
+const PANEL_MAX_HEIGHT = 560;
 const PANEL_OFFSET = 12;
 
 /**
