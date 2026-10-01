@@ -131,12 +131,14 @@ jobs:
 
   build-android:
     needs: ensure-release
-    # 首跑教训（0.10.2-local.3，2026-10-01）：ubuntu-latest（16GB）在 bundle 完成后
-    # 进入 Hermes/C++ 编译内存高峰时 runner 整体被杀（唯一 annotation
-    # "The operation was canceled"，无任何构建错误）——并发 gradle worker 叠内存。
-    # 修复=串行构建（docs/android.md 的 F-Droid 同款内存保守配置）。larger runner
-    # （large/xlarge，32GB）public 免费但免费池排队 10-20+ 分钟拿不到，不选。
-    runs-on: ubuntu-latest
+    # 跑挂实录（0.10.2-local.3，2026-10-01，两轮）：ubuntu-latest（16GB 无 swap）
+    # 都死在同一个点——Metro bundle 完成（5960 模块）后进入 Hermes 字节码编译的
+    # 瞬间，runner 整体被杀（"The runner has received a shutdown signal"）。
+    # 并发 worker 版和 --no-daemon --max-workers=1 串行版（docs/android.md 的
+    # F-Droid 同款内存保守配置）都救不回来——hermesc 单进程峰值 + gradle JVM
+    # 叠加就是超 16GB。large = 4 核 32GB（public 免费），串行保留作双保险。
+    # larger 免费池偶发排队 10-20+ 分钟，属正常等待，别急着取消换回标准池。
+    runs-on: ubuntu-latest-large
     defaults:
       run:
         shell: bash
