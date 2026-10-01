@@ -1,6 +1,8 @@
 name: release-local
 
-# 自用发布：打 <版本> tag（如 0.4.0-local.3，与包版本一致）自动构建 Windows x64 exe 并挂到 fork Release。
+# 自用发布：打 <版本> tag（如 0.4.0-local.3，与包版本一致）自动构建并挂到 fork Release：
+#   build-win     — Windows x64 exe + local.yml + latest.yml（electron-updater）
+#   build-android — Android arm64-v8a APK（纯 GitHub Actions 源码构建，不走 EAS）
 # fork 版本号 = 上游版本 + -local.N（prerelease）。tag 必须是合法 semver 且 prerelease
 # 首组件为 local：electron-updater 的 GitHubProvider 在 allowPrerelease=true 时按
 # semver.prerelease(tag)[0] === channel 匹配 release，非 semver tag（如旧 local-v*-lN）
@@ -26,8 +28,39 @@ on:
 permissions:
   contents: write
 
+env:
+  # Release tag：tag 触发用 tag 名，手动触发用输入的版本号
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+
 jobs:
+  ensure-release:
+    # build-win / build-android 并行上传资产，各自用 softprops 创建 Release 会在
+    # 并发时撞车（一方 already_exists 失败）。由这个秒级 job 先建好 Release。
+    # 注意：Release 从创建到 win 侧上传 exe/local.yml 之间有约十几分钟空窗口，
+    # 期间 updater 查更新会因 local.yml 缺失失败一次，下次检查自愈，可接受。
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure Release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG 已存在"
+            exit 0
+          fi
+          # 手动触发且 tag 尚不存在时，gh release create 会自动建 tag；
+          # --target 让它打在发版分支 HEAD（与构建代码一致），而不是默认分支。
+          target_args=()
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            target_args+=(--target "${{ inputs.branch }}")
+          fi
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "${target_args[@]}" \
+            --title "$RELEASE_TAG" \
+            --notes "Fork 自用版本 $RELEASE_TAG，发布说明稍后更新。"
+
   build-win:
+    needs: ensure-release
     runs-on: windows-latest
     defaults:
       run:
@@ -91,7 +124,95 @@ jobs:
             packages/desktop/release/Paseo-Setup-*-x64.exe
             packages/desktop/release/local.yml
             packages/desktop/release/latest.yml
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-android:
+    needs: ensure-release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout 发版分支
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
+
+      - name: "Guard: README 必须是 fork 版"
+        # 与 build-win 同一 tag commit，重复一层防 win 侧被跳过时 APK 仍发出去
+        run: |
+          grep -q "lzm04521" README.md || {
+            echo "::error::README.md 是上游版——fork README 被发版流程冲掉了"
+            exit 1
+          }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Java 21
+        # Android Gradle 要求 JDK 21（.tool-versions: java 21）
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Accept Android SDK licenses
+        # ubuntu runner 预装 SDK，gradle 自动补装 platform/build-tools 前需要已接受的
+        # license（docs/android.md）；预置 license 过期时补装会失败，显式接受一遍。
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build app deps (highlight/relay/client/protocol/plugin)
+        # 对齐 packages/app 的 eas-build-post-install（Android 打包需要这些 dist）
+        run: npm run build:app-deps
+
+      - name: Build terminal webview HTML
+        # 同上，eas-build-post-install 的另一半；Metro 打 release bundle 时引用其产物
+        run: npm run build:terminal-webview
+        working-directory: packages/app
+
+      - name: Expo prebuild (Android)
+        # 生成 android/ 工程，production 变体（包名 sh.paseo）。fork 没有
+        # .secrets/google-services.json，app.config.js 的 resolveSecretFile 容错跳过
+        # ——APK 无 FCM 推送（fork 本来也用不了），其余功能不受影响
+        # （docs/android.md 的本地构建同样不要求 secrets）。
+        run: npx expo prebuild --platform android --clean --non-interactive
+        working-directory: packages/app
+        env:
+          APP_VARIANT: production
+
+      - name: Gradle assembleRelease
+        # 只打 arm64-v8a（现代手机全覆盖）：省时省内存，全 ABI 在 16GB runner 上有
+        # Hermes OOM(exit 137) 风险（docs/android.md 记录 EAS 也需要 large 资源档）。
+        # 跳 lint 的任务列表与 packages/app/eas.json 的 production-apk profile 一致。
+        # release 用 debug keystore 签名（Expo 模板默认），自用安装/覆盖升级没问题。
+        run: |
+          ./gradlew assembleRelease --stacktrace \
+            -PreactNativeArchitectures=arm64-v8a \
+            -x lint -x lintVitalAnalyzeRelease -x lintVitalRelease \
+            -x generateReleaseLintModel -x generateReleaseLintVitalModel
+        working-directory: packages/app/android
+
+      - name: Collect APK
+        run: |
+          apk_dir="packages/app/android/app/build/outputs/apk/release"
+          ls -lh "$apk_dir"
+          cp "$apk_dir"/app-release*.apk "paseo-${RELEASE_TAG}-android.apk"
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: paseo-*-android.apk
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

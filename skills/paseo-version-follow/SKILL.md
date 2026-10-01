@@ -14,7 +14,7 @@ description: 跟进 paseo 官方新版本（fork 自 getpaseo，自用 exe 工�
 - `main` = 最新稳定 tag 快照 + fork 运维 commit（release-local workflow + 删上游 workflow；非 upstream/main 镜像）
 - `local/v{version}` = 发版分支，本地补丁 + fork 运维补丁在此，push 到 fork
 - 浅克隆起家（v0.2.5），fetch 上游 tag 用 `--depth 1`
-- **CI 自动发版**：push `<fork版本>` tag（如 `0.4.0-local.3`，glob `*-local.*`）→ `release-local` workflow 在 windows-latest 构建 win x64 exe + local.yml（prerelease 产物）+ 复制的 latest.yml（旧客户端兼容）挂到 fork Release；electron-updater 查 fork release 自动更新
+- **CI 自动发版**：push `<fork版本>` tag（如 `0.4.0-local.3`，glob `*-local.*`）→ `release-local` workflow 并行构建 win x64 exe + local.yml（prerelease 产物）+ 复制的 latest.yml（旧客户端兼容）+ Android arm64-v8a APK（ubuntu 源码构建，非 EAS），全挂 fork Release；electron-updater 查 fork release 自动更新
 
 拓扑见 memory `paseo-fork-git-topology`，CI 发版见 `paseo-fork-ci-release`。官方发新版本 tag 时，移植本地补丁到新版本，验证后 bump fork 版本、打同名 tag 让 CI 发版。
 
@@ -157,12 +157,12 @@ bash scripts/build-local.sh --x64
 
 ```bash
 git tag <fork版本>                    # 如 0.4.0-local.3；打在 local/v<新版本> HEAD（该 commit 须含 release-local workflow，见踩坑6）
-git push origin <fork版本>            # 触发 release-local（glob *-local.*）：windows-latest 构建 win x64 exe + local.yml(+latest.yml) 挂到 fork Release
+git push origin <fork版本>            # 触发 release-local（glob *-local.*）：并行构建 win exe + 双 yml（windows-latest）和 Android arm64 APK（ubuntu）挂到 fork Release
 ```
 
 - tag 必须是合法 semver 且 prerelease 首组件为 `local`——electron-updater 按它匹配 channel（见踩坑13）；数字开头天然不匹配上游 `v*` glob。
-- CI 跑约 15-25 分钟。查进度：`"/c/Program Files/GitHub CLI/gh" run list --repo lzm04521/paseo`。
-- 成功后 fork Release `<fork版本>` 里有 `Paseo-Setup-<fork版本>-x64.exe` + `local.yml` + `latest.yml`。
+- CI 跑约 15-25 分钟（win 侧）；Android APK 冷缓存约 25-40 分钟（ensure-release 先建 Release，win 资产先挂上，APK 稍后到）。查进度：`"/c/Program Files/GitHub CLI/gh" run list --repo lzm04521/paseo`。
+- 成功后 fork Release `<fork版本>` 里有 `Paseo-Setup-<fork版本>-x64.exe` + `local.yml` + `latest.yml` + `paseo-<fork版本>-android.apk`（arm64-v8a，debug keystore 签名，Android 手动安装覆盖升级，无 FCM 推送）。
 
 **② 更新 main 到新 tag + 重加 fork 运维 commit**：
 
@@ -246,7 +246,7 @@ git push --force-with-lease=main:<旧 main sha> origin main
 ### D. fork 运维补丁（v0.3.1 起有，跟随每个 local/v{version} 分支 + main）
 
 1. **electron-builder publish 改 fork**：`packages/desktop/electron-builder.yml` 的 `publish.owner` getpaseo → lzm04521（repo 仍是 paseo）。让 electron-updater 查 fork release 自动更新。
-2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `*-local.*` + workflow_dispatch（version+branch 双输入）；windows-latest；`npx electron-builder --win nsis --x64 --publish never`；构建后 `cp release/latest.yml release/local.yml`——`--publish never` 下产物是 latest.yml，复制出 local.yml 给 fork channel；softprops/action-gh-release 上传 exe + 双 yml）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
+2. **`.github/workflows/release-local.yml`**：CI 发版 workflow（on push tag `*-local.*` + workflow_dispatch（version+branch 双输入）），三 job：`ensure-release` 秒级先建 Release（防双构建 job 并发创建撞车，代价是 win 资产上传前有十几分钟空 Release 窗口，updater 查更新失败一次自愈）→ 并行 `build-win`（windows-latest；`npx electron-builder --win nsis --x64 --publish never`；构建后 `cp release/latest.yml release/local.yml`——`--publish never` 下产物是 latest.yml，复制出 local.yml 给 fork channel；softprops 上传 exe + 双 yml）和 `build-android`（ubuntu-latest；依赖链对齐 `eas-build-post-install`：`build:app-deps` + `build:terminal-webview` → `APP_VARIANT=production expo prebuild` → `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a` + 跳 lint（同 `packages/app/eas.json` production-apk）；fork 无 google-services.json，`app.config.js` 的 `resolveSecretFile` 容错跳过 → APK 无 FCM 但其余功能完整；上传 `paseo-<版本>-android.apk`）。**必须在 main + local/v{version} 两处**（main 注册 + tag commit 触发，见踩坑6）。
 3. **删除上游 11 个 workflow**（`.github/workflows/` 的 ci/android-apk-release/deploy-_/desktop-_/docker/nix* 等）：fork 不跑上游 CI/部署。上游 tag glob 是 `v*`，我们的 `<版本>` tag（如 `0.4.0-local.3`）数字开头不匹配，互不干扰。
 4. **`auto-updater.ts` channel 写死 fork 渠道**（0.4.x 工作线起，随 `68106d503` 进）：`packages/desktop/src/features/auto-updater.ts` 的 `configure()` 里 `allowPrerelease = true; channel = "local"`（上游原值按 releaseChannel 选 latest/beta）。fork 版本是 `-local.N` prerelease，updater 必须查 `local.yml`（workflow 从 latest.yml 复制，见 D2）；app 内 stable/beta 渠道设置只属上游发版体系（其 rollout 准入逻辑照旧生效，无害）。上游 merge 时保留此改动；上游若重构 configure/channel，按"channel 写死 local"重新套。`auto-updater.test.ts` 的 `pins the updater to the fork channel` 断言防回退。
 5. **`README.md` 是 fork 自定义版**（fork 说明 + 仅 win x64 + 改动清单 + 指向官方；顶部 HTML 注释有提示）：**曾两次被冲掉**——v0.4.0 port 时（2026-08-12 的 revert"fork 用 zh-CN README"从未落地，fork 版悬空）+ main reset 到新 tag 基底时（README commit 不在 cherry-pick 列表）。且 v0.4.0 重写本 skill 时本项曾丢失（教训：skill 重写也要逐项核对清单）。三个保留点：**起新分支后**立即 `grep -q lzm04521 README.md || git checkout main -- README.md`（步骤 1）；**merge/port 冲突**保本地版 `git checkout --theirs README.md && git add README.md`（theirs=被 merge 的旧分支=本地版）；**main 更新 reset 后** `git checkout local/v<新版本> -- README.md`（步骤 6②）。**CI 硬兜底**：release-local workflow 的 "Guard: README 必须是 fork 版" 步骤 grep `lzm04521`，tag commit 的 README 是上游版时直接 fail 发版。不用 `.gitattributes merge=ours`（fork merge 流程 ours=新 tag=上游版，语义反）。其他 `README.zh-CN/ja/ko.md` 保留上游原版。
