@@ -205,6 +205,7 @@ export const ko: TranslationResources = {
         cost: "비용",
       },
       sections: {
+        overview: "개요",
         totals: "세션 누적",
         timing: "속도와 턴",
         tools: "도구 호출",

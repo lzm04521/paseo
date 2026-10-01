@@ -207,6 +207,7 @@ export const es: TranslationResources = {
         cost: "Coste",
       },
       sections: {
+        overview: "Resumen",
         totals: "Totales de la sesión",
         timing: "Velocidad y turnos",
         tools: "Llamadas a herramientas",

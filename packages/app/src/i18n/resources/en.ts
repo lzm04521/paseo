@@ -201,6 +201,7 @@ export const en = {
         cost: "Cost",
       },
       sections: {
+        overview: "Overview",
         totals: "Session totals",
         timing: "Speed and turns",
         tools: "Tool calls",

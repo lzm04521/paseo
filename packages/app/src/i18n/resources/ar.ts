@@ -205,6 +205,7 @@ export const ar: TranslationResources = {
         cost: "التكلفة",
       },
       sections: {
+        overview: "نظرة عامة",
         totals: "إجماليات الجلسة",
         timing: "السرعة والأدوار",
         tools: "استدعاءات الأدوات",

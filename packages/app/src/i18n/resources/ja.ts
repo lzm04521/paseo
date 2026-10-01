@@ -207,6 +207,7 @@ export const ja: TranslationResources = {
         cost: "費用",
       },
       sections: {
+        overview: "概要",
         totals: "セッション累計",
         timing: "速度とターン",
         tools: "ツール呼び出し",

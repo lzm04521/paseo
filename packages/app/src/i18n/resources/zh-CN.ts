@@ -205,6 +205,7 @@ export const zhCN: TranslationResources = {
         cost: "成本",
       },
       sections: {
+        overview: "概览",
         totals: "会话累计",
         timing: "速度与轮次",
         tools: "工具调用",

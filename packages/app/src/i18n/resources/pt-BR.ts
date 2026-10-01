@@ -206,6 +206,7 @@ export const ptBR: TranslationResources = {
         cost: "Custo",
       },
       sections: {
+        overview: "Resumo",
         totals: "Totais da sessão",
         timing: "Velocidade e turnos",
         tools: "Chamadas de ferramenta",

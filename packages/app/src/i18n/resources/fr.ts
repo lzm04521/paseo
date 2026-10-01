@@ -209,6 +209,7 @@ export const fr: TranslationResources = {
         cost: "Coût",
       },
       sections: {
+        overview: "Aperçu",
         totals: "Totaux de la session",
         timing: "Vitesse et tours",
         tools: "Appels d'outils",

@@ -77,6 +77,9 @@ vi.mock("@/stores/session-store", () => ({
 }));
 
 vi.mock("@/components/ui/menu", () => ({
+  // The real formula: spacing[1] + borderWidth[1] + spacing[2], against the mock theme below.
+  menuRowContentInset: (value: { spacing: Record<string, number>; borderWidth: Record<string, number> }) =>
+    value.spacing[1] + value.borderWidth[1] + value.spacing[2],
   // `onSelect` is wired to a DOM click the way the real item wires it to a press, so the
   // display-settings page can be driven from a test.
   MenuItem: ({
@@ -174,6 +177,9 @@ describe("buildAgentStatsPanelModel", () => {
       "agentStats.panel.rows.toolCallErrors=1",
       "Bash=12 (1✕)",
     ]);
+    // The total carries the section; the per-tool rows under it are the breakdown.
+    expect(model.sections[2]?.rows[0]?.strong).toBe(true);
+    expect(model.sections[2]?.rows[2]?.strong).toBeUndefined();
     expect(model.sections[3]?.rows).toEqual([
       { id: "subagent.sub-1", label: "Explore", value: "↑900 ↓120", running: false },
     ]);
@@ -273,6 +279,7 @@ describe("AgentStatsPanel", () => {
 
     act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
 
+    expect(container.querySelector('[data-testid="agent-stats-section-overview"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-totals"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-timing"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-tools"]')).not.toBeNull();
@@ -289,6 +296,7 @@ describe("AgentStatsPanel", () => {
 
     act(() => root.render(<AgentStatsPanel serverId={SERVER_ID} agentId={AGENT_ID} />));
 
+    expect(container.querySelector('[data-testid="agent-stats-section-overview"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-totals"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-timing"]')).toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-tools"]')).toBeNull();

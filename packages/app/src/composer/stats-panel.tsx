@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { Fragment, useCallback, useMemo, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -7,6 +7,7 @@ import {
   MenuItem,
   MenuSeparator,
   MenuSubTrigger,
+  menuRowContentInset,
   type MenuPageDefinition,
 } from "@/components/ui/menu";
 import {
@@ -28,6 +29,8 @@ export interface AgentStatsPanelRow {
   value: string;
   /** Subagent rows only: the session is still waiting on this child. */
   running?: boolean;
+  /** A row that summarises the rows under it — the tools total above its per-tool counts. */
+  strong?: boolean;
 }
 
 export interface AgentStatsPanelSection {
@@ -228,6 +231,7 @@ function buildToolsSection(input: BuildAgentStatsPanelModelInput): AgentStatsPan
       id: "toolCallTotal",
       label: input.t("agentStats.panel.rows.toolCallTotal"),
       value: String(stats.toolCallTotal),
+      strong: true,
     });
   }
   if (typeof stats.toolCallErrors === "number" && stats.toolCallErrors > 0) {
@@ -373,61 +377,73 @@ export function AgentStatsPanel({
     [stats, lastUsage, t],
   );
 
+  const hasOverview = model.kpis.length > 0 || model.progress !== null;
+
   return (
     <>
-      {model.kpis.length > 0 ? (
-        <View style={styles.kpiRow} testID="agent-stats-panel-kpis">
-          {model.kpis.map((kpi) => (
-            <View key={kpi.id} style={styles.kpi} testID={`agent-stats-kpi-${kpi.id}`}>
-              <Text style={styles.kpiLabel}>{kpi.label}</Text>
-              <Text style={styles.kpiValue}>{kpi.value}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      {model.progress ? (
-        <View style={styles.progressTrack} testID="agent-stats-panel-progress">
-          <View
-            testID={`agent-stats-progress-${model.progress.tone}`}
-            style={progressFillStyle(model.progress)}
-          />
-        </View>
-      ) : null}
-      {model.sections.map((section) => (
-        <View key={section.id} testID={`agent-stats-section-${section.id}`}>
-          <MenuSeparator />
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.layout === "grid" ? (
-            <View style={styles.grid}>
-              {section.rows.map((row) => (
-                <View
-                  key={row.id}
-                  style={styles.gridCell}
-                  testID={`agent-stats-row-${section.id}-${row.id}`}
-                >
-                  <Text style={styles.kpiLabel}>{row.label}</Text>
-                  <Text style={styles.kpiValue}>{row.value}</Text>
+      {hasOverview ? (
+        <View style={styles.rail} testID="agent-stats-section-overview">
+          <Text style={styles.sectionTitle}>{t("agentStats.panel.sections.overview")}</Text>
+          {model.kpis.length > 0 ? (
+            <View style={styles.grid} testID="agent-stats-panel-kpis">
+              {model.kpis.map((kpi) => (
+                <View key={kpi.id} style={styles.gridCell} testID={`agent-stats-kpi-${kpi.id}`}>
+                  <Text style={styles.kpiLabel}>{kpi.label}</Text>
+                  <Text style={styles.kpiValue}>{kpi.value}</Text>
                 </View>
               ))}
             </View>
-          ) : (
-            section.rows.map((row) => (
+          ) : null}
+          {model.progress ? (
+            <View style={styles.progressTrack} testID="agent-stats-panel-progress">
               <View
-                key={row.id}
-                style={styles.row}
-                testID={`agent-stats-row-${section.id}-${row.id}`}
-              >
-                {row.running ? (
-                  <View testID="agent-stats-subagent-running" style={styles.runningDot} />
-                ) : null}
-                <Text style={styles.rowLabel} numberOfLines={1}>
-                  {row.label}
-                </Text>
-                <Text style={styles.rowValue}>{row.value}</Text>
-              </View>
-            ))
-          )}
+                testID={`agent-stats-progress-${model.progress.tone}`}
+                style={progressFillStyle(model.progress)}
+              />
+            </View>
+          ) : null}
         </View>
+      ) : null}
+      {model.sections.map((section, index) => (
+        <Fragment key={section.id}>
+          {index > 0 || hasOverview ? <MenuSeparator /> : null}
+          <View style={styles.rail} testID={`agent-stats-section-${section.id}`}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            {section.layout === "grid" ? (
+              <View style={styles.grid}>
+                {section.rows.map((row) => (
+                  <View
+                    key={row.id}
+                    style={styles.gridCell}
+                    testID={`agent-stats-row-${section.id}-${row.id}`}
+                  >
+                    <Text style={styles.kpiLabel}>{row.label}</Text>
+                    <Text style={styles.kpiValue}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              section.rows.map((row) => (
+                <View
+                  key={row.id}
+                  style={styles.row}
+                  testID={`agent-stats-row-${section.id}-${row.id}`}
+                >
+                  {row.running ? (
+                    <View testID="agent-stats-subagent-running" style={styles.runningDot} />
+                  ) : null}
+                  <Text
+                    style={row.strong ? [styles.rowLabel, styles.rowLabelStrong] : styles.rowLabel}
+                    numberOfLines={1}
+                  >
+                    {row.label}
+                  </Text>
+                  <Text style={styles.rowValue}>{row.value}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </Fragment>
       ))}
       <MenuSeparator />
       <MenuSubTrigger id="segments" testID="agent-stats-display-settings">
@@ -454,14 +470,11 @@ function progressFillStyle(progress: { percent: number; tone: MeterTone }): {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  kpiRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-  },
-  kpi: {
-    flexDirection: "column",
+  // The panel's own content sits on the same rail as a menu row's label, so it reads as part of
+  // the list rather than a block pasted over its edges. Separators stay outside the rail — the
+  // page has no horizontal padding so they keep running the full width of the surface.
+  rail: {
+    paddingHorizontal: menuRowContentInset(theme),
   },
   kpiLabel: {
     fontSize: theme.fontSize.sm,
@@ -473,6 +486,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   progressTrack: {
     height: 4,
+    marginTop: theme.spacing[2],
     borderRadius: theme.borderRadius.sm,
     backgroundColor: theme.colors.surface3,
     overflow: "hidden",
@@ -525,6 +539,10 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
+  },
+  rowLabelStrong: {
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
   },
   rowValue: {
     fontSize: theme.fontSize.base,

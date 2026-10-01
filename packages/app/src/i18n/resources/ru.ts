@@ -207,6 +207,7 @@ export const ru: TranslationResources = {
         cost: "Стоимость",
       },
       sections: {
+        overview: "Обзор",
         totals: "Итоги сессии",
         timing: "Скорость и ходы",
         tools: "Вызовы инструментов",
