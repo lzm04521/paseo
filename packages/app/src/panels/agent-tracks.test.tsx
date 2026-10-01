@@ -113,7 +113,7 @@ describe("AgentTracks", () => {
     container.remove();
   });
 
-  it("mounts the stats pill between the subagents track and the plugin pills", () => {
+  it("mounts the stats pill last on the row", () => {
     mockState.sessions = {
       "server-tracks": {
         serverInfo: { features: { agentSessionStats: true } },
@@ -144,9 +144,9 @@ describe("AgentTracks", () => {
       "ComposerTrackBar",
       "AgentTaskList",
       "SubagentsTrack",
-      "AgentStatsPill",
       "PluginComposerPills",
       "WorkspaceDiffStatPill",
+      "AgentStatsPill",
     ]);
   });
 });

@@ -10,6 +10,7 @@ const { theme, mockState } = vi.hoisted(() => ({
   theme: {
     spacing: { 1: 4, 2: 8, 3: 12 },
     fontSize: { sm: 12, base: 14 },
+    fontWeight: { medium: "#medium" },
     borderWidth: { 1: 1 },
     borderRadius: { sm: 2, "2xl": 16 },
     colors: {
@@ -178,6 +179,44 @@ describe("buildAgentStatsPanelModel", () => {
     ]);
   });
 
+  it("collapses MCP tool namespaces and caps the per-tool rows", () => {
+    // Counts 10,9,8,7,6,5,4: the top five stay, the last two (5+4=9 calls) fold into one row.
+    const toolCalls = Array.from({ length: 7 }, (_, index) => ({
+      tool: index === 0 ? "mcp__ssh-server__xterminal_ssh_exec" : `Tool${index}`,
+      count: 10 - index,
+      errors: 0,
+    }));
+
+    const model = buildAgentStatsPanelModel({
+      stats: { toolCallTotal: 49, toolCalls },
+      lastUsage,
+      t,
+    });
+
+    const tools = model.sections[0];
+    expect(tools?.layout).toBe("rows");
+    expect(tools?.rows.map((row) => `${row.label}=${row.value}`)).toEqual([
+      "agentStats.panel.rows.toolCallTotal=49",
+      "ssh-server · xterminal_ssh_exec=10",
+      "Tool1=9",
+      "Tool2=8",
+      "Tool3=7",
+      "Tool4=6",
+      "agentStats.panel.rows.moreTools=9",
+    ]);
+  });
+
+  it("lays the counter sections out as grids and the identifier sections as rows", () => {
+    const model = buildAgentStatsPanelModel({ stats: fullStats, lastUsage, t });
+
+    expect(model.sections.map((section) => `${section.id}:${section.layout}`)).toEqual([
+      "totals:grid",
+      "timing:grid",
+      "tools:rows",
+      "subagents:rows",
+    ]);
+  });
+
   it("drops the sections a provider cannot fill", () => {
     // What opencode reports: usage and cost, no timings, no tools, no subagents.
     const model = buildAgentStatsPanelModel({
@@ -239,6 +278,8 @@ describe("AgentStatsPanel", () => {
     expect(container.querySelector('[data-testid="agent-stats-section-tools"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-section-subagents"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="agent-stats-display-settings"]')).not.toBeNull();
+    // Grid sections keep the row testID contract, so a cell is addressable like a row.
+    expect(container.querySelector('[data-testid="agent-stats-row-totals-cost"]')).not.toBeNull();
     expect(container.textContent).toContain("42%");
     expect(container.textContent).toContain("Bash");
   });

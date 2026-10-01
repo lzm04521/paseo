@@ -223,6 +223,7 @@ export const ptBR: TranslationResources = {
         turnDuration: "Turno",
         toolCallTotal: "Chamadas",
         toolCallErrors: "Falhas",
+        moreTools: "+ {{count}} mais",
       },
       segments: {
         contextPct: "% de contexto",

@@ -218,6 +218,7 @@ export const en = {
         turnDuration: "Turn",
         toolCallTotal: "Calls",
         toolCallErrors: "Failed",
+        moreTools: "+ {{count}} more",
       },
       segments: {
         contextPct: "Context %",

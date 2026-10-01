@@ -224,6 +224,7 @@ export const ja: TranslationResources = {
         turnDuration: "ターン",
         toolCallTotal: "呼び出し",
         toolCallErrors: "失敗",
+        moreTools: "ほか {{count}} 件",
       },
       segments: {
         contextPct: "コンテキスト %",

@@ -222,6 +222,7 @@ export const ar: TranslationResources = {
         turnDuration: "الدور",
         toolCallTotal: "الاستدعاءات",
         toolCallErrors: "الفاشلة",
+        moreTools: "+ {{count}} أخرى",
       },
       segments: {
         contextPct: "نسبة السياق",

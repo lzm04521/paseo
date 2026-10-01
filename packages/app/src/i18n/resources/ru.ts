@@ -224,6 +224,7 @@ export const ru: TranslationResources = {
         turnDuration: "Ход",
         toolCallTotal: "Вызовы",
         toolCallErrors: "Сбои",
+        moreTools: "+ ещё {{count}}",
       },
       segments: {
         contextPct: "% контекста",

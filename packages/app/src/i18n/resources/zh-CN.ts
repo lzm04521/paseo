@@ -222,6 +222,7 @@ export const zhCN: TranslationResources = {
         turnDuration: "轮次",
         toolCallTotal: "调用",
         toolCallErrors: "失败",
+        moreTools: "其余 {{count}} 个",
       },
       segments: {
         contextPct: "上下文 %",

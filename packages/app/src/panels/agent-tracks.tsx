@@ -140,7 +140,6 @@ export const AgentTracks = memo(function AgentTracks({
         archiveFinishedStatus={archiveFinishedStatus}
         onDetachSubagent={canDetachSubagents ? detachSubagent : undefined}
       />
-      <AgentStatsPill serverId={serverId} agentId={agentId} />
       <PluginComposerPills
         serverId={serverId}
         workspaceId={workspaceId}
@@ -152,6 +151,7 @@ export const AgentTracks = memo(function AgentTracks({
         workspaceId={workspaceId}
         onPress={handleOpenChanges}
       />
+      <AgentStatsPill serverId={serverId} agentId={agentId} />
     </ComposerTrackBar>
   );
 });

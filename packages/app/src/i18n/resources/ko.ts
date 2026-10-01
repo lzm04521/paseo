@@ -222,6 +222,7 @@ export const ko: TranslationResources = {
         turnDuration: "턴",
         toolCallTotal: "호출",
         toolCallErrors: "실패",
+        moreTools: "기타 {{count}}개",
       },
       segments: {
         contextPct: "컨텍스트 %",

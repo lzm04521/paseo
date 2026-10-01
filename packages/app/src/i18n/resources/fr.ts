@@ -226,6 +226,7 @@ export const fr: TranslationResources = {
         turnDuration: "Tour",
         toolCallTotal: "Appels",
         toolCallErrors: "Échecs",
+        moreTools: "+ {{count}} autres",
       },
       segments: {
         contextPct: "% de contexte",

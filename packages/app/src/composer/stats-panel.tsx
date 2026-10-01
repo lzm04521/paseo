@@ -33,6 +33,12 @@ export interface AgentStatsPanelRow {
 export interface AgentStatsPanelSection {
   id: string;
   title: string;
+  /**
+   * `grid` lays the rows as label-over-value cells — six short counters read as two lines instead
+   * of six, and never sit beside a long identifier the way a two-column row does. `rows` is for
+   * identifiers (tool names, subagent labels) that need the full row width against their value.
+   */
+  layout: "grid" | "rows";
   rows: AgentStatsPanelRow[];
 }
 
@@ -162,7 +168,12 @@ function buildTotalsSection(input: BuildAgentStatsPanelModelInput): AgentStatsPa
     });
   }
   if (rows.length === 0) return null;
-  return { id: "totals", title: input.t("agentStats.panel.sections.totals"), rows };
+  return {
+    id: "totals",
+    title: input.t("agentStats.panel.sections.totals"),
+    layout: "grid",
+    rows,
+  };
 }
 
 function buildTimingSection(input: BuildAgentStatsPanelModelInput): AgentStatsPanelSection | null {
@@ -185,7 +196,27 @@ function buildTimingSection(input: BuildAgentStatsPanelModelInput): AgentStatsPa
   );
   addDuration("turnDuration", "agentStats.panel.rows.turnDuration", stats.lastTurnDurationMs);
   if (rows.length === 0) return null;
-  return { id: "timing", title: input.t("agentStats.panel.sections.timing"), rows };
+  return {
+    id: "timing",
+    title: input.t("agentStats.panel.sections.timing"),
+    layout: "grid",
+    rows,
+  };
+}
+
+/** Per-tool rows kept before the fold. The daemon already sends only the top ten; any wider and the section outgrows the panel's height ceiling on its own. */
+const MAX_TOOL_ROWS = 5;
+
+/**
+ * `mcp__<server>__<tool>` collapses to `server · tool`. The wire name is three namespaces of
+ * noise, and in a count column the leaf is the part being compared.
+ */
+function displayToolName(name: string): string {
+  const segments = name.split("__").filter((segment) => segment.length > 0);
+  if (segments.length >= 3 && segments[0].toLowerCase() === "mcp") {
+    return segments.slice(1).join(" · ");
+  }
+  return name;
 }
 
 function buildToolsSection(input: BuildAgentStatsPanelModelInput): AgentStatsPanelSection | null {
@@ -206,15 +237,24 @@ function buildToolsSection(input: BuildAgentStatsPanelModelInput): AgentStatsPan
       value: String(stats.toolCallErrors),
     });
   }
-  for (const call of stats.toolCalls ?? []) {
+  const calls = stats.toolCalls ?? [];
+  for (const call of calls.slice(0, MAX_TOOL_ROWS)) {
     rows.push({
       id: `tool.${call.tool}`,
-      label: call.tool,
+      label: displayToolName(call.tool),
       value: call.errors > 0 ? `${call.count} (${call.errors}✕)` : String(call.count),
     });
   }
+  const rest = calls.slice(MAX_TOOL_ROWS);
+  if (rest.length > 0) {
+    rows.push({
+      id: "tool.more",
+      label: input.t("agentStats.panel.rows.moreTools", { count: rest.length }),
+      value: String(rest.reduce((total, call) => total + call.count, 0)),
+    });
+  }
   if (rows.length === 0) return null;
-  return { id: "tools", title: input.t("agentStats.panel.sections.tools"), rows };
+  return { id: "tools", title: input.t("agentStats.panel.sections.tools"), layout: "rows", rows };
 }
 
 function buildSubagentsSection(
@@ -237,7 +277,12 @@ function buildSubagentsSection(
       running: subagent.running,
     };
   });
-  return { id: "subagents", title: input.t("agentStats.panel.sections.subagents"), rows };
+  return {
+    id: "subagents",
+    title: input.t("agentStats.panel.sections.subagents"),
+    layout: "rows",
+    rows,
+  };
 }
 
 /**
@@ -352,21 +397,36 @@ export function AgentStatsPanel({
         <View key={section.id} testID={`agent-stats-section-${section.id}`}>
           <MenuSeparator />
           <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.rows.map((row) => (
-            <View
-              key={row.id}
-              style={styles.row}
-              testID={`agent-stats-row-${section.id}-${row.id}`}
-            >
-              {row.running ? (
-                <View testID="agent-stats-subagent-running" style={styles.runningDot} />
-              ) : null}
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                {row.label}
-              </Text>
-              <Text style={styles.rowValue}>{row.value}</Text>
+          {section.layout === "grid" ? (
+            <View style={styles.grid}>
+              {section.rows.map((row) => (
+                <View
+                  key={row.id}
+                  style={styles.gridCell}
+                  testID={`agent-stats-row-${section.id}-${row.id}`}
+                >
+                  <Text style={styles.kpiLabel}>{row.label}</Text>
+                  <Text style={styles.kpiValue}>{row.value}</Text>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : (
+            section.rows.map((row) => (
+              <View
+                key={row.id}
+                style={styles.row}
+                testID={`agent-stats-row-${section.id}-${row.id}`}
+              >
+                {row.running ? (
+                  <View testID="agent-stats-subagent-running" style={styles.runningDot} />
+                ) : null}
+                <Text style={styles.rowLabel} numberOfLines={1}>
+                  {row.label}
+                </Text>
+                <Text style={styles.rowValue}>{row.value}</Text>
+              </View>
+            ))
+          )}
         </View>
       ))}
       <MenuSeparator />
@@ -437,8 +497,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   sectionTitle: {
     fontSize: theme.fontSize.sm,
+    // Structural label above a group — medium per docs/design.md §3, so a section reads as a
+    // section and not as one more muted row.
+    fontWeight: theme.fontWeight.medium,
     color: theme.colors.foregroundMuted,
     paddingVertical: theme.spacing[1],
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+  },
+  gridCell: {
+    flexDirection: "column",
+    flexGrow: 1,
+    flexBasis: "30%",
   },
   row: {
     flexDirection: "row",

@@ -224,6 +224,7 @@ export const es: TranslationResources = {
         turnDuration: "Turno",
         toolCallTotal: "Llamadas",
         toolCallErrors: "Fallidas",
+        moreTools: "+ {{count}} más",
       },
       segments: {
         contextPct: "% de contexto",
