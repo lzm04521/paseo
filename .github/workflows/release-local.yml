@@ -133,9 +133,10 @@ jobs:
     needs: ensure-release
     # 首跑教训（0.10.2-local.3，2026-10-01）：ubuntu-latest（16GB）在 bundle 完成后
     # 进入 Hermes/C++ 编译内存高峰时 runner 整体被杀（唯一 annotation
-    # "The operation was canceled"，无任何构建错误）。large = 4 核 32GB，
-    # public 仓库免费；xlarge（8 核 32GB）免费池排队 20+ 分钟拿不到，不选。
-    runs-on: ubuntu-latest-large
+    # "The operation was canceled"，无任何构建错误）——并发 gradle worker 叠内存。
+    # 修复=串行构建（docs/android.md 的 F-Droid 同款内存保守配置）。larger runner
+    # （large/xlarge，32GB）public 免费但免费池排队 10-20+ 分钟拿不到，不选。
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
@@ -202,7 +203,9 @@ jobs:
         run: |
           ./gradlew assembleRelease --stacktrace \
             -PreactNativeArchitectures=arm64-v8a \
-            --max-workers=4 \
+            --no-daemon --max-workers=1 \
+            -Dorg.gradle.parallel=false \
+            -Dkotlin.compiler.execution.strategy=in-process \
             -x lint -x lintVitalAnalyzeRelease -x lintVitalRelease \
             -x generateReleaseLintModel -x generateReleaseLintVitalModel
         working-directory: packages/app/android
