@@ -57,6 +57,10 @@ function createStatus(cwd: string): CheckoutStatusGit {
 
 const cleanup: Array<() => Promise<void>> = [];
 
+// 本地 F4 启动错峰：grace=0 时立即执行首次 git 观察活动（恢复上游行为），
+// 集成测试的 5s waitFor 等不到默认 30s 宽限期。
+vi.stubEnv("PASEO_WS_GIT_BOOT_GRACE_MS", "0");
+
 afterEach(async () => {
   while (cleanup.length > 0) {
     await cleanup.pop()?.();

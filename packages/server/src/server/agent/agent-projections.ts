@@ -15,6 +15,9 @@ import type {
   AgentSessionConfig,
   AgentRuntimeInfo,
   AgentUsage,
+  AgentSessionStats,
+  AgentSubagentUsageStat,
+  AgentToolCallStat,
   ImportableProviderSession,
 } from "./agent-sdk-types.js";
 import type { ManagedAgent } from "./agent-manager.js";
@@ -90,6 +93,7 @@ export function toStoredAgentRecord(
     runtimeInfo,
     features: normalizeFeatures(agent.features),
     persistence,
+    stats: sanitizeStats(agent.stats),
     lastError: agent.lastError ?? undefined,
     requiresAttention: agent.attention.requiresAttention,
     attentionReason: agent.attention.requiresAttention ? agent.attention.attentionReason : null,
@@ -144,6 +148,11 @@ export function toAgentPayload(
   const usage = sanitizeUsage(agent.lastUsage);
   if (usage !== undefined) {
     payload.lastUsage = usage;
+  }
+
+  const stats = sanitizeStats(agent.stats);
+  if (stats !== undefined) {
+    payload.stats = stats;
   }
 
   if (agent.lastError !== undefined) {
@@ -242,6 +251,7 @@ export function buildStoredAgentPayload(
     availableModes: [],
     pendingPermissions: [],
     persistence,
+    ...(record.stats ? { stats: record.stats } : {}),
     title: record.title ?? null,
     requiresAttention: record.requiresAttention ?? false,
     attentionReason: record.attentionReason ?? null,
@@ -473,6 +483,131 @@ function sanitizeUsage(value: unknown): AgentUsage | undefined {
   for (const field of fields) {
     if (!assignFiniteNumber(sanitized, result, field)) {
       return undefined;
+    }
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+type StatsNumericField = Exclude<keyof AgentSessionStats, "toolCalls" | "subagents">;
+
+const STATS_NUMERIC_FIELDS: StatsNumericField[] = [
+  "sessionInputTokens",
+  "sessionCachedInputTokens",
+  "sessionOutputTokens",
+  "sessionCacheWriteTokens",
+  "sessionTotalCostUsd",
+  "requestCount",
+  "turnCount",
+  "lastGenTokensPerSec",
+  "lastFirstTokenLatencyMs",
+  "lastRequestDurationMs",
+  "lastTurnDurationMs",
+  "cacheHitRate",
+  "toolCallTotal",
+  "toolCallErrors",
+];
+
+const MAX_STATS_TOOL_CALLS = 10;
+const MAX_STATS_SUBAGENTS = 50;
+
+function readNonNegativeNumber(
+  source: { [key: string]: JsonValue },
+  field: string,
+): number | undefined {
+  const raw = source[field];
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+}
+
+function sanitizeToolCallStats(value: JsonValue): AgentToolCallStat[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const entries: AgentToolCallStat[] = [];
+  for (const entry of value) {
+    if (!isJsonObject(entry)) {
+      continue;
+    }
+    const tool = entry.tool;
+    const count = readNonNegativeNumber(entry, "count");
+    const errors = readNonNegativeNumber(entry, "errors");
+    if (
+      typeof tool !== "string" ||
+      tool.length === 0 ||
+      count === undefined ||
+      errors === undefined
+    ) {
+      continue;
+    }
+    entries.push({ tool, count, errors });
+    if (entries.length === MAX_STATS_TOOL_CALLS) {
+      break;
+    }
+  }
+  return entries.length ? entries : undefined;
+}
+
+function sanitizeSubagentStats(value: JsonValue): AgentSubagentUsageStat[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const entries: AgentSubagentUsageStat[] = [];
+  for (const entry of value) {
+    if (!isJsonObject(entry)) {
+      continue;
+    }
+    if (typeof entry.agentId !== "string" || entry.agentId.length === 0) {
+      continue;
+    }
+    if (typeof entry.running !== "boolean") {
+      continue;
+    }
+    const stat: AgentSubagentUsageStat = { agentId: entry.agentId, running: entry.running };
+    if (typeof entry.label === "string" && entry.label.length > 0) {
+      stat.label = entry.label;
+    }
+    const inputTokens = readNonNegativeNumber(entry, "inputTokens");
+    if (inputTokens !== undefined) {
+      stat.inputTokens = inputTokens;
+    }
+    const outputTokens = readNonNegativeNumber(entry, "outputTokens");
+    if (outputTokens !== undefined) {
+      stat.outputTokens = outputTokens;
+    }
+    entries.push(stat);
+    if (entries.length === MAX_STATS_SUBAGENTS) {
+      break;
+    }
+  }
+  return entries.length ? entries : undefined;
+}
+
+/**
+ * Session stats cross a trust boundary twice (provider emit, then the persisted
+ * record), so invalid numbers drop their own field instead of voiding the whole
+ * snapshot — a provider that reports one bad counter still shows the rest.
+ */
+function sanitizeStats(value: unknown): AgentSessionStats | undefined {
+  const sanitized = sanitizeOptionalJson(value);
+  if (!sanitized || !isJsonObject(sanitized)) {
+    return undefined;
+  }
+  const result: AgentSessionStats = {};
+  for (const field of STATS_NUMERIC_FIELDS) {
+    const parsed = readNonNegativeNumber(sanitized, field);
+    if (parsed !== undefined) {
+      result[field] = parsed;
+    }
+  }
+  if (sanitized.toolCalls !== undefined) {
+    const toolCalls = sanitizeToolCallStats(sanitized.toolCalls);
+    if (toolCalls !== undefined) {
+      result.toolCalls = toolCalls;
+    }
+  }
+  if (sanitized.subagents !== undefined) {
+    const subagents = sanitizeSubagentStats(sanitized.subagents);
+    if (subagents !== undefined) {
+      result.subagents = subagents;
     }
   }
   return Object.keys(result).length ? result : undefined;

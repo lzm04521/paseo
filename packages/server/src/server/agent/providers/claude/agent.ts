@@ -33,6 +33,7 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
+  readClaudeSettingsModels,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -41,8 +42,10 @@ import {
   parseClaudeCodeVersion,
   resolveClaudeDisabledThinkingForModel,
 } from "./model-manifest.js";
+import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
+import { createSessionStatsAggregator } from "../session-stats.js";
 import { ClaudeTaskState } from "./task-state.js";
 import {
   ClaudeTaskProtocolSource,
@@ -83,6 +86,7 @@ import {
 } from "./rewind.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
 import { claudeConfigDir, claudeProjectDirSync } from "./project-dir.js";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
 import {
   isProviderImageMarkdown,
@@ -119,6 +123,7 @@ import {
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentUsage,
+  type AgentSubagentUsageStat,
   type AgentRuntimeInfo,
   type FetchCatalogOptions,
   type ImportableProviderSession,
@@ -409,6 +414,13 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
+  customProvider?: {
+    id: string;
+    label: string;
+    extends: string;
+    fetchModels?: boolean;
+  };
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 interface ClaudeAgentSessionOptions {
@@ -422,6 +434,7 @@ interface ClaudeAgentSessionOptions {
   queryFactory?: ClaudeQueryFactory;
   resolveBinary: () => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
+  getDaemonConfig?: () => MutableDaemonConfig;
 }
 
 type ClaudeThinkingEffort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -1505,6 +1518,8 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly rewindSdk: ClaudeRewindSdk;
+  private readonly customProvider?: ClaudeAgentClientOptions["customProvider"];
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
 
   constructor(options: ClaudeAgentClientOptions) {
     this.defaults = options.defaults;
@@ -1516,6 +1531,8 @@ export class ClaudeAgentClient implements AgentClient {
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
+    this.customProvider = options.customProvider;
+    this.getDaemonConfig = options.getDaemonConfig;
   }
 
   resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
@@ -1538,6 +1555,7 @@ export class ClaudeAgentClient implements AgentClient {
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
       rewindSdk: this.rewindSdk,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -1567,6 +1585,7 @@ export class ClaudeAgentClient implements AgentClient {
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
       rewindSdk: this.rewindSdk,
+      getDaemonConfig: this.getDaemonConfig,
     });
   }
 
@@ -1589,9 +1608,27 @@ export class ClaudeAgentClient implements AgentClient {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
     const env = this.buildProviderEnv();
-    const models = await runProviderRefreshActivity(context, "settings", () =>
-      getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),
-    );
+    let models: AgentModelDefinition[];
+    if (this.customProvider?.fetchModels) {
+      // 动态拉取模式：列表只含 settings.json 声明的模型 + 远端发现的模型。
+      // 内置 manifest 的 Anthropic 官方模型不适用于派生供应商（relay/兼容网关背后没有它们）。
+      const settingsModels = await runProviderRefreshActivity(context, "settings", () =>
+        readClaudeSettingsModels(this.logger, claudeConfigDir(env)),
+      );
+      const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
+        fetchAnthropicCompatModels(env, this.logger, context?.signal),
+      );
+      // 补思考等级：settings/远端来源不带 thinkingOptions，不补则 UI 不显示思考等级选择器。
+      // resolveConfiguredClaudeModel 会把可归一到 manifest 的 id（如 claude-opus-5[1M]）继承
+      // 官方思考选项，其余（网关自定义模型）给通用 custom 兜底——与手写 models 条目同款语义。
+      models = mergeClaudeRemoteModels(settingsModels, remoteModels).map((model) =>
+        resolveConfiguredClaudeModel(model),
+      );
+    } else {
+      models = await runProviderRefreshActivity(context, "settings", () =>
+        getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),
+      );
+    }
     const modeCatalog = claudeModeCatalog(env);
     return {
       models,
@@ -1838,6 +1875,56 @@ function readStreamRequestOutputTokens(event: Record<string, unknown>): number |
   return outputTokens;
 }
 
+/** Token counters a provider can report: absent or nonsensical values are dropped, not zeroed. */
+function readTokenCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Input-side usage on `message_delta`, for gateways that zero `message_start.usage` because the
+ * upstream (OpenAI-style) stream reports prompt tokens only in its final chunk. Fields the delta
+ * leaves out are omitted so the aggregator keeps the message-start reading for them.
+ */
+function readStreamDeltaUsage(event: Record<string, unknown>): {
+  inputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+} {
+  const usage = toObjectRecord(event.usage);
+  if (!usage) {
+    return {};
+  }
+  const deltaUsage: {
+    inputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } = {};
+  const inputTokens = readTokenCount(usage.input_tokens);
+  if (inputTokens !== undefined) {
+    deltaUsage.inputTokens = inputTokens;
+  }
+  const cacheReadTokens = readTokenCount(usage.cache_read_input_tokens);
+  if (cacheReadTokens !== undefined) {
+    deltaUsage.cacheReadTokens = cacheReadTokens;
+  }
+  const cacheWriteTokens = readTokenCount(usage.cache_creation_input_tokens);
+  if (cacheWriteTokens !== undefined) {
+    deltaUsage.cacheWriteTokens = cacheWriteTokens;
+  }
+  return deltaUsage;
+}
+
+/** The input-side total a `message_delta` reports, or undefined when it carries none. */
+function readStreamDeltaInputTokens(event: Record<string, unknown>): number | undefined {
+  const deltaUsage = readStreamDeltaUsage(event);
+  if (deltaUsage.inputTokens === undefined) {
+    return undefined;
+  }
+  return (
+    deltaUsage.inputTokens + (deltaUsage.cacheReadTokens ?? 0) + (deltaUsage.cacheWriteTokens ?? 0)
+  );
+}
+
 function readLastUsageIteration(usage: unknown): Record<string, unknown> | undefined {
   const iterations = toObjectRecord(usage)?.iterations;
   if (!Array.isArray(iterations)) {
@@ -1948,6 +2035,15 @@ class ClaudeContextUsageState {
         return null;
       }
       this.streamRequestOutputTokens = outputTokens;
+      // Same gateway shape the session-stats reconciliation covers: real prompt totals may ride
+      // the delta while message_start reported zero.
+      const deltaInputTokens = readStreamDeltaInputTokens(streamEvent);
+      if (
+        deltaInputTokens !== undefined &&
+        deltaInputTokens > (this.streamRequestInputTokens ?? 0)
+      ) {
+        this.streamRequestInputTokens = deltaInputTokens;
+      }
     } else {
       return null;
     }
@@ -2050,6 +2146,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
+  private readonly getDaemonConfig?: () => MutableDaemonConfig;
   private query: Query | null = null;
   private childProcess: ChildProcess | null = null;
   private input: AsyncMessageInput<SDKUserMessage> | null = null;
@@ -2090,6 +2187,14 @@ class ClaudeAgentSession implements AgentSession {
     isDescriptorOwnedElsewhere: () => this.taskProtocolSource.isActive,
     needsSyntheticParentToolCard: (toolUseId) =>
       this.taskProtocolSource.needsSyntheticParentToolCard(toolUseId),
+    onToolUse: (toolName) => {
+      this.statsAggregator.recordToolUse(toolName);
+      this.statsDirty = true;
+    },
+    onToolError: (toolName) => {
+      this.statsAggregator.recordToolResult(toolName, true);
+      this.statsDirty = true;
+    },
   });
   private persistedHistory: PersistedTimelineEntry[] = [];
   private persistedProviderSubagentEvents: Extract<
@@ -2111,6 +2216,10 @@ class ClaudeAgentSession implements AgentSession {
   private foregroundHasVisibleActivity = false;
   private activeTurnHasAssistantText = false;
   private readonly contextUsage: ClaudeContextUsageState;
+  private readonly statsAggregator = createSessionStatsAggregator();
+  // Full per-subagent state, because `upsertSubagent` replaces the aggregator's entry wholesale.
+  private readonly subagentStats = new Map<string, AgentSubagentUsageStat>();
+  private statsDirty = false;
   private userMessageIds: string[] = [];
   private readonly emittedUserMessageIds = new Set<string>();
   private readonly rewindTurnAnchors: ClaudeRewindTurnAnchor[] = [];
@@ -2131,6 +2240,7 @@ class ClaudeAgentSession implements AgentSession {
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary;
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
+    this.getDaemonConfig = options.getDaemonConfig;
     this.contextUsage = new ClaudeContextUsageState(
       findClaudeModel(this.config.model)?.contextWindowMaxTokens,
     );
@@ -2285,6 +2395,10 @@ class ClaudeAgentSession implements AgentSession {
       this.activeForegroundQuery = this.query;
       this.activeForegroundInput = this.input;
       this.startQueryPump();
+      // Anchor the request clock at the push: a gateway that buffers the stream can deliver
+      // message_start glued to the first content block, and first-token latency measured from
+      // frame arrival would read as zero.
+      this.statsAggregator.recordRequestStart(Date.now());
       this.input.push(sdkMessage);
       setTimeout(() => {
         if (this.activeForegroundTurnId === turnId) {
@@ -3381,6 +3495,22 @@ class ClaudeAgentSession implements AgentSession {
     return result;
   }
 
+  private shouldDowngradeImage(): boolean {
+    return this.getDaemonConfig?.().claudeImageDowngrade === "on";
+  }
+
+  private saveImageToTemp(chunk: { data: string; mimeType: string }): string {
+    try {
+      return materializeProviderImage({ data: chunk.data, mimeType: chunk.mimeType }).path;
+    } catch (error) {
+      this.logger.warn(
+        { err: error },
+        "Failed to materialize image for downgrade; sending placeholder path",
+      );
+      return "<保存失败>";
+    }
+  }
+
   private toSdkUserMessage(prompt: AgentPromptInput): SDKUserMessage {
     const content: Array<
       | { type: "text"; text: string }
@@ -3398,6 +3528,7 @@ class ClaudeAgentSession implements AgentSession {
     // so a "/command" sent with a pasted link or a screenshot would otherwise reach the model as
     // literal text instead of the command it names.
     let typedSlashCommandIndex = -1;
+    const downgrade = this.shouldDowngradeImage();
     if (Array.isArray(prompt)) {
       for (const chunk of prompt) {
         if (chunk.type === "text") {
@@ -3408,7 +3539,13 @@ class ClaudeAgentSession implements AgentSession {
           }
           content.push({ type: "text", text: chunk.text });
         } else if (chunk.type === "image") {
-          if (isImageMimeType(chunk.mimeType)) {
+          if (!isImageMimeType(chunk.mimeType)) {
+            continue;
+          }
+          if (downgrade) {
+            const absPath = this.saveImageToTemp(chunk);
+            content.push({ type: "text", text: `图片：${absPath}` });
+          } else {
             content.push({
               type: "image",
               source: {
@@ -3629,6 +3766,8 @@ class ClaudeAgentSession implements AgentSession {
         this.syncTurnState("autonomous turn terminal");
       }
     }
+
+    this.flushStatsEvent();
   }
 
   private startAutonomousTurn(): void {
@@ -3708,8 +3847,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private failRunningRuntimeTasks(): void {
+    const observations = this.taskProtocolSource.failRunningTasks();
+    this.recordSubagentObservations(observations);
     this.dispatchEvents(
-      foldSubagentObservations(this.taskProtocolSource.failRunningTasks()).map(
+      foldSubagentObservations(observations).map(
         (event): AgentStreamEvent => ({ type: "provider_subagent", provider: "claude", event }),
       ),
     );
@@ -4090,6 +4231,7 @@ class ClaudeAgentSession implements AgentSession {
     // read rather than inferred from sidechain frames. `task_started` precedes the child's first
     // frame, so the descriptor exists before any timeline item lands on it.
     const subagentObservations = this.taskProtocolSource.observe(message);
+    this.recordSubagentObservations(subagentObservations);
     for (const event of foldSubagentObservations(subagentObservations)) {
       events.push({ type: "provider_subagent", provider: "claude", event });
     }
@@ -4131,6 +4273,7 @@ class ClaudeAgentSession implements AgentSession {
         const timelineItems = this.mapBlocksToTimeline(message.message.content, {
           suppressAssistantText: options?.suppressAssistantText ?? false,
           suppressReasoning: options?.suppressReasoning ?? false,
+          countStats: true,
         });
         for (const item of timelineItems) {
           events.push({ type: "timeline", item, provider: "claude" });
@@ -4190,6 +4333,7 @@ class ClaudeAgentSession implements AgentSession {
       ),
     ).map((event): AgentStreamEvent => ({ type: "provider_subagent", provider: "claude", event }));
     const routedId = canonicalSubagentId ?? parentToolUseId;
+    this.recordSubagentFrameUsage(message, routedId);
     return [...runtimeEvents, ...this.sidechainTracker.handleMessage(message, routedId)];
   }
 
@@ -4440,6 +4584,7 @@ class ClaudeAgentSession implements AgentSession {
   ): void {
     const timelineItems = this.mapBlocksToTimeline(content, {
       textMessageType: "user_message",
+      countStats: true,
     });
     for (const item of timelineItems) {
       if (item.type === "user_message" && messageId && !item.messageId) {
@@ -4454,6 +4599,151 @@ class ClaudeAgentSession implements AgentSession {
     }
   }
 
+  /**
+   * Session stats observe the live stream. History replay reuses the same block mapping, so
+   * counting there would re-count a resumed session's entire past; every entry point here is a
+   * live frame.
+   */
+  private recordSessionStatsStreamEvent(event: unknown): void {
+    const streamEvent = toObjectRecord(event);
+    if (!streamEvent) {
+      return;
+    }
+    const eventType = readTrimmedString(streamEvent.type);
+    const now = Date.now();
+    if (eventType === "message_start") {
+      const usage = toObjectRecord(toObjectRecord(streamEvent.message)?.usage);
+      const inputTokens = readTokenCount(usage?.input_tokens);
+      if (inputTokens === undefined) {
+        return;
+      }
+      this.statsAggregator.recordMessageStart(
+        {
+          inputTokens,
+          cacheReadTokens: readTokenCount(usage?.cache_read_input_tokens),
+          cacheWriteTokens: readTokenCount(usage?.cache_creation_input_tokens),
+        },
+        now,
+      );
+    } else if (eventType === "message_delta") {
+      this.statsAggregator.reconcileStreamUsage(readStreamDeltaUsage(streamEvent));
+      const outputTokens = readStreamRequestOutputTokens(streamEvent);
+      if (outputTokens === undefined) {
+        return;
+      }
+      this.statsAggregator.recordMessageDelta(outputTokens, now);
+    } else if (eventType === "content_block_start") {
+      // Any block start is the model's first emission for the request — a tool-only turn never
+      // produces a text delta. It is not worth a snapshot on its own: no number in the snapshot
+      // moves until the message completes, and a block per snapshot is one wire message per block.
+      this.statsAggregator.recordFirstAssistantToken(now);
+      return;
+    } else {
+      return;
+    }
+    this.statsDirty = true;
+  }
+
+  private recordSessionStatsResult(usage: AgentUsage | undefined): void {
+    if (usage?.totalCostUsd !== undefined) {
+      this.statsAggregator.recordResultUsage({ totalCostUsd: usage.totalCostUsd });
+    }
+    this.statsAggregator.recordMessageComplete(Date.now());
+    this.statsDirty = true;
+  }
+
+  /** Subagent entries are whole-state updates: the aggregator replaces by id, never merges. */
+  private updateSubagentStats(
+    agentId: string,
+    patch: {
+      label?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      running?: boolean;
+    },
+  ): void {
+    const existing: AgentSubagentUsageStat = this.subagentStats.get(agentId) ?? {
+      agentId,
+      running: true,
+    };
+    if (patch.label !== undefined) {
+      existing.label = patch.label;
+    }
+    if (patch.inputTokens !== undefined) {
+      existing.inputTokens = (existing.inputTokens ?? 0) + patch.inputTokens;
+    }
+    if (patch.outputTokens !== undefined) {
+      existing.outputTokens = (existing.outputTokens ?? 0) + patch.outputTokens;
+    }
+    if (patch.running !== undefined) {
+      existing.running = patch.running;
+    }
+    this.subagentStats.set(agentId, existing);
+    this.statsAggregator.upsertSubagent(existing);
+    this.statsDirty = true;
+  }
+
+  /**
+   * Subagent usage is read from completed assistant frames, not stream partials, so a message
+   * counts once no matter how many deltas it streams.
+   */
+  private recordSubagentFrameUsage(message: SDKMessage, agentId: string): void {
+    if (message.type !== "assistant") {
+      return;
+    }
+    const usage = toObjectRecord(toObjectRecord(toObjectRecord(message)?.message)?.usage);
+    if (!usage) {
+      return;
+    }
+    const inputTokens = readTokenCount(usage.input_tokens);
+    if (inputTokens === undefined) {
+      return;
+    }
+    this.updateSubagentStats(agentId, {
+      inputTokens:
+        inputTokens +
+        (readTokenCount(usage.cache_read_input_tokens) ?? 0) +
+        (readTokenCount(usage.cache_creation_input_tokens) ?? 0),
+      outputTokens: readTokenCount(usage.output_tokens) ?? 0,
+    });
+  }
+
+  private recordSubagentObservations(observations: readonly SubagentObservation[]): void {
+    for (const observation of observations) {
+      if (observation.kind === "declared") {
+        const label = observation.description ?? observation.title;
+        this.updateSubagentStats(observation.id, {
+          ...(label ? { label } : {}),
+          running: true,
+        });
+      } else if (observation.kind === "status") {
+        this.updateSubagentStats(observation.id, {
+          running: observation.status === "running",
+        });
+      }
+    }
+  }
+
+  private createStatsUpdatedEvent(): AgentStreamEvent {
+    return {
+      type: "stats_updated",
+      provider: "claude",
+      stats: this.statsAggregator.snapshot(),
+    };
+  }
+
+  /**
+   * Flushed after a batch is announced rather than while it is built: a turn's stats are only
+   * complete once its terminal event has been recorded, and that happens during notification.
+   */
+  private flushStatsEvent(): void {
+    if (!this.statsDirty) {
+      return;
+    }
+    this.statsDirty = false;
+    this.notifySubscribers(this.createStatsUpdatedEvent());
+  }
+
   private appendStreamEventEvents(
     message: Extract<SDKMessage, { type: "stream_event" }>,
     events: AgentStreamEvent[],
@@ -4463,6 +4753,7 @@ class ClaudeAgentSession implements AgentSession {
     if (usageUpdatedEvent) {
       events.push(usageUpdatedEvent);
     }
+    this.recordSessionStatsStreamEvent(message.event);
     const timelineItems = this.mapPartialEvent(message.event, {
       suppressAssistantText: options?.suppressAssistantText ?? false,
       suppressReasoning: options?.suppressReasoning ?? false,
@@ -4477,6 +4768,7 @@ class ClaudeAgentSession implements AgentSession {
     events: AgentStreamEvent[],
   ): void {
     const usage = this.convertUsage(message, message.modelUsage);
+    this.recordSessionStatsResult(usage);
     if (message.subtype === "success") {
       events.push(...this.sidechainTracker.finishAll("completed"));
       // Built-in slash commands (e.g. /voice, /usage, "Unknown command: …")
@@ -4768,9 +5060,9 @@ class ClaudeAgentSession implements AgentSession {
     // the turn ended, the session did not. Wiping it would strand every task id the session still
     // holds — a backgrounded child that settles after the interrupt would find no descriptor to
     // land on, and ownership would flip back to the legacy tracker mid-session.
-    for (const event of foldSubagentObservations(
-      this.taskProtocolSource.cancelRunningForegroundTasks(),
-    )) {
+    const cancellations = this.taskProtocolSource.cancelRunningForegroundTasks();
+    this.recordSubagentObservations(cancellations);
+    for (const event of foldSubagentObservations(cancellations)) {
       this.pushEvent({ type: "provider_subagent", provider: "claude", event });
     }
   }
@@ -4828,6 +5120,13 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private notifySubscribers(event: AgentStreamEvent): void {
+    // The one funnel every emitted event passes through, so turn timing is recorded here rather
+    // than at each of the call sites that raise turn_started / turn_completed.
+    if (event.type === "turn_started") {
+      this.statsAggregator.recordTurnStarted(Date.now());
+    } else if (this.isTerminalTurnEvent(event)) {
+      this.statsAggregator.recordTurnCompleted(Date.now());
+    }
     const turnId = this.activeForegroundTurnId ?? this.autonomousTurn?.id;
     const tagged = turnId ? { ...event, turnId } : event;
     this.logger.trace(
@@ -5093,12 +5392,15 @@ class ClaudeAgentSession implements AgentSession {
       textMessageType?: "assistant_message" | "user_message";
       suppressAssistantText?: boolean;
       suppressReasoning?: boolean;
+      /** Live frames count toward session stats; history replay must not. */
+      countStats?: boolean;
     },
   ): AgentTimelineItem[] {
     const textMessageType = options?.textMessageType ?? "assistant_message";
     const suppressText =
       textMessageType === "assistant_message" && (options?.suppressAssistantText ?? false);
     const suppressReasoning = options?.suppressReasoning ?? false;
+    const countStats = options?.countStats ?? false;
 
     if (typeof content === "string") {
       if (
@@ -5127,6 +5429,7 @@ class ClaudeAgentSession implements AgentSession {
         textMessageType,
         suppressText,
         suppressReasoning,
+        countStats,
       });
     }
 
@@ -5174,6 +5477,7 @@ class ClaudeAgentSession implements AgentSession {
       textMessageType: "assistant_message" | "user_message";
       suppressText: boolean;
       suppressReasoning: boolean;
+      countStats: boolean;
     },
   ): void {
     switch (block.type) {
@@ -5190,7 +5494,7 @@ class ClaudeAgentSession implements AgentSession {
       case "tool_use":
       case "server_tool_use":
       case "mcp_tool_use":
-        this.handleToolUseStart(block, context.items);
+        this.handleToolUseStart(block, context.items, context.countStats);
         break;
       case "tool_result":
       case "mcp_tool_result":
@@ -5199,14 +5503,18 @@ class ClaudeAgentSession implements AgentSession {
       case "code_execution_tool_result":
       case "bash_code_execution_tool_result":
       case "text_editor_code_execution_tool_result":
-        this.handleToolResult(block, context.items);
+        this.handleToolResult(block, context.items, context.countStats);
         break;
       default:
         break;
     }
   }
 
-  private handleToolUseStart(block: ClaudeContentChunk, items: AgentTimelineItem[]): void {
+  private handleToolUseStart(
+    block: ClaudeContentChunk,
+    items: AgentTimelineItem[],
+    countStats: boolean,
+  ): void {
     const entry = this.upsertToolUseEntry(block);
     if (!entry) {
       return;
@@ -5215,6 +5523,10 @@ class ClaudeAgentSession implements AgentSession {
       return;
     }
     entry.started = true;
+    if (countStats) {
+      this.statsAggregator.recordToolUse(entry.name);
+      this.statsDirty = true;
+    }
     this.toolUseCache.set(entry.id, entry);
     this.pushToolCall(
       mapClaudeRunningToolCall({
@@ -5227,11 +5539,24 @@ class ClaudeAgentSession implements AgentSession {
     );
   }
 
-  private handleToolResult(block: ClaudeContentChunk, items: AgentTimelineItem[]): void {
+  private recordToolErrorStat(toolName: string, isError: unknown, countStats: boolean): void {
+    if (!countStats || isError !== true) {
+      return;
+    }
+    this.statsAggregator.recordToolResult(toolName, true);
+    this.statsDirty = true;
+  }
+
+  private handleToolResult(
+    block: ClaudeContentChunk,
+    items: AgentTimelineItem[],
+    countStats: boolean,
+  ): void {
     const entry =
       typeof block.tool_use_id === "string" ? this.toolUseCache.get(block.tool_use_id) : undefined;
     const blockToolName = typeof block.tool_name === "string" ? block.tool_name : undefined;
     const toolName = entry?.name ?? blockToolName ?? "tool";
+    this.recordToolErrorStat(toolName, block.is_error, countStats);
     const callId =
       typeof block.tool_use_id === "string" && block.tool_use_id.length > 0
         ? block.tool_use_id
@@ -5484,6 +5809,7 @@ class ClaudeAgentSession implements AgentSession {
           ? this.mapBlocksToTimeline([event.content_block], {
               suppressAssistantText: options?.suppressAssistantText,
               suppressReasoning: options?.suppressReasoning,
+              countStats: true,
             })
           : [];
       case "content_block_delta":
@@ -5491,6 +5817,7 @@ class ClaudeAgentSession implements AgentSession {
           ? this.mapBlocksToTimeline([event.delta], {
               suppressAssistantText: options?.suppressAssistantText,
               suppressReasoning: options?.suppressReasoning,
+              countStats: true,
             })
           : [];
       default:

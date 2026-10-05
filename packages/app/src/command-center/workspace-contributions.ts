@@ -19,6 +19,7 @@ export interface WorkspaceCommandCenterLabels {
   section: string;
   newAgent: string;
   newTerminal: string;
+  openPowerShell: string;
   newBrowser: string;
   splitRight: string;
   splitDown: string;
@@ -34,7 +35,7 @@ export interface WorkspaceCommandCenterLabels {
   copyResumeCommand: string;
   copyAgentId: string;
   copyTerminalId: string;
-  copyFilePath: string;
+  copyFileRelativePath: string;
   closeTabsLeft: string;
   closeTabsRight: string;
   closeOtherTabs: string;
@@ -338,7 +339,7 @@ function buildActiveTabContributions(
       buildQueryAction(source, {
         id: "tab:copy-file-path",
         rank: 37,
-        title: source.labels.copyFilePath,
+        title: source.labels.copyFileRelativePath,
         keywords: ["tab", "file", "copy", "path"],
         icon: source.icons.copy,
         action: { id: "workspace.tab.copy-file-path", scope: "workspace" },
@@ -555,12 +556,20 @@ function buildCreationContributions(
       shortcutKeys: source.shortcuts.newTerminal,
       action: { id: "workspace.terminal.new", scope: "workspace" },
     }),
+    buildQueryAction(source, {
+      id: "tab:new-powershell",
+      rank: 3,
+      title: source.labels.openPowerShell,
+      keywords: ["terminal", "shell", "console", "powershell"],
+      icon: source.icons.newTerminal,
+      action: { id: "workspace.terminal.new.powershell", scope: "workspace" },
+    }),
   );
   if (source.capabilities.canOpenBrowserTabs) {
     contributions.push(
       buildQueryAction(source, {
         id: "tab:new-browser",
-        rank: 3,
+        rank: 4,
         title: source.labels.newBrowser,
         keywords: ["browser", "web", "preview"],
         icon: source.icons.newBrowser,

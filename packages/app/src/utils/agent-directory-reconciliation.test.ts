@@ -208,4 +208,69 @@ describe("agent directory reconciliation", () => {
 
     expect(result[0]?.agent.lastUsage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
+
+  it("accepts session stats from a stale buffered upsert without regressing metadata", () => {
+    const result = reconcileAgentDirectory({
+      snapshot: [
+        {
+          ...entry("agent", "idle"),
+          agent: {
+            ...snapshot("agent", "idle"),
+            title: "newer page",
+            updatedAt: "2026-07-12T12:00:00.000Z",
+            stats: { sessionInputTokens: 100, requestCount: 1 },
+          },
+        },
+      ],
+      deltas: [
+        {
+          kind: "upsert",
+          agent: {
+            ...snapshot("agent", "running"),
+            title: "stale live",
+            updatedAt: "2026-07-12T11:00:00.000Z",
+            stats: { sessionInputTokens: 250, requestCount: 3 },
+          },
+          project: entry("agent", "idle").project,
+        },
+      ],
+    });
+
+    expect({
+      title: result[0]?.agent.title,
+      status: result[0]?.agent.status,
+      stats: result[0]?.agent.stats,
+    }).toEqual({
+      title: "newer page",
+      status: "idle",
+      stats: { sessionInputTokens: 250, requestCount: 3 },
+    });
+  });
+
+  it("preserves session stats when a stale buffered upsert omits them", () => {
+    const result = reconcileAgentDirectory({
+      snapshot: [
+        {
+          ...entry("agent", "idle"),
+          agent: {
+            ...snapshot("agent", "idle"),
+            updatedAt: "2026-07-12T12:00:00.000Z",
+            stats: { sessionInputTokens: 100, requestCount: 1 },
+          },
+        },
+      ],
+      deltas: [
+        {
+          kind: "upsert",
+          agent: {
+            ...snapshot("agent", "running"),
+            updatedAt: "2026-07-12T11:00:00.000Z",
+          },
+          project: entry("agent", "idle").project,
+        },
+      ],
+    });
+
+    expect(result[0]?.agent.stats).toEqual({ sessionInputTokens: 100, requestCount: 1 });
+  });
 });

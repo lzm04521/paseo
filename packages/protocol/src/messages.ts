@@ -152,9 +152,23 @@ const MutableStructuredGenerationProviderSchema = z
   })
   .passthrough();
 
+const MutableMetadataGenerationEntrySchema = z
+  .object({
+    instructions: z.string().optional(),
+  })
+  .passthrough();
+
+// daemon-level metadataGeneration instructions are the global fallback used when
+// a project's paseo.json does not override the same key; project-level wins. See
+// buildMetadataPrompt's three-tier fallback (project override → daemon default →
+// code default). Mirrors the per-key shape of paseo.json's metadataGeneration.
 const MutableMetadataGenerationConfigSchema = z
   .object({
     providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+    title: MutableMetadataGenerationEntrySchema.optional(),
+    branchName: MutableMetadataGenerationEntrySchema.optional(),
+    commitMessage: MutableMetadataGenerationEntrySchema.optional(),
+    pullRequest: MutableMetadataGenerationEntrySchema.optional(),
   })
   .passthrough();
 
@@ -166,6 +180,26 @@ const MutableBrowserToolsConfigSchema = z
 const MutableRelayConfigSchema = z
   .object({
     enabled: z.boolean(),
+  })
+  .passthrough();
+
+const MutableFileSearchConfigSchema = z
+  .object({
+    gitIgnoreOverrides: z.array(z.string().trim().min(1)).optional(),
+  })
+  .passthrough();
+
+export const DEFAULT_IDLE_AUTO_RESTART_CONFIG = {
+  enabled: false,
+  uptimeThresholdMinutes: 240,
+  idleThresholdMinutes: 10,
+} as const;
+
+const MutableIdleAutoRestartConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    uptimeThresholdMinutes: z.number().int().min(1).max(10080),
+    idleThresholdMinutes: z.number().int().min(1).max(1440),
   })
   .passthrough();
 
@@ -201,11 +235,15 @@ export const MutableDaemonConfigSchema = z
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
+    claudeImageDowngrade: z.enum(["off", "on"]).default("off"),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
+    idleAutoRestart: MutableIdleAutoRestartConfigSchema.optional(),
+    powershellPath: z.string().optional(),
   })
   .passthrough();
 
@@ -222,10 +260,14 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
+    claudeImageDowngrade: z.enum(["off", "on"]).optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    fileSearch: MutableFileSearchConfigSchema.optional(),
+    idleAutoRestart: MutableIdleAutoRestartConfigSchema.partial().optional(),
+    powershellPath: z.string().optional(),
   })
   .partial()
   .passthrough();
@@ -246,6 +288,7 @@ import type {
   ToolCallDetail,
   ToolCallTimelineItem,
   AgentUsage,
+  AgentSessionStats,
   JsonValue,
 } from "./agent-types.js";
 
@@ -387,6 +430,37 @@ const AgentUsageSchema: z.ZodType<AgentUsage> = z.object({
   totalCostUsd: z.number().optional(),
   contextWindowMaxTokens: z.number().optional(),
   contextWindowUsedTokens: z.number().optional(),
+});
+
+const AgentSessionStatsSchema: z.ZodType<AgentSessionStats> = z.object({
+  sessionInputTokens: z.number().optional(),
+  sessionCachedInputTokens: z.number().optional(),
+  sessionOutputTokens: z.number().optional(),
+  sessionCacheWriteTokens: z.number().optional(),
+  sessionTotalCostUsd: z.number().optional(),
+  requestCount: z.number().optional(),
+  turnCount: z.number().optional(),
+  lastGenTokensPerSec: z.number().optional(),
+  lastFirstTokenLatencyMs: z.number().optional(),
+  lastRequestDurationMs: z.number().optional(),
+  lastTurnDurationMs: z.number().optional(),
+  cacheHitRate: z.number().optional(),
+  toolCallTotal: z.number().optional(),
+  toolCallErrors: z.number().optional(),
+  toolCalls: z
+    .array(z.object({ tool: z.string(), count: z.number(), errors: z.number() }))
+    .optional(),
+  subagents: z
+    .array(
+      z.object({
+        agentId: z.string(),
+        label: z.string().optional(),
+        inputTokens: z.number().optional(),
+        outputTokens: z.number().optional(),
+        running: z.boolean(),
+      }),
+    )
+    .optional(),
 });
 
 const McpStdioServerConfigSchema = z.object({
@@ -731,6 +805,12 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     turnId: z.string().optional(),
     usage: AgentUsageSchema.optional(),
   }),
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  z.object({
+    type: z.literal("stats_updated"),
+    provider: AgentProviderSchema,
+    stats: AgentSessionStatsSchema,
+  }),
   z.object({
     type: z.literal("turn_failed"),
     provider: AgentProviderSchema,
@@ -827,6 +907,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   persistence: AgentPersistenceHandleSchema.nullable(),
   runtimeInfo: AgentRuntimeInfoSchema.optional(),
   lastUsage: AgentUsageSchema.optional(),
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  stats: AgentSessionStatsSchema.optional(),
   lastError: z.string().optional(),
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()).default({}),
@@ -3544,6 +3626,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
         workspaceTerminals: z.boolean().optional(),
+        // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+        agentSessionStats: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.2.0-beta.1. Remove the
         // feature gate and checkoutGithubSetAutoMerge fallback after 2027-01-17
         // once the supported daemon floor is >= v0.2.0.
@@ -4943,6 +5027,7 @@ export const DaemonGetStatusResponseSchema = z.object({
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),
+      idleSince: z.string().nullable().optional(),
       listen: z.string().nullable(),
       relay: z
         .object({

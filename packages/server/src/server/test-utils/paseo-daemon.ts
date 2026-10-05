@@ -171,6 +171,11 @@ async function prepareTestDaemonConfig(
   const config: PaseoDaemonConfig = {
     listen: `${listenHost}:0`,
     paseoHome,
+    // Startup auto-installs the orchestration skills under the daemon user's
+    // home (~/.claude/skills, ~/.codex/skills, ~/.agents/skills). Anchor them
+    // inside the sandbox instead so tests never touch the developer's home;
+    // close() and the failure path already remove paseoHomeRoot wholesale.
+    skillsHome: path.join(paseoHomeRoot, "skills-home"),
     daemonVersion: options.daemonVersion,
     desktopManaged: options.desktopManaged,
     corsAllowedOrigins: options.corsAllowedOrigins ?? [],

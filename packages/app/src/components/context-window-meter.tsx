@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
-import { formatTokenCount } from "./context-window-meter.utils";
+import { formatSessionCost, formatTokenCount, getMeterTone } from "./context-window-meter.utils";
 
 interface ContextWindowMeterProps {
   maxTokens: number | null;
@@ -49,25 +49,16 @@ function clampPercentage(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-function formatSessionCost(value: number): string | null {
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  if (value < 0.01) {
-    return `$${value.toFixed(4)}`;
-  }
-  return `$${value.toFixed(2)}`;
-}
-
-function getMeterColors(
+export function getMeterColors(
   percentage: number,
   theme: ReturnType<typeof useUnistyles>["theme"],
 ): { progress: string; track: string } {
   const track = theme.colors.surface3;
-  if (percentage > 90) {
+  const tone = getMeterTone(percentage);
+  if (tone === "critical") {
     return { progress: theme.colors.destructive, track };
   }
-  if (percentage >= 70) {
+  if (tone === "warning") {
     return { progress: theme.colors.palette.amber[500], track };
   }
   return { progress: theme.colors.foregroundMuted, track };
