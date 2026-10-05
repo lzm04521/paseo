@@ -58,6 +58,56 @@ describe("createSessionStatsAggregator", () => {
     expect(stats.lastGenTokensPerSec).toBeCloseTo(150);
   });
 
+  test("updates generation speed live over a rolling window while streaming", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordMessageStart({ inputTokens: 10 }, 0);
+    aggregator.recordFirstAssistantToken(0);
+
+    // Fast phase: 200 t/s over the first two seconds, readable before the request completes.
+    aggregator.recordMessageDelta(400, 2_000);
+    expect(aggregator.snapshot().lastGenTokensPerSec).toBeCloseTo(200);
+
+    // Slow phase: 40 t/s from second two onward. Once the fast phase slides out of the
+    // five-second window, only the slow phase should count.
+    for (let second = 3; second <= 10; second += 1) {
+      aggregator.recordMessageDelta(400 + (second - 2) * 40, second * 1_000);
+    }
+
+    expect(aggregator.snapshot().lastGenTokensPerSec).toBeCloseTo(40);
+  });
+
+  test("keeps the last rolling speed after the request completes", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordMessageStart({ inputTokens: 10 }, 0);
+    aggregator.recordFirstAssistantToken(0);
+    aggregator.recordMessageDelta(100, 1_000);
+    aggregator.recordMessageDelta(200, 2_000);
+    aggregator.recordMessageComplete(2_100);
+
+    // 100 t/s throughout; completing must not rewrite it into a whole-request average
+    // (200 tokens / 2.1 s = 95.2).
+    expect(aggregator.snapshot().lastGenTokensPerSec).toBeCloseTo(100);
+  });
+
+  test("holds the previous request's speed until the new one has enough signal", () => {
+    const aggregator = createSessionStatsAggregator();
+
+    aggregator.recordMessageStart({ inputTokens: 10 }, 0);
+    aggregator.recordFirstAssistantToken(0);
+    aggregator.recordMessageDelta(200, 2_000);
+    aggregator.recordMessageComplete(2_100);
+    expect(aggregator.snapshot().lastGenTokensPerSec).toBeCloseTo(100);
+
+    // The next request is 300 ms of streaming — under the one-second streaming minimum span,
+    // so the pill keeps showing the previous request's speed instead of going blank.
+    aggregator.recordMessageStart({ inputTokens: 10 }, 10_000);
+    aggregator.recordFirstAssistantToken(10_200);
+    aggregator.recordMessageDelta(30, 10_500);
+    expect(aggregator.snapshot().lastGenTokensPerSec).toBeCloseTo(100);
+  });
+
   test("falls back to the message-start clock when no request start was recorded", () => {
     const aggregator = createSessionStatsAggregator();
 

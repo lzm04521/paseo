@@ -6,6 +6,12 @@ import type {
 
 const MAX_TOOL_CALLS = 10;
 const MAX_SUBAGENTS = 50;
+/** How far back the generation-speed window reaches. */
+const RATE_WINDOW_MS = 5_000;
+/** Below this span a streaming rate reading is mostly noise, so the previous reading stays. */
+const RATE_STREAM_MIN_SPAN_MS = 1_000;
+/** `message_complete` is a short request's last chance to report a speed at all. */
+const RATE_COMPLETE_MIN_SPAN_MS = 250;
 
 export interface SessionStatsAggregator {
   /**
@@ -17,6 +23,11 @@ export interface SessionStatsAggregator {
     usage: { inputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number },
     at: number,
   ): void;
+  /**
+   * Cumulative output tokens for the message (not an increment). Each call also refreshes
+   * `lastGenTokensPerSec` from a rolling window, so the speed reading tracks the current
+   * generation rate instead of one end-of-request average.
+   */
   recordMessageDelta(outputTokens: number, at: number): void;
   /**
    * Per-request input-side totals seen later on the wire, for gateways that cannot know prompt
@@ -95,6 +106,10 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
   let turnStartedAt: number | undefined;
 
   let lastGenTokensPerSec: number | undefined;
+  /** Sliding (timestamp, cumulative output) samples behind `lastGenTokensPerSec`. */
+  let rateSamples: { at: number; tokens: number }[] = [];
+  /** Whether the request in flight ever produced a rate reading of its own. */
+  let requestRateObserved = false;
   let lastFirstTokenLatencyMs: number | undefined;
   let lastRequestDurationMs: number | undefined;
   let lastTurnDurationMs: number | undefined;
@@ -112,6 +127,39 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
     return created;
   }
 
+  function pushRateSample(at: number, tokens: number): void {
+    rateSamples.push({ at, tokens });
+    // Trim to the last sample at or before the window edge — it stands in for the token baseline
+    // at the edge — so the array stays bounded and the rate stays a windowed reading.
+    let keep = 0;
+    while (rateSamples[keep + 1] !== undefined && rateSamples[keep + 1].at <= at - RATE_WINDOW_MS) {
+      keep += 1;
+    }
+    if (keep > 0) {
+      rateSamples.splice(0, keep);
+    }
+  }
+
+  function updateGenRate(minSpanMs: number, at: number, tokens: number): void {
+    pushRateSample(at, tokens);
+    const first = rateSamples[0];
+    const last = rateSamples[rateSamples.length - 1];
+    if (first === undefined || first === last) {
+      return;
+    }
+    const spanMs = last.at - first.at;
+    if (spanMs < minSpanMs) {
+      return;
+    }
+    const emitted = last.tokens - first.tokens;
+    if (emitted <= 0) {
+      // A stalled stream keeps its last reading rather than dropping toward zero on silence.
+      return;
+    }
+    lastGenTokensPerSec = emitted / (spanMs / 1_000);
+    requestRateObserved = true;
+  }
+
   return {
     recordMessageStart(usage, at) {
       // Each request gets its own clock. Seeding it only once would measure every later request
@@ -121,6 +169,8 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
       streamRequestObserved = true;
       firstAssistantTokenAt = undefined;
       currentRequestOutputTokens = 0;
+      rateSamples = [];
+      requestRateObserved = false;
       requestCount += 1;
       currentRequestInputTokens = usage.inputTokens;
       currentRequestCacheReadTokens = usage.cacheReadTokens ?? 0;
@@ -131,12 +181,13 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
       sessionCacheWriteTokens += currentRequestCacheWriteTokens;
     },
 
-    recordMessageDelta(outputTokens) {
+    recordMessageDelta(outputTokens, at) {
       const delta = outputTokens - currentRequestOutputTokens;
       if (delta > 0) {
         sessionOutputTokens += delta;
       }
       currentRequestOutputTokens = Math.max(currentRequestOutputTokens, outputTokens);
+      updateGenRate(RATE_STREAM_MIN_SPAN_MS, at, currentRequestOutputTokens);
     },
 
     reconcileStreamUsage(usage) {
@@ -164,7 +215,13 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
     },
 
     recordFirstAssistantToken(at) {
-      firstAssistantTokenAt ??= at;
+      if (firstAssistantTokenAt !== undefined) {
+        return;
+      }
+      firstAssistantTokenAt = at;
+      // The window needs a zero-token baseline at the first emission; without it a request whose
+      // only delta lands under the streaming minimum span would never report a speed.
+      pushRateSample(at, currentRequestOutputTokens);
     },
 
     recordMessageComplete(at) {
@@ -176,7 +233,15 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
       streamRequestObserved = false;
       lastFirstTokenLatencyMs = undefined;
       lastRequestDurationMs = undefined;
-      lastGenTokensPerSec = undefined;
+
+      if (!requestRateObserved && rateSamples.length > 0) {
+        // A short request may never have reached the streaming minimum span; give it one more
+        // chance with the result timestamp before falling back to clearing the reading.
+        updateGenRate(RATE_COMPLETE_MIN_SPAN_MS, at, currentRequestOutputTokens);
+      }
+      if (!requestRateObserved) {
+        lastGenTokensPerSec = undefined;
+      }
 
       if (requestStartedAt !== undefined && at >= requestStartedAt) {
         lastRequestDurationMs = at - requestStartedAt;
@@ -187,13 +252,6 @@ export function createSessionStatsAggregator(): SessionStatsAggregator {
         firstAssistantTokenAt >= requestStartedAt
       ) {
         lastFirstTokenLatencyMs = firstAssistantTokenAt - requestStartedAt;
-      }
-      if (
-        firstAssistantTokenAt !== undefined &&
-        at > firstAssistantTokenAt &&
-        currentRequestOutputTokens > 0
-      ) {
-        lastGenTokensPerSec = currentRequestOutputTokens / ((at - firstAssistantTokenAt) / 1_000);
       }
     },
 
