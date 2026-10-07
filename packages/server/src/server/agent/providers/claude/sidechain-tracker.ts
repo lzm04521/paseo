@@ -64,6 +64,14 @@ export class ClaudeSidechainTracker {
   private readonly getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
   private readonly isDescriptorOwnedElsewhere: () => boolean;
   private readonly needsSyntheticParentToolCard: (toolUseId: string) => boolean;
+  /**
+   * A subagent's tool call, reported once when the tracker first sees it. Session stats count
+   * subagent work as the session's own, and this is the only place a child's tools are
+   * deduplicated — the same call arrives as a stream event and again in the finished message.
+   */
+  private readonly onToolUse: (toolName: string) => void;
+  /** The counted call failing. The use was already reported, so only the error is news. */
+  private readonly onToolError: (toolName: string) => void;
 
   constructor(input: {
     getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
@@ -74,10 +82,14 @@ export class ClaudeSidechainTracker {
      */
     isDescriptorOwnedElsewhere?: () => boolean;
     needsSyntheticParentToolCard?: (toolUseId: string) => boolean;
+    onToolUse?: (toolName: string) => void;
+    onToolError?: (toolName: string) => void;
   }) {
     this.getToolInput = input.getToolInput;
     this.isDescriptorOwnedElsewhere = input.isDescriptorOwnedElsewhere ?? (() => false);
     this.needsSyntheticParentToolCard = input.needsSyntheticParentToolCard ?? (() => true);
+    this.onToolUse = input.onToolUse ?? (() => undefined);
+    this.onToolError = input.onToolError ?? (() => undefined);
   }
 
   handleMessage(message: SDKMessage, parentToolUseId: string): AgentStreamEvent[] {
@@ -93,7 +105,7 @@ export class ClaudeSidechainTracker {
     this.activeSidechains.set(parentToolUseId, state);
 
     const contextUpdated = this.updateSubAgentContextFromTaskInput(state, parentToolUseId);
-    const actionCandidates = this.extractSubAgentActionCandidates(message);
+    const actionCandidates = this.extractSubAgentActionCandidates(message, state);
     const childTimelineItems = [
       ...this.extractSubAgentTimelineItems(message, state),
       ...this.extractSubAgentToolResults(message, state),
@@ -103,6 +115,7 @@ export class ClaudeSidechainTracker {
       if (state.completedActionKeys.has(action.key)) continue;
       if (this.appendSubAgentAction(state, action)) {
         actionUpdated = true;
+        this.onToolUse(action.toolName);
         const toolCall = mapClaudeRunningToolCall({
           name: action.toolName,
           callId: action.key,
@@ -306,6 +319,9 @@ export class ClaudeSidechainTracker {
         : mapClaudeCompletedToolCall(params);
       if (toolCall) {
         state.completedActionKeys.add(callId);
+        if (block.is_error === true) {
+          this.onToolError(toolName);
+        }
         items.push(toolCall);
       }
     }
@@ -409,13 +425,19 @@ export class ClaudeSidechainTracker {
     ];
   }
 
-  private extractSubAgentActionCandidates(message: SDKMessage): SubAgentActionCandidate[] {
-    return this.extractToolActionCandidates(message).filter(
+  private extractSubAgentActionCandidates(
+    message: SDKMessage,
+    state: SubAgentActivityState,
+  ): SubAgentActionCandidate[] {
+    return this.extractToolActionCandidates(message, state).filter(
       (action) => !isClaudeSubagentHandbackToolName(action.toolName),
     );
   }
 
-  private extractToolActionCandidates(message: SDKMessage): SubAgentActionCandidate[] {
+  private extractToolActionCandidates(
+    message: SDKMessage,
+    state: SubAgentActivityState,
+  ): SubAgentActionCandidate[] {
     if (message.type === "assistant") {
       return this.extractAssistantMessageActions(message);
     }
@@ -429,7 +451,15 @@ export class ClaudeSidechainTracker {
       if (!toolName) {
         return [];
       }
-      const key = readTrimmedString(message.tool_use_id) ?? `progress:${toolName}`;
+      const key = readTrimmedString(message.tool_use_id);
+      // Claude Code reports long-running tools through synthetic `-heartbeat-N`
+      // progress ids that carry no input and never receive a result. Treating an
+      // unknown id as a new action materializes an empty running card that
+      // shows a loading skeleton forever. Progress may only refresh a tool the
+      // subagent already announced.
+      if (!key || !state.actionIndexByKey.has(key)) {
+        return [];
+      }
       return [{ key, toolName, input: null }];
     }
 

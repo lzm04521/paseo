@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useSettings } from "@/hooks/use-settings";
 import {
   DndContext,
   DragOverlay,
@@ -106,10 +107,12 @@ interface SplitContainerProps {
   closingTabIds: Set<string>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => Promise<void> | void;
@@ -319,10 +322,12 @@ export function SplitContainer({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -415,17 +420,22 @@ export function SplitContainer({
     null,
   );
   const requestedExplorerSidebarWidth = previewExplorerSidebarWidth ?? storedExplorerSidebarWidth;
+  const explorerSidebarWidthRatio = useSettings(
+    (settings) => settings.explorerSidebarWidthPercent / 100,
+  );
   const explorerSidebarWidth = resolveExplorerSidebarWidth({
     requestedWidth: requestedExplorerSidebarWidth,
     containerWidth: workspaceShellWidth,
+    defaultWidthRatio: explorerSidebarWidthRatio,
   });
   const explorerSidebarDockSizes = useMemo(
     () =>
       resolveExplorerSidebarDockSizes({
         requestedWidth: requestedExplorerSidebarWidth,
         containerWidth: workspaceShellWidth,
+        defaultWidthRatio: explorerSidebarWidthRatio,
       }),
-    [requestedExplorerSidebarWidth, workspaceShellWidth],
+    [requestedExplorerSidebarWidth, workspaceShellWidth, explorerSidebarWidthRatio],
   );
   const renderExplorerSidebarDock = Boolean(
     !focusModeEnabled && explorerSidebarPane && explorerSidebarPane.hidden !== true,
@@ -660,10 +670,12 @@ export function SplitContainer({
                   closingTabIds={closingTabIds}
                   onNavigateTab={onNavigateTab}
                   onCloseTab={onCloseTab}
+                  workspaceRoot={workspaceRoot}
                   onCopyResumeCommand={onCopyResumeCommand}
                   onCopyAgentId={onCopyAgentId}
                   onCopyTerminalId={onCopyTerminalId}
-                  onCopyFilePath={onCopyFilePath}
+                  onCopyFileRelativePath={onCopyFileRelativePath}
+                  onCopyFileFullPath={onCopyFileFullPath}
                   onReloadAgent={onReloadAgent}
                   onRenameTab={onRenameTab}
                   onCloseTabsToLeft={onCloseTabsToLeft}
@@ -719,7 +731,9 @@ export function SplitContainer({
                   onCopyResumeCommand={onCopyResumeCommand}
                   onCopyAgentId={onCopyAgentId}
                   onCopyTerminalId={onCopyTerminalId}
-                  onCopyFilePath={onCopyFilePath}
+                  onCopyFileRelativePath={onCopyFileRelativePath}
+                  onCopyFileFullPath={onCopyFileFullPath}
+                  workspaceRoot={workspaceRoot}
                   onReloadAgent={onReloadAgent}
                   onRenameTab={onRenameTab}
                   onCloseTabsToLeft={onCloseTabsToLeft}
@@ -933,10 +947,12 @@ function SplitNodeView({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1021,10 +1037,12 @@ function SplitNodeView({
             closingTabIds={closingTabIds}
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
+            workspaceRoot={workspaceRoot}
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
-            onCopyFilePath={onCopyFilePath}
+            onCopyFileRelativePath={onCopyFileRelativePath}
+            onCopyFileFullPath={onCopyFileFullPath}
             onReloadAgent={onReloadAgent}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={onCloseTabsToLeft}
@@ -1076,7 +1094,9 @@ function SplitNodeView({
               onCopyResumeCommand={onCopyResumeCommand}
               onCopyAgentId={onCopyAgentId}
               onCopyTerminalId={onCopyTerminalId}
-              onCopyFilePath={onCopyFilePath}
+              workspaceRoot={workspaceRoot}
+              onCopyFileRelativePath={onCopyFileRelativePath}
+              onCopyFileFullPath={onCopyFileFullPath}
               onReloadAgent={onReloadAgent}
               onRenameTab={onRenameTab}
               onCloseTabsToLeft={onCloseTabsToLeft}
@@ -1133,10 +1153,12 @@ function SplitPaneView({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1268,10 +1290,12 @@ function SplitPaneView({
             setHoveredCloseTabKey={setHoveredCloseTabKey}
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
+            workspaceRoot={workspaceRoot}
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
-            onCopyFilePath={onCopyFilePath}
+            onCopyFileRelativePath={onCopyFileRelativePath}
+            onCopyFileFullPath={onCopyFileFullPath}
             onReloadAgent={onReloadAgent}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={handleCloseTabsToLeft}

@@ -1,6 +1,7 @@
 export const PRIMARY_LAUNCH_ORDER = [
   "agent",
   "terminal",
+  "powershell",
   "changes",
   "diff",
   "files",
@@ -11,6 +12,7 @@ export const PRIMARY_LAUNCH_ORDER = [
 export const SUPPORTING_LAUNCH_ORDER = [
   "changes",
   "terminal",
+  "powershell",
   "diff",
   "files",
   "agent",
@@ -18,7 +20,9 @@ export const SUPPORTING_LAUNCH_ORDER = [
   "pullRequest",
 ] as const;
 
-export type BuiltInLaunchItemId = (typeof PRIMARY_LAUNCH_ORDER)[number];
+export type BuiltInLaunchItemId =
+  | (typeof PRIMARY_LAUNCH_ORDER)[number]
+  | (typeof SUPPORTING_LAUNCH_ORDER)[number];
 
 export function getBuiltInLaunchOrder(purpose: "primary" | "supporting") {
   return purpose === "supporting" ? SUPPORTING_LAUNCH_ORDER : PRIMARY_LAUNCH_ORDER;

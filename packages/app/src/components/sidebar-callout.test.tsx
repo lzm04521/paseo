@@ -43,8 +43,12 @@ vi.mock("react-native-unistyles", () => ({
 }));
 
 vi.mock("lucide-react-native", () => {
-  const createIcon = (name: string) => (props: Record<string, unknown>) =>
-    React.createElement("span", { ...props, "data-icon": name });
+  const createIcon = (name: string) => {
+    const Icon = (props: Record<string, unknown>) =>
+      React.createElement("span", { ...props, "data-icon": name });
+    Icon.displayName = name;
+    return Icon;
+  };
   return {
     X: createIcon("X"),
     CheckCircle2: createIcon("CheckCircle2"),

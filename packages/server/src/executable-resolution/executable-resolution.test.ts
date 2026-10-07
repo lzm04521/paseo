@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { executableExists, findExecutable } from "./executable-resolution.js";
+import {
+  clearExecutableResolutionCacheForTests,
+  executableExists,
+  findExecutable,
+} from "./executable-resolution.js";
 import { windowsExecutableResolution } from "./windows.js";
 import { isPlatform } from "../test-utils/platform.js";
 
@@ -50,6 +54,7 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
+  clearExecutableResolutionCacheForTests();
 });
 
 describe("findExecutable", () => {

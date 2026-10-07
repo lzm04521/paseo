@@ -60,6 +60,23 @@ PASEO_DEV_SEED_HOME=/path/to/home npm run dev # seed from a different source hom
 PASEO_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived worktree home
 ```
 
+### Orchestration skills
+
+Daemon startup installs the bundled skills from `skills/` into the provider homes of whoever runs
+it: `~/.claude/skills`, `~/.codex/skills`, and `~/.agents/skills`. Those are where the agents Paseo
+spawns read their own skills, so that is the only place the install is useful.
+
+Point `PASEO_SKILLS_HOME` elsewhere to keep them out of your home:
+
+```bash
+PASEO_SKILLS_HOME=$PWD/.dev/skills-home npm run dev
+```
+
+`skillsHome` on the daemon config wins over the variable, and the variable wins over `os.homedir()`.
+The test suite sets the variable once in `packages/server/src/test-utils/vitest-setup.ts`, so a test
+run cannot write into the developer's home even when the harness booting the daemon does not name
+`skillsHome`.
+
 ### Daemon endpoints
 
 - Stable daemon launched by the desktop app: `localhost:6767`.

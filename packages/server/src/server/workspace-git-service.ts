@@ -28,6 +28,7 @@ import {
   resolveBranchCheckout,
   resolveAbsoluteGitDir,
 } from "../utils/checkout-git.js";
+import { ForgeAuthenticationError, ForgeCliMissingError } from "../services/forge-cli-command.js";
 import type {
   ForgeAuthState,
   ForgeService,
@@ -80,11 +81,74 @@ import { createWatcherLivenessCanary } from "./watcher-liveness-canary.js";
 
 const WORKSPACE_GIT_WATCH_DEBOUNCE_MS = 1_000;
 const BACKGROUND_GIT_FETCH_INTERVAL_MS = 180_000;
+const BACKGROUND_GIT_FETCH_BACKOFF_CAP_MS = 1_800_000;
+
+export function computeBackgroundFetchDelayMs(consecutiveErrors: number): number {
+  if (consecutiveErrors <= 0) {
+    return BACKGROUND_GIT_FETCH_INTERVAL_MS;
+  }
+  return Math.min(
+    BACKGROUND_GIT_FETCH_INTERVAL_MS * 2 ** (consecutiveErrors - 1),
+    BACKGROUND_GIT_FETCH_BACKOFF_CAP_MS,
+  );
+}
+
+export function shouldWarnOnFetchFailure(consecutiveErrors: number): boolean {
+  if (consecutiveErrors === 1 || consecutiveErrors === 5 || consecutiveErrors === 20) {
+    return true;
+  }
+  return consecutiveErrors > 20 && consecutiveErrors % 20 === 0;
+}
+
+export function shouldRefreshMetadataAfterFetchFailure(consecutiveErrors: number): boolean {
+  return consecutiveErrors < 3;
+}
+
+const DEFAULT_WS_GIT_BOOT_GRACE_MS = 30_000;
+const DEFAULT_WS_GIT_OBSERVATION_STAGGER_MS = 2_000;
+const DEFAULT_WS_GIT_OBSERVATION_JITTER_MS = 500;
+
+export interface WorkspaceGitObservationSchedulePolicy {
+  bootGraceMs: number;
+  staggerMs: number;
+  jitterMs: number;
+}
+
+export function loadWorkspaceGitObservationSchedulePolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): WorkspaceGitObservationSchedulePolicy {
+  const parse = (raw: string | undefined, fallback: number): number => {
+    const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  };
+  return {
+    bootGraceMs: parse(env.PASEO_WS_GIT_BOOT_GRACE_MS, DEFAULT_WS_GIT_BOOT_GRACE_MS),
+    staggerMs: parse(
+      env.PASEO_WS_GIT_OBSERVATION_STAGGER_MS,
+      DEFAULT_WS_GIT_OBSERVATION_STAGGER_MS,
+    ),
+    jitterMs: parse(env.PASEO_WS_GIT_OBSERVATION_JITTER_MS, DEFAULT_WS_GIT_OBSERVATION_JITTER_MS),
+  };
+}
+
+export function computeInitialGitActivityDelayMs(input: {
+  sequence: number;
+  policy: WorkspaceGitObservationSchedulePolicy;
+  random: number;
+}): number {
+  const { bootGraceMs, staggerMs, jitterMs } = input.policy;
+  if (bootGraceMs <= 0) {
+    return 0;
+  }
+  const jitter = jitterMs > 0 ? Math.round(input.random * jitterMs * 2) - jitterMs : 0;
+  return Math.max(0, bootGraceMs + input.sequence * staggerMs + jitter);
+}
+
 const FETCH_METADATA_ECHO_TTL_MS = 5_000;
 export const WORKSPACE_GIT_OBSERVATION_REENSURE_INTERVAL_MS = 60_000;
 const FORGE_PR_STATUS_POLL_FAST_INTERVAL_MS = 20_000;
 const FORGE_PR_STATUS_POLL_SLOW_INTERVAL_MS = 120_000;
-const FORGE_PR_STATUS_POLL_ERROR_BACKOFF_CAP_MS = 300_000;
+const FORGE_PR_STATUS_POLL_ERROR_BACKOFF_CAP_MS = 900_000;
 const DEGRADED_GIT_POLL_INTERVAL_MS = 5_000;
 // Degraded polling shells out a full Git refresh per tick, and the repositories that defeat the
 // recursive watcher are the ones where that refresh is expensive. At a fixed cadence the daemon
@@ -111,11 +175,36 @@ const WORKING_TREE_IGNORE_REFRESH_MAX_DELAY_MS = 2_000;
 // observer itself already fails into polling before a single root's
 // combined entry count could approach that cap.
 const WORKING_TREE_KNOWN_DIRECTORIES_MAX = 50_000;
+
+export const FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS = 8;
+
+export type ForgePollFailureClass = "environment" | "auth" | "transient";
+
+export function classifyForgePollFailure(error: unknown): ForgePollFailureClass {
+  if (error instanceof ForgeCliMissingError) {
+    return "environment";
+  }
+  if (error instanceof ForgeAuthenticationError) {
+    return "auth";
+  }
+  return "transient";
+}
 // Keep whole workspace pipelines below the lower-level Git process pool so daemon control work
 // retains subprocess and event-loop headroom during large workspace reconciliation bursts.
 export const WORKSPACE_GIT_REFRESH_CONCURRENCY = 4;
 export const WORKSPACE_GIT_OBSERVATION_SETUP_CONCURRENCY = 2;
 export const WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS = 10_000;
+
+/**
+ * Opt-in diagnostics for watcher subscription stalls (F1). Off by default; enable
+ * via PASEO_WS_GIT_WATCH_DIAG=1 or the watchDiagnostics constructor option. When
+ * enabled, subscription settle durations, deadline hits, canary verify durations,
+ * and observer metrics snapshots are logged at warn level for field triage.
+ */
+export function isWatchDiagnosticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.PASEO_WS_GIT_WATCH_DIAG === "1";
+}
+
 const WATCH_RECOVERY_BASE_DELAY_MS = 30_000;
 // Giving up permanently leaves polling as the only behaviour until a daemon
 // restart, which kills running agents. Back off, but keep trying.
@@ -397,6 +486,8 @@ interface WorkspaceGitServiceOptions {
   paseoHome: string;
   worktreesRoot?: string;
   fileObserver?: FileObserver;
+  observationSchedulePolicy?: WorkspaceGitObservationSchedulePolicy;
+  watchDiagnostics?: boolean;
   deps?: Partial<WorkspaceGitServiceDependencies>;
 }
 
@@ -425,6 +516,8 @@ interface WorkspaceGitTarget {
   observationReensureTimer: NodeJS.Timeout | null;
   forgePrStatusPollSubscription: { unsubscribe: () => void } | null;
   forgePrStatusPollKey: string | null;
+  forgePrStatusDegraded: ForgePollFailureClass | "repeated" | null;
+  forgePrStatusConsecutiveErrors: number;
   refreshState: WorkspaceGitRefreshState;
   latestGit: WorkspaceGitRuntimeSnapshot["git"] | null;
   latestGitLoadedAtMs: number | null;
@@ -439,6 +532,10 @@ interface WorkspaceGitTarget {
   repoGitRoot: string | null;
   observationSetupPromise: Promise<void> | null;
   observationSetupComplete: boolean;
+  observationSetupScheduledOnce: boolean;
+  observationSetupFirstActivityDone: boolean;
+  pendingInitialRefresh: Promise<void> | null;
+  pendingInitialRefreshResolve: (() => void) | null;
   closed: boolean;
 }
 
@@ -452,6 +549,8 @@ interface RepoGitTarget {
   fallbackPollQuietTickCount: number;
   recovery: WatchRecoveryState;
   intervalId: NodeJS.Timeout | null;
+  fetchTimer: NodeJS.Timeout | null;
+  consecutiveFetchErrors: number;
   fetchInFlight: boolean;
   bufferedFetchMetadataEvents: FileChange[];
   recentFetchRemoteRefChanges: Map<
@@ -601,6 +700,12 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private readonly disposeController = new AbortController();
   private disposed = false;
   private disposePromise: Promise<void> | null = null;
+  private readonly observationSchedulePolicy: WorkspaceGitObservationSchedulePolicy;
+  private readonly watchDiagnostics: boolean;
+  private initialGitActivitySequence = 0;
+  private initialGitActivityAnchorMs: number | null = null;
+  private lastInitialGitActivitySlotMs: number | null = null;
+  private readonly initialGitActivityTimers = new Set<NodeJS.Timeout>();
   private readonly snapshotUpdatedListeners = new Set<WorkspaceGitSnapshotUpdatedListener>();
   private readonly workspaceTargets = new Map<string, WorkspaceGitTarget>();
   private readonly repoTargets = new Map<string, RepoGitTarget>();
@@ -639,6 +744,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.paseoHome = options.paseoHome;
     this.worktreesRoot = options.worktreesRoot;
     this.fileObserver = options.fileObserver ?? createFileObserver();
+    this.observationSchedulePolicy =
+      options.observationSchedulePolicy ?? loadWorkspaceGitObservationSchedulePolicy();
+    this.watchDiagnostics = options.watchDiagnostics ?? isWatchDiagnosticsEnabled();
     this.deps = resolveWorkspaceGitServiceDeps(
       this.fileObserver.subscribe.bind(this.fileObserver),
       options.deps,
@@ -752,7 +860,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (!request.force && target.latestSnapshot) {
       return target.latestSnapshot;
     }
-
+    if (!request.force && target.pendingInitialRefresh) {
+      // F5b：宽限期内并入已排定的首轮刷新，避免连接风暴里每个请求各刷一轮
+      await target.pendingInitialRefresh;
+      this.assertNotDisposed(); // 宽限期内被 dispose：快速失败而非继续刷新
+      if (target.latestSnapshot) {
+        return target.latestSnapshot;
+      }
+    }
     return this.requestWorkspaceSnapshot(target, request);
   }
 
@@ -962,6 +1077,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       movedRemoteRefs: new Set(),
     });
     this.scheduleWorkspaceObservationSetup(target);
+    if (target.forgePrStatusDegraded !== null) {
+      target.forgePrStatusDegraded = null;
+      this.updateForgePrStatusPollForTarget(target, { forceImmediate: true });
+    }
   }
 
   async requestWorkingTreeWatch(
@@ -1021,6 +1140,18 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.disposeController.abort(new WorkspaceGitServiceDisposedError());
     this.workspaceRefreshLimit.clearQueue();
     this.workspaceObservationSetupLimit.clearQueue();
+    for (const timer of this.initialGitActivityTimers) {
+      clearTimeout(timer);
+    }
+    this.initialGitActivityTimers.clear();
+
+    for (const target of this.workspaceTargets.values()) {
+      // F5b：宽限期内 dispose，resolve 同一个 pendingInitialRefresh 唤醒已 await
+      // 的 getSnapshot 等待方（Task 5 join 消费；本 Task 不单测，Task 5 覆盖）。
+      target.pendingInitialRefreshResolve?.();
+      target.pendingInitialRefreshResolve = null;
+      target.pendingInitialRefresh = null;
+    }
 
     for (const target of this.workspaceTargets.values()) {
       this.closeWorkspaceTarget(target);
@@ -1190,6 +1321,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       observationReensureTimer: null,
       forgePrStatusPollSubscription: null,
       forgePrStatusPollKey: null,
+      forgePrStatusDegraded: null,
+      forgePrStatusConsecutiveErrors: 0,
       refreshState: { status: "idle" },
       latestGit: null,
       latestGitLoadedAtMs: null,
@@ -1204,6 +1337,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       repoGitRoot: null,
       observationSetupPromise: null,
       observationSetupComplete: false,
+      observationSetupScheduledOnce: false,
+      observationSetupFirstActivityDone: false,
+      pendingInitialRefresh: null,
+      pendingInitialRefreshResolve: null,
       closed: false,
     };
 
@@ -1211,25 +1348,109 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return target;
   }
 
+  /**
+   * F5b 启动错峰（主修）：注册触发的首个快照刷新经 `scheduleInitialGitActivity`
+   * 纳入启动宽限+错峰槽位，而非注册即刷新；grace=0 时立即执行（恢复现状）。
+   * `pendingInitialRefresh` 供 getSnapshot 等待方 join（Task 5 消费）；dispose 通过
+   * `pendingInitialRefreshResolve` resolve 同一个 promise 唤醒已 await 的等待方。
+   */
   private scheduleInitialWorkspaceRefresh(target: WorkspaceGitTarget): void {
-    queueMicrotask(() => {
-      if (!this.isActiveObservedWorkspaceTarget(target) || target.latestSnapshot) {
-        return;
-      }
-      void this.refreshWorkspaceTarget(target, {
-        force: false,
-        refreshStructure: true,
-        refreshWorktree: true,
-        includeForge: true,
-        reason: "initial",
-        notify: true,
-        queueIfBusy: false,
-        movedRemoteRefs: new Set(),
+    if (target.pendingInitialRefresh) {
+      return;
+    }
+    let resolvePending: () => void = () => undefined;
+    const pending = new Promise<void>((settle) => {
+      resolvePending = () => {
+        // F5b：promise 正常结算后清空 dispose 兜底句柄，避免重复唤醒。
+        if (target.pendingInitialRefreshResolve === resolvePending) {
+          target.pendingInitialRefreshResolve = null;
+        }
+        settle();
+      };
+    });
+    target.pendingInitialRefresh = pending;
+    target.pendingInitialRefreshResolve = resolvePending;
+    this.scheduleInitialGitActivity(() => {
+      queueMicrotask(() => {
+        if (!this.isActiveObservedWorkspaceTarget(target) || target.latestSnapshot) {
+          resolvePending();
+          return;
+        }
+        void this.refreshWorkspaceTarget(target, {
+          force: false,
+          refreshStructure: true,
+          refreshWorktree: true,
+          includeForge: true,
+          reason: "initial",
+          notify: true,
+          queueIfBusy: false,
+          movedRemoteRefs: new Set(),
+        }).then(resolvePending, resolvePending);
       });
     });
   }
 
+  /**
+   * F4 启动错峰：首次 git 观察活动（观察 setup、首次 fetch）统一经此调度。
+   * 槽位时刻 = 批次锚点 + 注册批次宽限 + 序号×错峰步长 ± 抖动，延迟 =
+   * max(0, 槽位时刻 − 距锚点流逝时间)，使链式活动（观察 setup 完成后调度
+   * 的首 fetch）落在自身的错峰槽位而非重新起算宽限。锚点在静默（距上一
+   * 槽位超过宽限）后重置，每个连接批次各自起算宽限与错峰；grace=0 时
+   * 立即执行（恢复现状）。
+   */
+  private scheduleInitialGitActivity(callback: () => void): void {
+    if (this.disposed) {
+      return;
+    }
+    const nowMs = Date.now();
+    const lastSlotMs = this.lastInitialGitActivitySlotMs;
+    if (
+      this.initialGitActivityAnchorMs === null ||
+      lastSlotMs === null ||
+      nowMs - lastSlotMs > this.observationSchedulePolicy.bootGraceMs
+    ) {
+      this.initialGitActivitySequence = 0;
+      this.initialGitActivityAnchorMs = nowMs;
+    }
+    const anchorMs = this.initialGitActivityAnchorMs;
+    const sequence = this.initialGitActivitySequence++;
+    const slotMs = computeInitialGitActivityDelayMs({
+      sequence,
+      policy: this.observationSchedulePolicy,
+      random: Math.random(),
+    });
+    this.lastInitialGitActivitySlotMs = anchorMs + slotMs;
+    const delayMs = Math.max(0, slotMs - (nowMs - anchorMs));
+    if (delayMs <= 0) {
+      callback();
+      return;
+    }
+    const timer: NodeJS.Timeout = setTimeout(() => {
+      this.initialGitActivityTimers.delete(timer);
+      if (!this.disposed) {
+        callback();
+      }
+    }, delayMs);
+    this.initialGitActivityTimers.add(timer);
+  }
+
   private scheduleWorkspaceObservationSetup(target: WorkspaceGitTarget): void {
+    const scheduleFirstTime = !target.observationSetupScheduledOnce;
+    if (scheduleFirstTime) {
+      target.observationSetupScheduledOnce = true;
+      this.scheduleInitialGitActivity(() => {
+        target.observationSetupFirstActivityDone = true;
+        if (!target.closed && this.isActiveObservedWorkspaceTarget(target)) {
+          this.scheduleWorkspaceObservationSetup(target);
+        }
+      });
+      return;
+    }
+    // 宽限期内（首次活动尚未发生）re-ensure/refresh() 的再次调度仅入队不执行，
+    // 由已排定的错峰定时器统一触发，避免提前绕过启动宽限（spec F4 第 1 点）。
+    if (!target.observationSetupFirstActivityDone) {
+      return;
+    }
     if (
       target.observationSetupComplete ||
       target.observationSetupPromise ||
@@ -1389,15 +1610,50 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const signal = this.disposeController.signal;
     let outcome: "pending" | "accepted" | "expired" = "pending";
     let timeout: NodeJS.Timeout | null = null;
+    let timeoutFired = false;
     let removeAbortListener = () => {};
     let unsubscribePromise: Promise<void> | null = null;
     let subscriptionPromise: Promise<FileObserverSubscription>;
-    try {
-      subscriptionPromise = this.deps
-        .subscribe(watchPath, callback, options)
-        .finally(onSubscribeSettled);
-    } catch (error) {
+    const startedAtMs = Date.now();
+    // F1 review: the settle diagnostic must not read `outcome`. A reaction on the
+    // raw subscribe promise runs BEFORE the Promise.race continuation assigns
+    // "accepted", so every settle would log "pending". Derive the label from how
+    // the raw promise settled instead: once the deadline fired or disposal
+    // aborted, any (late) settle is an expiry; otherwise resolution is acceptance
+    // and rejection is an error.
+    const reportSettleWithDiag = (settledAs: "resolved" | "rejected") => {
       onSubscribeSettled();
+      if (!this.watchDiagnostics) {
+        return;
+      }
+      let settleOutcome: "accepted" | "error" | "expired";
+      if (timeoutFired || signal.aborted) {
+        settleOutcome = "expired";
+      } else {
+        settleOutcome = settledAs === "resolved" ? "accepted" : "error";
+      }
+      this.logger.warn(
+        {
+          watchPath,
+          durationMs: Date.now() - startedAtMs,
+          outcome: settleOutcome,
+        },
+        "watch_diag_subscribe_settled",
+      );
+    };
+    try {
+      subscriptionPromise = this.deps.subscribe(watchPath, callback, options).then(
+        (subscription) => {
+          reportSettleWithDiag("resolved");
+          return subscription;
+        },
+        (error: unknown) => {
+          reportSettleWithDiag("rejected");
+          throw error;
+        },
+      );
+    } catch (error) {
+      reportSettleWithDiag("rejected");
       throw error;
     }
     void subscriptionPromise.then(
@@ -1413,6 +1669,17 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => {
         outcome = "expired";
+        timeoutFired = true;
+        if (this.watchDiagnostics) {
+          this.logger.warn(
+            {
+              watchPath,
+              deadlineMs: WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS,
+              fileObserver: this.fileObserver.getDiagnostics(),
+            },
+            "watch_diag_subscribe_deadline",
+          );
+        }
         reject(new WorkspaceGitWatcherSubscriptionTimeoutError(watchPath));
       }, WORKSPACE_GIT_WATCHER_SUBSCRIBE_TIMEOUT_MS);
     });
@@ -1558,7 +1825,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         throw error;
       }
       this.logger.warn(
-        { err: error, cwd: target.cwd },
+        {
+          err: error,
+          cwd: target.cwd,
+          ...(this.watchDiagnostics ? { fileObserver: this.fileObserver.getDiagnostics() } : {}),
+        },
         "Failed to start working tree watcher; using degraded polling",
       );
       if (!options?.replaceFallback) {
@@ -2148,6 +2419,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       fallbackPollQuietTickCount: 0,
       recovery: { attemptCount: 0, timer: null, establishedAt: null },
       intervalId: null,
+      fetchTimer: null,
+      consecutiveFetchErrors: 0,
       fetchInFlight: false,
       bufferedFetchMetadataEvents: [],
       recentFetchRemoteRefChanges: new Map(),
@@ -2181,10 +2454,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (!hasOrigin) {
       return;
     }
-    repoTarget.intervalId = setInterval(() => {
-      void this.runRepoFetch(repoTarget);
-    }, BACKGROUND_GIT_FETCH_INTERVAL_MS);
-    void this.runRepoFetch(repoTarget);
+    this.scheduleInitialGitActivity(() => {
+      if (!repoTarget.closed && this.repoTargets.get(repoTarget.repoGitRoot) === repoTarget) {
+        void this.runRepoFetch(repoTarget);
+      }
+    });
   }
 
   private async startRepoMetadataObservation(
@@ -2263,7 +2537,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         markSubscribeSettled,
       );
       openedSubscription = subscription;
+      const canaryStartedAtMs = Date.now();
       await canary.verify(this.disposeController.signal);
+      if (this.watchDiagnostics) {
+        this.logger.warn(
+          { repoGitRoot: target.repoGitRoot, durationMs: Date.now() - canaryStartedAtMs },
+          "watch_diag_canary_verified",
+        );
+      }
       if (watcherErrored) {
         await this.unsubscribeWatcherSubscription(subscription, target.repoGitRoot);
         return false;
@@ -2300,7 +2581,11 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         throw error;
       }
       this.logger.warn(
-        { err: error, repoGitRoot: target.repoGitRoot },
+        {
+          err: error,
+          repoGitRoot: target.repoGitRoot,
+          ...(this.watchDiagnostics ? { fileObserver: this.fileObserver.getDiagnostics() } : {}),
+        },
         "Failed to start repository metadata watcher; using degraded polling",
       );
       if (!options?.replaceFallback) {
@@ -2755,7 +3040,10 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.updateForgePrStatusPollForTarget(target);
   }
 
-  private updateForgePrStatusPollForTarget(target: WorkspaceGitTarget): void {
+  private updateForgePrStatusPollForTarget(
+    target: WorkspaceGitTarget,
+    options?: { forceImmediate?: boolean },
+  ): void {
     if (target.listeners.size === 0) {
       this.stopForgePrStatusPollForTarget(target);
       return;
@@ -2788,7 +3076,14 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (target.forgePrStatusPollKey === pollKey && target.forgePrStatusPollSubscription) {
       return;
     }
-    const pollImmediately = previousPollKey !== null && previousPollKey !== pollKey;
+    const pollImmediately =
+      options?.forceImmediate === true || (previousPollKey !== null && previousPollKey !== pollKey);
+    if (target.forgePrStatusDegraded !== null) {
+      if (previousPollKey === pollKey) {
+        return;
+      }
+      target.forgePrStatusDegraded = null;
+    }
 
     this.stopForgePrStatusPollForTarget(target);
     target.forgePrStatusPollKey = pollKey;
@@ -2801,6 +3096,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           ? { headRepositoryOwner: pollTarget.headRepositoryOwner }
           : {}),
         onStatus: (status) => {
+          target.forgePrStatusConsecutiveErrors = 0;
           if (!this.isActiveObservedWorkspaceTarget(target)) {
             return;
           }
@@ -2813,17 +3109,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           );
         },
         onError: (error) => {
-          this.logger.warn(
-            {
-              err: error,
-              cwd: target.cwd,
-              forge: resolution.forge,
-              headRef: pollTarget.headRef,
-              headRepositoryOwner: pollTarget.headRepositoryOwner,
-              reason: "self-heal-forge-pr-status",
-            },
-            "Failed to run forge PR status self-heal refresh",
-          );
+          this.handleForgePollError(target, resolution.forge, error);
         },
       });
       return;
@@ -2855,7 +3141,6 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     let timer: NodeJS.Timeout | null = null;
     let latestStatus: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"] =
       target.latestForge?.pullRequest ?? null;
-    let consecutiveErrors = 0;
 
     const schedule = (delayMs: number) => {
       if (closed) {
@@ -2883,26 +3168,17 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         });
         if (!closed && this.isActiveObservedWorkspaceTarget(target)) {
           latestStatus = status;
-          consecutiveErrors = 0;
+          target.forgePrStatusConsecutiveErrors = 0;
           this.rememberForgePrStatusSnapshot(target, buildForgeSnapshotFromStatus(status, forge), {
             notify: true,
           });
         }
       } catch (error) {
-        consecutiveErrors += 1;
-        this.logger.warn(
-          {
-            err: error,
-            cwd: target.cwd,
-            forge,
-            headRef: pollTarget.headRef,
-            headRepositoryOwner: pollTarget.headRepositoryOwner,
-            reason: "self-heal-forge-pr-status",
-          },
-          "Failed to run forge PR status self-heal refresh",
-        );
+        this.handleForgePollError(target, forge, error);
       } finally {
-        schedule(computeGenericForgeNextInterval(latestStatus, consecutiveErrors));
+        schedule(
+          computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors),
+        );
       }
     };
 
@@ -2910,7 +3186,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     // changes. Revalidate that new identity immediately instead of leaving the
     // PR panel empty for the full stable polling interval.
     schedule(
-      pollImmediately ? 0 : computeGenericForgeNextInterval(latestStatus, consecutiveErrors),
+      pollImmediately
+        ? 0
+        : computeGenericForgeNextInterval(latestStatus, target.forgePrStatusConsecutiveErrors),
     );
     return {
       unsubscribe: () => {
@@ -2945,10 +3223,59 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return { headRef: git.currentBranch };
   }
 
+  /**
+   * F2 停摆：仅断开订阅并标记 degraded，保留 pollKey——同 key 的自动重订
+   * （self-heal、观察重建）被 updateForgePrStatusPollForTarget 的守卫抑制；
+   * pollKey 变化（分支/远端变化）或用户显式 refresh(cwd) 才恢复。
+   */
+  private degradeForgePrStatusPoll(
+    target: WorkspaceGitTarget,
+    reason: ForgePollFailureClass | "repeated",
+  ): void {
+    target.forgePrStatusPollSubscription?.unsubscribe();
+    target.forgePrStatusPollSubscription = null;
+    target.forgePrStatusDegraded = reason;
+    this.logger.warn(
+      {
+        cwd: target.cwd,
+        degraded: reason,
+        consecutiveErrors: target.forgePrStatusConsecutiveErrors,
+        recovery: "branch/remote change or explicit workspace refresh",
+      },
+      "Forge PR status polling stopped after repeated failures",
+    );
+  }
+
+  private handleForgePollError(target: WorkspaceGitTarget, forge: string, error: unknown): void {
+    const failureClass = classifyForgePollFailure(error);
+    if (failureClass === "environment" || failureClass === "auth") {
+      this.degradeForgePrStatusPoll(target, failureClass);
+      return;
+    }
+    target.forgePrStatusConsecutiveErrors += 1;
+    if (target.forgePrStatusConsecutiveErrors >= FORGE_POLL_DEGRADED_AFTER_CONSECUTIVE_ERRORS) {
+      this.degradeForgePrStatusPoll(target, "repeated");
+      return;
+    }
+    const fields = {
+      err: error,
+      cwd: target.cwd,
+      forge,
+      reason: "self-heal-forge-pr-status",
+    };
+    if (target.forgePrStatusConsecutiveErrors === 1) {
+      this.logger.warn(fields, "Failed to run forge PR status self-heal refresh");
+    } else {
+      this.logger.debug(fields, "Failed to run forge PR status self-heal refresh");
+    }
+  }
+
   private stopForgePrStatusPollForTarget(target: WorkspaceGitTarget): void {
     target.forgePrStatusPollSubscription?.unsubscribe();
     target.forgePrStatusPollSubscription = null;
     target.forgePrStatusPollKey = null;
+    target.forgePrStatusDegraded = null;
+    target.forgePrStatusConsecutiveErrors = 0;
   }
 
   /**
@@ -3519,8 +3846,46 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     if (target.fetchInFlight) {
       return;
     }
-
     target.fetchInFlight = true;
+    try {
+      await this.performRepoFetch(target);
+    } finally {
+      target.fetchInFlight = false;
+      this.scheduleNextRepoFetch(target);
+    }
+  }
+
+  private scheduleNextRepoFetch(target: RepoGitTarget): void {
+    if (this.disposed || target.closed || this.repoTargets.get(target.repoGitRoot) !== target) {
+      return;
+    }
+    if (target.fetchTimer) {
+      clearTimeout(target.fetchTimer);
+    }
+    const delayMs = computeBackgroundFetchDelayMs(target.consecutiveFetchErrors);
+    target.fetchTimer = setTimeout(() => {
+      target.fetchTimer = null;
+      if (!this.disposed && !target.closed && this.repoTargets.get(target.repoGitRoot) === target) {
+        void this.runRepoFetch(target);
+      }
+    }, delayMs);
+  }
+
+  private logFetchFailure(target: RepoGitTarget, fields: object, message: string): void {
+    const fieldsWithCount = {
+      ...fields,
+      repoGitRoot: target.repoGitRoot,
+      cwd: target.cwd,
+      consecutiveFetchErrors: target.consecutiveFetchErrors,
+    };
+    if (shouldWarnOnFetchFailure(target.consecutiveFetchErrors)) {
+      this.logger.warn(fieldsWithCount, message);
+    } else {
+      this.logger.debug(fieldsWithCount, message);
+    }
+  }
+
+  private async performRepoFetch(target: RepoGitTarget): Promise<void> {
     this.logger.debug(
       { repoGitRoot: target.repoGitRoot, cwd: target.cwd },
       "Running background git fetch",
@@ -3543,10 +3908,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           createRunGitCommand("background-fetch"),
         );
       } catch (error) {
-        this.logger.warn(
-          { err: error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
-          "Background git fetch failed",
-        );
+        target.consecutiveFetchErrors += 1;
+        this.logFetchFailure(target, { err: error }, "Background git fetch failed");
       }
       this.applyRepoFetchResult(target, result, eventsBeforeFetchSnapshot);
     } finally {
@@ -3561,23 +3924,31 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   ): void {
     this.flushFetchMetadataEvents(target, eventsBeforeFetchSnapshot);
     if (!result || result.changes === null) {
-      target.recentFetchRemoteRefChanges.clear();
-      target.knownRemoteRefs = null;
-      this.flushBufferedFetchMetadataEvents(target);
       if (result) {
-        this.logger.warn(
-          { err: result.error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
+        target.consecutiveFetchErrors += 1;
+        this.logFetchFailure(
+          target,
+          { err: result.error },
           "Background git fetch ref classification failed; using structural refresh",
         );
       }
-      this.scheduleRepoMetadataRefresh(target, "repo-fetch-unclassified", false);
+      target.recentFetchRemoteRefChanges.clear();
+      target.knownRemoteRefs = null;
+      this.flushBufferedFetchMetadataEvents(target);
+      if (shouldRefreshMetadataAfterFetchFailure(target.consecutiveFetchErrors)) {
+        this.scheduleRepoMetadataRefresh(target, "repo-fetch-unclassified", false);
+      }
       return;
     }
     if (result.error) {
-      this.logger.warn(
-        { err: result.error, repoGitRoot: target.repoGitRoot, cwd: target.cwd },
+      target.consecutiveFetchErrors += 1;
+      this.logFetchFailure(
+        target,
+        { err: result.error },
         "Background git fetch completed with errors after changing refs",
       );
+    } else {
+      target.consecutiveFetchErrors = 0;
     }
     const expiresAtMs = this.deps.now().getTime() + FETCH_METADATA_ECHO_TTL_MS;
     const remoteRefShapeChanged =
@@ -3754,9 +4125,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
 
   private closeRepoTarget(target: RepoGitTarget): void {
     target.closed = true;
-    if (target.intervalId) {
-      clearInterval(target.intervalId);
-      target.intervalId = null;
+    if (target.fetchTimer) {
+      clearTimeout(target.fetchTimer);
+      target.fetchTimer = null;
     }
     if (target.fallbackPollTimer) {
       clearTimeout(target.fallbackPollTimer);
@@ -3949,7 +4320,7 @@ function buildWorkspaceForgePrStatusPollKey({
   ]);
 }
 
-function computeGenericForgeNextInterval(
+export function computeGenericForgeNextInterval(
   status: WorkspaceGitRuntimeSnapshot["forge"]["pullRequest"],
   consecutiveErrors: number,
 ): number {
