@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
+  AgentStreamEventPayloadSchema,
   AgentTimelineItemPayloadSchema,
   ServerInfoStatusPayloadSchema,
   SessionOutboundMessageSchema,
@@ -435,4 +437,58 @@ test("usage login errors are additive and older reports still parse", () => {
   expect(SessionOutboundMessageSchema.parse(oldMessage)).toEqual(oldMessage);
   expect(SessionOutboundMessageSchema.parse(newMessage)).toEqual(newMessage);
   expect(legacy.parse(newMessage)).toEqual(oldMessage);
+});
+
+const statsUpdatedEvent = {
+  type: "stats_updated",
+  provider: "claude",
+  stats: {
+    sessionInputTokens: 12000,
+    sessionCachedInputTokens: 8000,
+    sessionOutputTokens: 3400,
+    sessionCacheWriteTokens: 1200,
+    sessionTotalCostUsd: 1.23,
+    requestCount: 27,
+    turnCount: 6,
+    lastGenTokensPerSec: 38.5,
+    lastFirstTokenLatencyMs: 820,
+    lastRequestDurationMs: 4200,
+    lastTurnDurationMs: 30000,
+    cacheHitRate: 0.66,
+    toolCallTotal: 24,
+    toolCallErrors: 1,
+    toolCalls: [
+      { tool: "Bash", count: 12, errors: 1 },
+      { tool: "Read", count: 9, errors: 0 },
+    ],
+    subagents: [
+      { agentId: "sub-1", label: "Explore", inputTokens: 900, outputTokens: 120, running: false },
+    ],
+  },
+};
+
+test("current clients accept the stats_updated stream event", () => {
+  expect(AgentStreamEventPayloadSchema.parse(statsUpdatedEvent)).toEqual(statsUpdatedEvent);
+});
+
+test("pre-agentSessionStats clients reject stats_updated instead of crashing", () => {
+  // Simulates a client whose validator predates the member: same union minus the new variant.
+  const legacyOptions = (AgentStreamEventPayloadSchema.options as z.ZodTypeAny[]).filter(
+    (option) =>
+      ((option as z.ZodObject<z.ZodRawShape>).shape.type as z.ZodLiteral<string>).value !==
+      "stats_updated",
+  );
+  const legacyUnion = z.union(legacyOptions as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
+
+  expect(legacyOptions.length).toBe(AgentStreamEventPayloadSchema.options.length - 1);
+  expect(legacyUnion.safeParse(statsUpdatedEvent).success).toBe(false);
+  expect(AgentStreamEventPayloadSchema.safeParse(statsUpdatedEvent).success).toBe(true);
+});
+
+test("AgentSessionStatsSchema stays a pure wire declaration", () => {
+  const source = readFileSync(new URL("./messages.ts", import.meta.url), "utf8");
+  const start = source.indexOf("const AgentSessionStatsSchema");
+  expect(start).toBeGreaterThan(-1);
+  const block = source.slice(start, source.indexOf("\n});", start));
+  expect(block).not.toMatch(/\.(transform|catch|preprocess)\(/);
 });

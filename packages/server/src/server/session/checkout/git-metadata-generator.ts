@@ -14,6 +14,7 @@ import {
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
 import {
   buildMetadataPrompt,
+  readDaemonMetadataGenerationInstructions,
   type MetadataConfigKey,
 } from "../../../utils/build-metadata-prompt.js";
 
@@ -90,8 +91,9 @@ interface PromptForDiffInput {
 export function createGitMetadataGenerator(deps: {
   workspaceGitService: GitMetadataDiffSource;
   generation: StructuredTextGeneration;
+  readDaemonConfig: () => StructuredGenerationDaemonConfig;
 }): GitMetadataGenerator {
-  const { workspaceGitService, generation } = deps;
+  const { workspaceGitService, generation, readDaemonConfig } = deps;
 
   async function buildPromptForDiff(input: PromptForDiffInput): Promise<string> {
     const diff = await workspaceGitService.getCheckoutDiff(input.cwd, input.diffOptions);
@@ -100,6 +102,7 @@ export function createGitMetadataGenerator(deps: {
     return buildMetadataPrompt({
       cwd: input.cwd,
       workspaceGitService,
+      daemonInstructions: readDaemonMetadataGenerationInstructions(readDaemonConfig()),
       contract: input.contract,
       styles: [{ configKey: input.styleConfigKey, default: input.styleDefault }],
       after: [

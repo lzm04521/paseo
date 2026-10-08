@@ -59,7 +59,11 @@ describe("createGitMetadataGenerator", () => {
     const { generation, generateCalls } = createGeneration(() => ({
       message: "Fix the flaky retry test",
     }));
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     const message = await generator.generateCommitMessage("/repo");
 
@@ -82,7 +86,11 @@ describe("createGitMetadataGenerator", () => {
     const { generation } = createGeneration(() => {
       throw new StructuredAgentFallbackError([]);
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
   });
@@ -95,7 +103,11 @@ describe("createGitMetadataGenerator", () => {
         validationErrors: ["message: required"],
       });
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
   });
@@ -105,7 +117,11 @@ describe("createGitMetadataGenerator", () => {
     const { generation } = createGeneration(() => {
       throw new Error("network down");
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     await expect(generator.generateCommitMessage("/repo")).rejects.toThrow("network down");
   });
@@ -116,7 +132,11 @@ describe("createGitMetadataGenerator", () => {
       title: "Add retry with backoff",
       body: "Retries transient failures up to twice.",
     }));
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     const result = await generator.generatePullRequestText("/repo", "main");
 
@@ -140,7 +160,11 @@ describe("createGitMetadataGenerator", () => {
     const { generation } = createGeneration(() => {
       throw new StructuredAgentFallbackError([]);
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      readDaemonConfig: () => ({}),
+    });
 
     await expect(generator.generatePullRequestText("/repo")).resolves.toEqual({
       title: "Update changes",

@@ -20,6 +20,7 @@ import { streamSession } from "../test-utils/session-stream-adapter.js";
 import type {
   AgentPromptInput,
   AgentSession,
+  AgentSessionStats,
   AgentTimelineItem,
   AgentStreamEvent,
 } from "../../agent-sdk-types.js";
@@ -1909,6 +1910,39 @@ describe("ClaudeAgentSession context window usage", () => {
     return session as unknown as TestClaudeSession;
   }
 
+  function lastStatsEvent(events: AgentStreamEvent[]): AgentSessionStats | null {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === "stats_updated") {
+        return event.stats;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * `collectStreamEvents` returns the moment a terminal turn event is yielded, and the session
+   * stats for a turn are flushed just after that — once the turn has been accounted for. This
+   * collector subscribes directly so those trailing stats events are not dropped.
+   */
+  async function collectTurnEvents(session: AgentSession, prompt = "turn") {
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => {
+      events.push(event);
+    });
+    try {
+      await session.startTurn(prompt);
+      await vi.waitFor(() => {
+        expect(
+          events.some((event) => event.type === "turn_completed" || event.type === "turn_failed"),
+        ).toBe(true);
+      });
+    } finally {
+      unsubscribe();
+    }
+    return events;
+  }
+
   async function createSessionForTurns(
     turns: Array<Array<Record<string, unknown>>>,
     options?: QueryFactoryForTurnsOptions,
@@ -2778,6 +2812,303 @@ describe("ClaudeAgentSession context window usage", () => {
     }
   });
 
+  test("session stats total input as input + cache write + cache read", async () => {
+    const session = await createSessionForTurns([
+      [createInitMessage(), createMessageStartEvent(), createSuccessResult()],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 150,
+        sessionCachedInputTokens: 30,
+        sessionCacheWriteTokens: 20,
+        sessionOutputTokens: 0,
+        requestCount: 1,
+        cacheHitRate: 0.2,
+        turnCount: 1,
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("session stats accumulate across requests and message deltas", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        createMessageStartEvent(),
+        createMessageDeltaEvent(42),
+        createMessageStartEvent({ input_tokens: 10, cache_read_input_tokens: 5 }),
+        createMessageDeltaEvent(80),
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 165,
+        sessionCachedInputTokens: 35,
+        sessionOutputTokens: 122,
+        requestCount: 2,
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("session stats reconcile input totals that ride the message delta", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        // Gateway shape: message_start cannot know prompt tokens yet and reports zero; the real
+        // totals arrive with the final delta.
+        createMessageStartEvent({ input_tokens: 0, output_tokens: 0 }),
+        {
+          type: "stream_event",
+          event: {
+            type: "message_delta",
+            usage: {
+              output_tokens: 132,
+              input_tokens: 15_053,
+              cache_read_input_tokens: 640,
+            },
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        sessionInputTokens: 15_693,
+        sessionCachedInputTokens: 640,
+        sessionOutputTokens: 132,
+        requestCount: 1,
+      });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "usage_updated",
+          usage: expect.objectContaining({ contextWindowUsedTokens: 15_825 }),
+        }),
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("result messages publish the provider-reported session cost", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        createMessageStartEvent(),
+        createSuccessResult({ total_cost_usd: 1.5 }),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)?.sessionTotalCostUsd).toBe(1.5);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("counts main-loop tool calls and errors", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-stats-1", name: "Bash", input: { command: "ls" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        {
+          type: "user",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu-stats-1",
+                content: "boom",
+                is_error: true,
+              },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 1,
+        toolCallErrors: 1,
+        toolCalls: [{ tool: "Bash", count: 1, errors: 1 }],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("attributes sidechain usage to a subagent entry", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-stats",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "child" }],
+            usage: { input_tokens: 100, cache_read_input_tokens: 50, output_tokens: 20 },
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)?.subagents).toEqual([
+        { agentId: "toolu-agent-stats", inputTokens: 150, outputTokens: 20, running: true },
+      ]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("counts subagent tool calls toward the session totals", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-tools",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-child-1", name: "Read", input: { file_path: "/a" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 1,
+        toolCallErrors: 0,
+        toolCalls: [{ tool: "Read", count: 1, errors: 0 }],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("counts a subagent tool call once across its use and its result", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "assistant",
+          parent_tool_use_id: "toolu-agent-tools-once",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu-child-ok", name: "Read", input: { file_path: "/a" } },
+              { type: "tool_use", id: "toolu-child-bad", name: "Bash", input: { command: "ls" } },
+            ],
+          },
+          session_id: "session-1",
+        },
+        {
+          type: "user",
+          parent_tool_use_id: "toolu-agent-tools-once",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu-child-ok", content: "ok" },
+              {
+                type: "tool_result",
+                tool_use_id: "toolu-child-bad",
+                content: "boom",
+                is_error: true,
+              },
+            ],
+          },
+          session_id: "session-1",
+        },
+        createSuccessResult(),
+      ],
+    ]);
+
+    try {
+      const events = await collectTurnEvents(session);
+
+      expect(lastStatsEvent(events)).toMatchObject({
+        toolCallTotal: 2,
+        toolCallErrors: 1,
+        toolCalls: [
+          { tool: "Read", count: 1, errors: 0 },
+          { tool: "Bash", count: 1, errors: 1 },
+        ],
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("does not publish a session stats snapshot per streamed content block", async () => {
+    const blockStart = {
+      type: "stream_event",
+      event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "hi" } },
+      session_id: "session-1",
+    };
+    const plain = await createSessionForTurns([[createInitMessage(), createSuccessResult()]]);
+    const streamed = await createSessionForTurns([
+      [createInitMessage(), blockStart, blockStart, blockStart, createSuccessResult()],
+    ]);
+
+    try {
+      const plainEvents = await collectTurnEvents(plain);
+      const streamedEvents = await collectTurnEvents(streamed);
+
+      const countStats = (events: AgentStreamEvent[]) =>
+        events.filter((event) => event.type === "stats_updated").length;
+
+      expect(countStats(streamedEvents)).toBe(countStats(plainEvents));
+      expect(countStats(plainEvents)).toBeGreaterThan(0);
+    } finally {
+      await plain.close();
+      await streamed.close();
+    }
+  });
+
   test("selected Claude models seed active context window usage with max tokens", async () => {
     const session = await createSessionForTurns(
       [[createInitMessage(), createMessageStartEvent(), createSuccessResult()]],
@@ -3501,5 +3832,119 @@ describe("Claude question permission notifications", () => {
 
     expect(request.title).toBeUndefined();
     expect(request.description).toBeUndefined();
+  });
+});
+
+describe("ClaudeAgentClient fetchCatalog remote models", () => {
+  const logger = createTestLogger();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("lists only settings + remote models (no manifest) for fetchModels providers", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ id: "glm-4.7", display_name: "GLM 4.7" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      await fs.writeFile(
+        path.join(configDir, "settings.json"),
+        JSON.stringify({
+          model: "settings-declared-model",
+          env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-sonnet-5" },
+        }),
+        "utf8",
+      );
+      const client = new ClaudeAgentClient({
+        logger,
+        // 上游 v0.10.0 起不再支持 configDir option，改由 CLAUDE_CONFIG_DIR 注入
+        runtimeSettings: {
+          env: {
+            CLAUDE_CONFIG_DIR: configDir,
+            ANTHROPIC_BASE_URL: "https://relay.example.com",
+            ANTHROPIC_AUTH_TOKEN: "tok",
+          },
+        },
+        customProvider: { id: "my-relay", label: "My Relay", extends: "claude", fetchModels: true },
+      });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://relay.example.com/v1/models");
+      const modelIds = catalog.models.map((model) => model.id);
+      expect(modelIds).toContain("glm-4.7");
+      expect(modelIds).toContain("settings-declared-model");
+      expect(modelIds).toContain("claude-sonnet-5");
+      expect(modelIds).not.toContain("claude-opus-5");
+      expect(modelIds.length).toBe(3);
+      // 思考等级：非 Anthropic id（远端/自定义）拿 custom 兜底，可归一 manifest 的 id 继承官方选项
+      const remoteModel = catalog.models.find((model) => model.id === "glm-4.7");
+      expect(remoteModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      const settingsCustomModel = catalog.models.find(
+        (model) => model.id === "settings-declared-model",
+      );
+      expect(settingsCustomModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      const manifestModel = catalog.models.find((model) => model.id === "claude-sonnet-5");
+      expect(manifestModel?.thinkingOptions?.length).toBeGreaterThan(0);
+      expect(manifestModel?.defaultThinkingOptionId).toBeTruthy();
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to settings-only list when remote fetch fails for fetchModels providers", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      await fs.writeFile(
+        path.join(configDir, "settings.json"),
+        JSON.stringify({ model: "settings-declared-model" }),
+        "utf8",
+      );
+      const client = new ClaudeAgentClient({
+        logger,
+        runtimeSettings: { env: { CLAUDE_CONFIG_DIR: configDir, ANTHROPIC_AUTH_TOKEN: "tok" } },
+        customProvider: { id: "my-relay", label: "My Relay", extends: "claude", fetchModels: true },
+      });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(catalog.models.map((model) => model.id)).toEqual(["settings-declared-model"]);
+      expect(catalog.models[0]?.thinkingOptions?.length).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("skips remote fetch for builtin claude provider", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "claude-catalog-"));
+    try {
+      const client = new ClaudeAgentClient({
+        logger,
+        runtimeSettings: { env: { CLAUDE_CONFIG_DIR: configDir } },
+      });
+
+      const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(catalog.models.length).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(configDir, { recursive: true, force: true });
+    }
   });
 });
