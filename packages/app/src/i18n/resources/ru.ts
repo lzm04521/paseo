@@ -282,6 +282,10 @@ export const ru: TranslationResources = {
       model: "Изменить модель",
       mode: "Изменить режим",
     },
+    notices: {
+      modeAppliesNextTurn: "Режим разрешений применится со следующего хода",
+      thinkingAppliesNextTurn: "Уровень рассуждений применится со следующего хода",
+    },
   },
   agentStream: {
     empty: "Начните общаться с этим агентом...",

@@ -282,6 +282,10 @@ export const es: TranslationResources = {
       model: "Cambiar modelo",
       mode: "Cambiar modo",
     },
+    notices: {
+      modeAppliesNextTurn: "El modo de permiso se aplica en el próximo turno",
+      thinkingAppliesNextTurn: "El nivel de pensamiento se aplica en el próximo turno",
+    },
   },
   agentStream: {
     empty: "Comience a chatear con este agente...",

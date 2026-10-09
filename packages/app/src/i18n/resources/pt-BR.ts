@@ -281,6 +281,10 @@ export const ptBR: TranslationResources = {
       model: "Alterar modelo",
       mode: "Alterar modo de permissão",
     },
+    notices: {
+      modeAppliesNextTurn: "O modo de permissão será aplicado no próximo turno",
+      thinkingAppliesNextTurn: "O nível de raciocínio será aplicado no próximo turno",
+    },
   },
   agentStream: {
     empty: "Comece a conversar com este agente...",

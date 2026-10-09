@@ -1338,6 +1338,7 @@ describe("ClaudeAgentSession features", () => {
     await expect(session.setThinkingOption?.("ultracode")).resolves.toEqual({
       type: "warning",
       message: "Thinking level applies next turn",
+      code: "thinking_applies_next_turn",
     });
 
     await session.close();

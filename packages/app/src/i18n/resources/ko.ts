@@ -280,6 +280,10 @@ export const ko: TranslationResources = {
       model: "모델 변경",
       mode: "모드 변경",
     },
+    notices: {
+      modeAppliesNextTurn: "권한 모드는 다음 턴부터 적용됩니다",
+      thinkingAppliesNextTurn: "사고 수준은 다음 턴부터 적용됩니다",
+    },
   },
   agentStream: {
     empty: "이 에이전트와 대화를 시작하세요...",

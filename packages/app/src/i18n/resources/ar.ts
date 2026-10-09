@@ -280,6 +280,10 @@ export const ar: TranslationResources = {
       model: "تغيير النموذج",
       mode: "تغيير الوضع",
     },
+    notices: {
+      modeAppliesNextTurn: "سيُطبَّق وضع الأذونات في الدور التالي",
+      thinkingAppliesNextTurn: "سيُطبَّق مستوى التفكير في الدور التالي",
+    },
   },
   agentStream: {
     empty: "ابدأ الدردشة مع هذا الوكيل...",

@@ -280,6 +280,10 @@ export const zhCN: TranslationResources = {
       model: "切换 Model",
       mode: "更改模式",
     },
+    notices: {
+      modeAppliesNextTurn: "权限模式将在下一轮生效",
+      thinkingAppliesNextTurn: "思考级别将在下一轮生效",
+    },
   },
   agentStream: {
     empty: "开始和这个 Agent 对话...",

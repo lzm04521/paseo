@@ -403,6 +403,51 @@ describe("agent setting action responses", () => {
     }
     expect(thinking.payload.notice).toBeUndefined();
   });
+
+  test("parses notice codes and accepts codes this client does not recognize", () => {
+    const known = SessionOutboundMessageSchema.parse({
+      type: "set_agent_thinking_response",
+      payload: {
+        requestId: "req-known",
+        agentId: "agent-1",
+        accepted: true,
+        error: null,
+        notice: {
+          type: "warning",
+          message: "Thinking level applies next turn",
+          code: "thinking_applies_next_turn",
+        },
+      },
+    });
+    const unknown = SessionOutboundMessageSchema.parse({
+      type: "set_agent_mode_response",
+      payload: {
+        requestId: "req-unknown",
+        agentId: "agent-1",
+        accepted: true,
+        error: null,
+        notice: { type: "warning", message: "Some future notice", code: "invented_next_version" },
+      },
+    });
+
+    if (
+      known.type !== "set_agent_thinking_response" ||
+      unknown.type !== "set_agent_mode_response"
+    ) {
+      throw new Error("Expected agent setting responses");
+    }
+    expect(known.payload.notice).toEqual({
+      type: "warning",
+      message: "Thinking level applies next turn",
+      code: "thinking_applies_next_turn",
+    });
+    // A newer daemon must be able to introduce codes this client has never seen.
+    expect(unknown.payload.notice).toEqual({
+      type: "warning",
+      message: "Some future notice",
+      code: "invented_next_version",
+    });
+  });
 });
 
 describe("file explorer request compatibility", () => {

@@ -322,10 +322,26 @@ const AgentSelectOptionSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+// `.string()`, not `z.enum`: a newer daemon may send codes this client has never seen,
+// and an unknown value must not fail validation of the whole message.
+const AgentProviderNoticeCodeSchema = z.string();
+
 const AgentProviderNoticeSchema: z.ZodType<AgentProviderNotice> = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("info"), message: z.string() }),
-  z.object({ type: z.literal("warning"), message: z.string() }),
-  z.object({ type: z.literal("error"), message: z.string() }),
+  z.object({
+    type: z.literal("info"),
+    message: z.string(),
+    code: AgentProviderNoticeCodeSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("warning"),
+    message: z.string(),
+    code: AgentProviderNoticeCodeSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    message: z.string(),
+    code: AgentProviderNoticeCodeSchema.optional(),
+  }),
 ]);
 
 export const AgentFeatureToggleSchema = z.object({

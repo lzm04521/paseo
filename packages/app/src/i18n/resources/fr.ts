@@ -283,6 +283,10 @@ export const fr: TranslationResources = {
       model: "Changer de modèle",
       mode: "Changer de mode",
     },
+    notices: {
+      modeAppliesNextTurn: "Le mode d’autorisation s’applique au tour suivant",
+      thinkingAppliesNextTurn: "Le niveau de réflexion s’applique au tour suivant",
+    },
   },
   agentStream: {
     empty: "Commencez à discuter avec cet agent…",

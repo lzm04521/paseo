@@ -276,6 +276,10 @@ export const en = {
       model: "Change model",
       mode: "Change mode",
     },
+    notices: {
+      modeAppliesNextTurn: "Permission mode applies next turn",
+      thinkingAppliesNextTurn: "Thinking level applies next turn",
+    },
   },
   agentStream: {
     empty: "Start chatting with this agent...",

@@ -282,6 +282,10 @@ export const ja: TranslationResources = {
       model: "モデルを変更",
       mode: "権限モードを変更",
     },
+    notices: {
+      modeAppliesNextTurn: "権限モードは次のターンから適用されます",
+      thinkingAppliesNextTurn: "思考レベルは次のターンから適用されます",
+    },
   },
   agentStream: {
     empty: "このエージェントとチャットを始めましょう...",

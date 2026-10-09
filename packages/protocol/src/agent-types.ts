@@ -7,9 +7,24 @@ export interface AgentMetadata {
 }
 
 export type AgentProviderNotice =
-  | { type: "info"; message: string }
-  | { type: "warning"; message: string }
-  | { type: "error"; message: string };
+  | { type: "info"; message: string; code?: AgentProviderNoticeCode }
+  | { type: "warning"; message: string; code?: AgentProviderNoticeCode }
+  | { type: "error"; message: string; code?: AgentProviderNoticeCode };
+
+/**
+ * Stable identifier for a notice the client knows how to localize. `message` stays the
+ * English fallback, so a client that does not recognize the code shows readable text.
+ *
+ * Typed as `string` on the wire: a newer daemon may introduce codes an older client has
+ * never seen, and rejecting the whole message for an unknown code would break the protocol
+ * contract. Clients look the code up and fall back to `message` when it is not recognized.
+ */
+export type AgentProviderNoticeCode = string;
+
+export const AGENT_PROVIDER_NOTICE_CODES = {
+  modeAppliesNextTurn: "mode_applies_next_turn",
+  thinkingAppliesNextTurn: "thinking_applies_next_turn",
+} as const;
 
 /**
  * Stdio-based MCP server (spawns a subprocess).
