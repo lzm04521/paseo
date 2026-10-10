@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollableCodeSurface, SurfaceCard } from "@/components/ui/scrollable-code-surface";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { useToast } from "@/contexts/toast-context";
@@ -60,24 +61,36 @@ function rankModels<T>(items: T[], query: string, fields: (item: T) => string[])
 
 function DiscoveredModelRow({ model }: { model: AgentModelDefinition }) {
   return (
-    <View style={sheetStyles.modelRow}>
-      <Text style={sheetStyles.modelTitle} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={sheetStyles.monoHint}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      {model.description ? (
-        <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
-          {model.description}
-        </Text>
-      ) : null}
-    </View>
+    <Tooltip delayDuration={250} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <View style={sheetStyles.modelRow}>
+          <Text style={sheetStyles.modelTitle} numberOfLines={1}>
+            {model.label}
+          </Text>
+          <Text
+            style={sheetStyles.monoHint}
+            numberOfLines={1}
+            selectable
+            dataSet={CODE_SURFACE_DATASET}
+          >
+            {model.id}
+          </Text>
+          {model.description ? (
+            <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
+              {model.description}
+            </Text>
+          ) : null}
+        </View>
+      </TooltipTrigger>
+      {/* Row texts ellipsize at one line, so the tooltip carries the full values. */}
+      <TooltipContent side="top" align="start" offset={8} maxWidth={480}>
+        <Text style={sheetStyles.tooltipTitle}>{model.label}</Text>
+        <Text style={sheetStyles.tooltipId}>{model.id}</Text>
+        {model.description ? (
+          <Text style={sheetStyles.tooltipDescription}>{model.description}</Text>
+        ) : null}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -103,30 +116,38 @@ function CustomModelRow({
   );
 
   return (
-    <View style={sheetStyles.modelRow}>
-      <Text style={sheetStyles.modelTitle} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={sheetStyles.monoHint}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      <View style={sheetStyles.modelRowFiller} />
-      <Pressable
-        onPress={handleDelete}
-        disabled={deleting}
-        hitSlop={8}
-        style={deleteButtonStyle}
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.providers.models.removeModel", { id: model.id })}
-      >
-        <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />
-      </Pressable>
-    </View>
+    <Tooltip delayDuration={250} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <View style={sheetStyles.modelRow}>
+          <Text style={sheetStyles.modelTitle} numberOfLines={1}>
+            {model.label}
+          </Text>
+          <Text
+            style={sheetStyles.monoHint}
+            numberOfLines={1}
+            selectable
+            dataSet={CODE_SURFACE_DATASET}
+          >
+            {model.id}
+          </Text>
+          <View style={sheetStyles.modelRowFiller} />
+          <Pressable
+            onPress={handleDelete}
+            disabled={deleting}
+            hitSlop={8}
+            style={deleteButtonStyle}
+            accessibilityRole="button"
+            accessibilityLabel={t("settings.providers.models.removeModel", { id: model.id })}
+          >
+            <Trash2 size={theme.iconSize.sm} color={theme.colors.destructive} />
+          </Pressable>
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" offset={8} maxWidth={480}>
+        <Text style={sheetStyles.tooltipTitle}>{model.label}</Text>
+        <Text style={sheetStyles.tooltipId}>{model.id}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -723,6 +744,8 @@ export function ProviderDiagnosticSheet({
         header={sheetHeader}
         visible={visible}
         onClose={onClose}
+        desktopMaxWidth={680}
+        desktopMaxHeight="92%"
         testID="provider-settings-sheet"
         footer={renderProviderSheetFooter({
           fetchedAt: providerEntry?.fetchedAt ?? null,
@@ -789,6 +812,19 @@ const sheetStyles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.code,
     color: theme.colors.foregroundMuted,
     flexShrink: 0,
+  },
+  tooltipTitle: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foreground,
+  },
+  tooltipId: {
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.code,
+    color: theme.colors.foregroundMuted,
+  },
+  tooltipDescription: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
   descriptionInline: {
     flex: 1,
