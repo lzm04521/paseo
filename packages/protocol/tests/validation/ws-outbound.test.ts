@@ -266,6 +266,51 @@ const SourceSchema = z.object({
     expect(generated).toContain('from "../../validation/ws-outbound-schema-metadata.js"');
   });
 
+  it("preserves provider notice codes and accepts codes the client does not recognize", () => {
+    const known = {
+      type: "session",
+      message: {
+        type: "set_agent_thinking_response",
+        payload: {
+          requestId: "req-known",
+          agentId: "agent-1",
+          accepted: true,
+          error: null,
+          notice: {
+            type: "warning",
+            message: "Thinking level applies next turn",
+            code: "thinking_applies_next_turn",
+          },
+        },
+      },
+    };
+    const unknown = {
+      type: "session",
+      message: {
+        type: "set_agent_mode_response",
+        payload: {
+          requestId: "req-unknown",
+          agentId: "agent-1",
+          accepted: true,
+          error: null,
+          notice: {
+            type: "warning",
+            message: "Some future notice",
+            code: "invented_next_version",
+          },
+        },
+      },
+    };
+
+    // `code` must survive validation intact, and a newer daemon's code this client has
+    // never seen must not fail the envelope.
+    expect(GeneratedWSOutboundMessageSchema.safeParse(known)).toEqual({
+      success: true,
+      data: known,
+    });
+    expect(GeneratedWSOutboundMessageSchema.safeParse(unknown).success).toBe(true);
+  });
+
   it("accepts a forge.search.response envelope", () => {
     const result = GeneratedWSOutboundMessageSchema.safeParse({
       type: "session",

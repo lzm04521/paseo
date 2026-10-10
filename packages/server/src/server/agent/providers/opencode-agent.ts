@@ -58,6 +58,7 @@ import {
   type ToolCallDetail,
   type ToolCallTimelineItem,
 } from "../agent-sdk-types.js";
+import { createSessionStatsAggregator, type SessionStatsAggregator } from "./session-stats.js";
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import {
   raceProviderRefreshAbort,
@@ -1968,6 +1969,8 @@ export interface OpenCodeEventTranslationState {
   emittedUserMessageIds?: Set<string>;
   accumulatedUsage: AgentUsage;
   sessionTotalCostUsd?: number;
+  /** Optional so callers that only need timeline translation can omit session accounting. */
+  stats?: SessionStatsAggregator;
   materializedParts: Map<string, { messageId: string; emittedText: string; closed: boolean }>;
   emittedStructuredMessageIds: Set<string>;
   compactionSummaryMessageIds: Set<string>;
@@ -2842,6 +2845,10 @@ function appendOpenCodeMessagePartUpdated(
     mergeOpenCodeStepFinishUsage(state.accumulatedUsage, part, {
       totalCostUsd: state.sessionTotalCostUsd,
     });
+    const statsEvent = buildOpenCodeSessionStatsEvent(state, part);
+    if (statsEvent) {
+      events.push(statsEvent);
+    }
     if (hasNormalizedOpenCodeUsage(state.accumulatedUsage)) {
       events.push({
         type: "usage_updated",
@@ -2850,6 +2857,44 @@ function appendOpenCodeMessagePartUpdated(
       });
     }
   }
+}
+
+/**
+ * OpenCode reports one token snapshot per step, and a step is one model request, so the session
+ * total is summed here. `usage_updated` cannot carry it: `accumulatedUsage` is overwritten with
+ * each step's snapshot because the context meter needs the latest request, not the running sum.
+ */
+function buildOpenCodeSessionStatsEvent(
+  state: OpenCodeEventTranslationState,
+  part: {
+    tokens?: {
+      input?: unknown;
+      output?: unknown;
+      cache?: { read?: unknown; write?: unknown };
+    };
+  },
+): AgentStreamEvent | null {
+  const aggregator = state.stats;
+  if (!aggregator) {
+    return null;
+  }
+  const inputTokens = readPositiveFiniteNumber(part.tokens?.input);
+  const outputTokens = readPositiveFiniteNumber(part.tokens?.output);
+  const cacheReadTokens = readPositiveFiniteNumber(part.tokens?.cache?.read);
+  const cacheWriteTokens = readPositiveFiniteNumber(part.tokens?.cache?.write);
+  if (inputTokens === undefined && outputTokens === undefined) {
+    return null;
+  }
+  const now = Date.now();
+  aggregator.recordMessageStart(
+    { inputTokens: inputTokens ?? 0, cacheReadTokens, cacheWriteTokens },
+    now,
+  );
+  if (outputTokens !== undefined) {
+    aggregator.recordMessageDelta(outputTokens, now);
+  }
+  aggregator.recordResultUsage({ totalCostUsd: state.sessionTotalCostUsd });
+  return { type: "stats_updated", provider: "opencode", stats: aggregator.snapshot() };
 }
 
 function shouldSuppressOpenCodeAssistantPart(
@@ -3387,6 +3432,7 @@ class OpenCodeAgentSession implements AgentSession {
   private abortController: AbortController | null = null;
   private accumulatedUsage: AgentUsage = {};
   private sessionTotalCostUsd: number | undefined;
+  private readonly sessionStats = createSessionStatsAggregator();
   private mcpSetup: Promise<void> | null = null;
   private messageRoles = new Map<string, OpenCodeMessageRole>();
   private pendingUserMessageText: string | null = null;
@@ -5216,6 +5262,7 @@ class OpenCodeAgentSession implements AgentSession {
       emittedUserMessageIds: this.emittedUserMessageIds,
       accumulatedUsage: this.accumulatedUsage,
       sessionTotalCostUsd: this.sessionTotalCostUsd,
+      stats: this.sessionStats,
       materializedParts: this.materializedParts,
       emittedStructuredMessageIds: this.emittedStructuredMessageIds,
       compactionSummaryMessageIds: this.compactionSummaryMessageIds,

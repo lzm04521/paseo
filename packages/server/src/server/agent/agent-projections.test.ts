@@ -471,6 +471,66 @@ describe("toAgentPayload", () => {
 
     expect(payload.features).toEqual(features);
   });
+
+  it("omits stats when the agent has none", () => {
+    const payload = toAgentPayload(createManagedAgent({ stats: undefined }));
+    expect(payload).not.toHaveProperty("stats");
+  });
+
+  it("drops invalid stats numbers instead of the whole snapshot", () => {
+    const agent = createManagedAgent({
+      stats: {
+        sessionInputTokens: 12_000,
+        sessionOutputTokens: Number.NaN,
+        sessionTotalCostUsd: Number.POSITIVE_INFINITY,
+        requestCount: -3,
+        turnCount: 6,
+        cacheHitRate: 0,
+      },
+    });
+
+    const payload = toAgentPayload(agent);
+
+    expect(payload.stats).toEqual({
+      sessionInputTokens: 12_000,
+      turnCount: 6,
+      cacheHitRate: 0,
+    });
+  });
+
+  it("truncates stats rows and drops malformed tool-call and subagent entries", () => {
+    const toolCalls = Array.from({ length: 12 }, (_, index) => ({
+      tool: `Tool${index}`,
+      count: index + 1,
+      errors: 0,
+    }));
+    const subagents = Array.from({ length: 55 }, (_, index) => ({
+      agentId: `sub-${index}`,
+      running: index % 2 === 0,
+    }));
+    const agent = createManagedAgent({
+      stats: {
+        toolCalls: [
+          ...toolCalls,
+          { tool: "Broken", count: Number.NaN, errors: 0 },
+          { tool: 7, count: 1, errors: 0 },
+          "not-an-object",
+        ] as unknown as NonNullable<AgentSessionStats["toolCalls"]>,
+        subagents: [
+          ...subagents,
+          { agentId: 5, running: true },
+          { agentId: "sub-running", running: "yes" },
+        ] as unknown as NonNullable<AgentSessionStats["subagents"]>,
+      },
+    });
+
+    const payload = toAgentPayload(agent);
+
+    expect(payload.stats?.toolCalls).toHaveLength(10);
+    expect(payload.stats?.toolCalls?.at(-1)).toEqual({ tool: "Tool9", count: 10, errors: 0 });
+    expect(payload.stats?.subagents).toHaveLength(50);
+    expect(payload.stats?.subagents?.[0]).toEqual({ agentId: "sub-0", running: true });
+  });
 });
 
 describe("toRecentProviderSessionDescriptorPayload", () => {

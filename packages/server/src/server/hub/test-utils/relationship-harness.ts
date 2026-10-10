@@ -1410,6 +1410,10 @@ export class HubRelationshipHarness {
         codex: this.codex,
       },
       agentStoragePath: path.join(this.paseoHome, "agents"),
+      // The daemon installs its bundled skills into the provider homes on startup; keeping them
+      // inside the harness root is what stops a hub test from writing into the developer's own
+      // ~/.claude/skills and ~/.codex/skills.
+      skillsHome: path.join(this.root, "skills-home"),
       relayEnabled: false,
       relayEndpoint: "relay.paseo.sh:443",
       appBaseUrl: "https://app.paseo.sh",
