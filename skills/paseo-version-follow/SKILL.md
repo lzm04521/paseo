@@ -149,7 +149,7 @@ bash scripts/build-local.sh --x64
 
 ### 6. 发版收尾：bump fork 版本 + 打 tag 触发 CI + 更新 main
 
-发版分支验证通过 + 已 push。三步收尾：
+发版分支验证通过 + 已 push。四步收尾：
 
 **⓪ bump fork 版本**（见「fork 版本号方案」）：改根 `package.json` version → `version:sync-internal` → `npm install` → 独立 commit + push。
 
@@ -177,6 +177,8 @@ git push --force-with-lease=main:<旧 main sha> origin main
 
 - `--force-with-lease` 锁基准 sha（fetch 后 `git rev-parse origin/main`），fork 只有自己一人，lease 安全。
 - **force-push main 会被 Claude Code auto classifier 单独拦截（git destructive）——即使已授权本次发版，force-push main 仍需用户专门确认**，不绕过。
+
+**③ 更新 Release 发布说明（CI 完成后，必做——2026-10-10 漏过一次被用户抓回）**：release-local workflow 只传产物不写 body，`gh release view` body 为空 = app 设置→关于「新功能」页空白（读 fork Releases API，memory `paseo-changelog-fork-releases-source`）。做法：按上一版 body 格式（`## 功能`/`## 同步上游`/`## 其他` + Full Changelog 链接，fork 视角如实写：上游同步内容、本地功能保留情况）写草稿到 `handoff/release-notes-<fork版本>.md` → `gh release edit <fork版本> --repo lzm04521/paseo --notes-file <草稿>` → 回读确认。
 
 ### 7. handoff 文档
 
