@@ -52,6 +52,8 @@ export type WorkspaceTabMenuEntry =
         | "arrow-right-to-line"
         | "copy-x"
         | "pencil"
+        | "folder-open"
+        | "code"
         | "x";
       hint?: string;
       tooltip?: string;
@@ -77,6 +79,10 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFileRelativePath: (path: string) => Promise<void> | void;
   onCopyFileFullPath: (path: string) => Promise<void> | void;
+  onRevealFile?: (absolutePath: string) => void;
+  revealFileLabel?: string;
+  onOpenFileInVSCode?: (absolutePath: string) => void;
+  openFileInVSCodeLabel?: string;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -96,6 +102,10 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFileRelativePath: (path: string) => Promise<void> | void;
   onCopyFileFullPath: (path: string) => Promise<void> | void;
+  onRevealFile?: (absolutePath: string) => void;
+  revealFileLabel?: string;
+  onOpenFileInVSCode?: (absolutePath: string) => void;
+  openFileInVSCodeLabel?: string;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -185,6 +195,10 @@ export function buildWorkspaceTabMenuEntries(
     onCopyTerminalId,
     onCopyFileRelativePath,
     onCopyFileFullPath,
+    onRevealFile,
+    revealFileLabel,
+    onOpenFileInVSCode,
+    openFileInVSCodeLabel,
     onReloadAgent,
     onRenameTab,
     onCloseTab,
@@ -266,6 +280,31 @@ export function buildWorkspaceTabMenuEntries(
         void onCopyFileFullPath(filePath);
       },
     });
+    // 文件管理器/VSCode 打开仅桌面端可用：调用方（tabs-row）仅在桥接就绪时传入回调与文案。
+    if (resolved && onRevealFile && revealFileLabel) {
+      entries.push({
+        kind: "item",
+        key: "reveal-file",
+        label: revealFileLabel,
+        icon: "folder-open",
+        testID: `${menuTestIDBase}-reveal-file`,
+        onSelect: () => {
+          onRevealFile(resolved.absolutePath);
+        },
+      });
+    }
+    if (resolved && onOpenFileInVSCode && openFileInVSCodeLabel) {
+      entries.push({
+        kind: "item",
+        key: "open-file-in-vscode",
+        label: openFileInVSCodeLabel,
+        icon: "code",
+        testID: `${menuTestIDBase}-open-file-in-vscode`,
+        onSelect: () => {
+          onOpenFileInVSCode(resolved.absolutePath);
+        },
+      });
+    }
   }
 
   if (tab.target.kind === "agent" || tab.target.kind === "terminal") {
@@ -364,6 +403,10 @@ export function buildWorkspaceDesktopTabActions(
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFileRelativePath: input.onCopyFileRelativePath,
       onCopyFileFullPath: input.onCopyFileFullPath,
+      onRevealFile: input.onRevealFile,
+      revealFileLabel: input.revealFileLabel,
+      onOpenFileInVSCode: input.onOpenFileInVSCode,
+      openFileInVSCodeLabel: input.openFileInVSCodeLabel,
       onReloadAgent: input.onReloadAgent,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,

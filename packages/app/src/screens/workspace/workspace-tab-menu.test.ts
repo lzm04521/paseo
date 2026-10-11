@@ -335,6 +335,99 @@ describe("buildWorkspaceTabMenuEntries", () => {
     ).toBe(true);
   });
 
+  it("adds reveal and VS Code actions for file tabs when desktop handlers are provided", () => {
+    const onRevealFile = vi.fn();
+    const onOpenFileInVSCode = vi.fn();
+    const fileTab: WorkspaceTabDescriptor = {
+      key: "file_abc",
+      tabId: "file_abc",
+      kind: "file",
+      target: { kind: "file", path: "/some/path.ts", lineStart: 1, lineEnd: 10 },
+    };
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: fileTab,
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-file_abc",
+      workspaceRoot: "/some",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFileRelativePath: vi.fn(),
+      onCopyFileFullPath: vi.fn(),
+      onRevealFile,
+      revealFileLabel: "Reveal in Files",
+      onOpenFileInVSCode,
+      openFileInVSCodeLabel: "Open in VS Code",
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const labels = entries.filter((entry) => entry.kind === "item").map((entry) => entry.label);
+    expect(labels[2]).toBe("Reveal in Files");
+    expect(labels[3]).toBe("Open in VS Code");
+
+    const revealEntry = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "reveal-file",
+    );
+    if (!revealEntry || revealEntry.kind !== "item") {
+      throw new Error("Reveal entry missing");
+    }
+    revealEntry.onSelect();
+    expect(onRevealFile).toHaveBeenCalledWith("/some/path.ts");
+
+    const vscodeEntry = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "open-file-in-vscode",
+    );
+    if (!vscodeEntry || vscodeEntry.kind !== "item") {
+      throw new Error("VS Code entry missing");
+    }
+    vscodeEntry.onSelect();
+    expect(onOpenFileInVSCode).toHaveBeenCalledWith("/some/path.ts");
+  });
+
+  it("omits reveal and VS Code actions when labels are missing", () => {
+    const fileTab: WorkspaceTabDescriptor = {
+      key: "file_abc",
+      tabId: "file_abc",
+      kind: "file",
+      target: { kind: "file", path: "/some/path.ts" },
+    };
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: fileTab,
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-file_abc",
+      workspaceRoot: "/some",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFileRelativePath: vi.fn(),
+      onCopyFileFullPath: vi.fn(),
+      onRevealFile: vi.fn(),
+      onOpenFileInVSCode: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    expect(entries.some((entry) => entry.kind === "item" && entry.key === "reveal-file")).toBe(
+      false,
+    );
+    expect(
+      entries.some((entry) => entry.kind === "item" && entry.key === "open-file-in-vscode"),
+    ).toBe(false);
+  });
+
   it("uses a Changes close id for the working diff tab", () => {
     const actions = buildWorkspaceDesktopTabActions({
       tab: {
