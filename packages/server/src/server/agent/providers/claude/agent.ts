@@ -34,7 +34,6 @@ import {
   findClaudeModel,
   getClaudeModelsWithSettings,
   normalizeClaudeRuntimeModelId,
-  readClaudeSettingsModels,
   resolveConfiguredClaudeModel,
 } from "./models.js";
 import {
@@ -43,7 +42,7 @@ import {
   parseClaudeCodeVersion,
   resolveClaudeDisabledThinkingForModel,
 } from "./model-manifest.js";
-import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
+import { fetchAnthropicCompatModels } from "./fetch-models.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
 import { readClaudeSubagentHandback } from "./subagent-handback.js";
@@ -1629,20 +1628,16 @@ export class ClaudeAgentClient implements AgentClient {
     const env = this.buildProviderEnv();
     let models: AgentModelDefinition[];
     if (this.customProvider?.fetchModels) {
-      // 动态拉取模式：列表只含 settings.json 声明的模型 + 远端发现的模型。
-      // 内置 manifest 的 Anthropic 官方模型不适用于派生供应商（relay/兼容网关背后没有它们）。
-      const settingsModels = await runProviderRefreshActivity(context, "settings", () =>
-        readClaudeSettingsModels(this.logger, claudeConfigDir(env)),
-      );
+      // 动态拉取模式：列表只含 /v1/models 远端发现的模型。内置 manifest 的 Anthropic
+      // 官方模型与 settings.json 声明的模型都不进列表——settings.json 是用户 Claude Code
+      // 本身的本地配置，与 relay/兼容网关背后实际可用的模型无关（远端失败则列表为空）。
       const remoteModels = await runProviderRefreshActivity(context, "remote-models", () =>
         fetchAnthropicCompatModels(env, this.logger, context?.signal),
       );
-      // 补思考等级：settings/远端来源不带 thinkingOptions，不补则 UI 不显示思考等级选择器。
+      // 补思考等级：远端来源不带 thinkingOptions，不补则 UI 不显示思考等级选择器。
       // resolveConfiguredClaudeModel 会把可归一到 manifest 的 id（如 claude-opus-5[1M]）继承
       // 官方思考选项，其余（网关自定义模型）给通用 custom 兜底——与手写 models 条目同款语义。
-      models = mergeClaudeRemoteModels(settingsModels, remoteModels).map((model) =>
-        resolveConfiguredClaudeModel(model),
-      );
+      models = remoteModels.map((model) => resolveConfiguredClaudeModel(model));
     } else {
       models = await runProviderRefreshActivity(context, "settings", () =>
         getClaudeModelsWithSettings(this.logger, claudeConfigDir(env), claudeCodeVersion),

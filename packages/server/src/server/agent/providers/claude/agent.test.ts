@@ -3843,7 +3843,7 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
     vi.unstubAllGlobals();
   });
 
-  test("lists only settings + remote models (no manifest) for fetchModels providers", async () => {
+  test("lists only remote models (no manifest/settings) for fetchModels providers", async () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(JSON.stringify({ data: [{ id: "glm-4.7", display_name: "GLM 4.7" }] }), {
@@ -3881,27 +3881,19 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock.mock.calls[0]?.[0]).toBe("https://relay.example.com/v1/models");
       const modelIds = catalog.models.map((model) => model.id);
-      expect(modelIds).toContain("glm-4.7");
-      expect(modelIds).toContain("settings-declared-model");
-      expect(modelIds).toContain("claude-sonnet-5");
+      expect(modelIds).toEqual(["glm-4.7"]);
+      expect(modelIds).not.toContain("settings-declared-model");
+      expect(modelIds).not.toContain("claude-sonnet-5");
       expect(modelIds).not.toContain("claude-opus-5");
-      expect(modelIds.length).toBe(3);
-      // 思考等级：非 Anthropic id（远端/自定义）拿 custom 兜底，可归一 manifest 的 id 继承官方选项
+      // 思考等级：非 Anthropic id（远端/自定义）拿 custom 兜底
       const remoteModel = catalog.models.find((model) => model.id === "glm-4.7");
       expect(remoteModel?.thinkingOptions?.length).toBeGreaterThan(0);
-      const settingsCustomModel = catalog.models.find(
-        (model) => model.id === "settings-declared-model",
-      );
-      expect(settingsCustomModel?.thinkingOptions?.length).toBeGreaterThan(0);
-      const manifestModel = catalog.models.find((model) => model.id === "claude-sonnet-5");
-      expect(manifestModel?.thinkingOptions?.length).toBeGreaterThan(0);
-      expect(manifestModel?.defaultThinkingOptionId).toBeTruthy();
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }
   });
 
-  test("falls back to settings-only list when remote fetch fails for fetchModels providers", async () => {
+  test("returns an empty model list when remote fetch fails for fetchModels providers", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
     );
@@ -3922,8 +3914,7 @@ describe("ClaudeAgentClient fetchCatalog remote models", () => {
 
       const catalog = await client.fetchCatalog({ scope: "global", force: false }, undefined);
 
-      expect(catalog.models.map((model) => model.id)).toEqual(["settings-declared-model"]);
-      expect(catalog.models[0]?.thinkingOptions?.length).toBeGreaterThan(0);
+      expect(catalog.models).toEqual([]);
     } finally {
       await fs.rm(configDir, { recursive: true, force: true });
     }

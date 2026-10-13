@@ -36,10 +36,10 @@ function resolveAuthHeaders(env: NodeJS.ProcessEnv): Record<string, string> | nu
 /**
  * Fetch models from an Anthropic-compatible `/v1/models` endpoint.
  * Every failure path (missing credentials, HTTP error, malformed body,
- * network error, timeout) degrades to an empty list — the caller merges
- * the result into local catalog sources and must never fail a snapshot
- * refresh because of it. An aborted external `signal` is re-thrown so the
- * refresh framework's cancellation semantics stay intact.
+ * network error, timeout) degrades to an empty list — the result is the
+ * provider's whole catalog and must never fail a snapshot refresh because
+ * of it. An aborted external `signal` is re-thrown so the refresh
+ * framework's cancellation semantics stay intact.
  */
 export async function fetchAnthropicCompatModels(
   env: NodeJS.ProcessEnv,
@@ -88,21 +88,4 @@ export async function fetchAnthropicCompatModels(
     logger.warn({ err: error, url }, "Claude remote model fetch error");
     return [];
   }
-}
-
-/**
- * Merge remote models into the local catalog: local entries win on id
- * collisions, remote only contributes ids the local sources don't know.
- */
-export function mergeClaudeRemoteModels(
-  localModels: AgentModelDefinition[],
-  remoteModels: AgentModelDefinition[],
-): AgentModelDefinition[] {
-  const models = [...localModels];
-  for (const model of remoteModels) {
-    if (!models.some((candidate) => candidate.id === model.id)) {
-      models.push(model);
-    }
-  }
-  return models;
 }

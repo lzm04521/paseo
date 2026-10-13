@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "pino";
 
-import { fetchAnthropicCompatModels, mergeClaudeRemoteModels } from "./fetch-models.js";
+import { fetchAnthropicCompatModels } from "./fetch-models.js";
 
 const logger = {
   debug: vi.fn(),
@@ -104,19 +104,5 @@ describe("fetchAnthropicCompatModels", () => {
     );
     expect(models).toEqual([]);
     expect(logger.warn).toHaveBeenCalled();
-  });
-});
-
-describe("mergeClaudeRemoteModels", () => {
-  it("appends only new ids, keeps local entries untouched", () => {
-    const local = [{ provider: "claude" as const, id: "claude-sonnet-4-5", label: "Sonnet" }];
-    const remote = [
-      { provider: "claude" as const, id: "claude-sonnet-4-5", label: "Remote Sonnet" },
-      { provider: "claude" as const, id: "glm-4.7", label: "GLM 4.7" },
-    ];
-    expect(mergeClaudeRemoteModels(local, remote)).toEqual([
-      { provider: "claude", id: "claude-sonnet-4-5", label: "Sonnet" },
-      { provider: "claude", id: "glm-4.7", label: "GLM 4.7" },
-    ]);
   });
 });
