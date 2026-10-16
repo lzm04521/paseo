@@ -1,6 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import {
+  DEFAULT_IDLE_AUTO_RESTART_CONFIG,
   FileExplorerRequestSchema,
+  MutableDaemonConfigPatchSchema,
+  MutableDaemonConfigSchema,
   PaseoWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
   SessionInboundMessageSchema,
@@ -400,6 +403,51 @@ describe("agent setting action responses", () => {
     }
     expect(thinking.payload.notice).toBeUndefined();
   });
+
+  test("parses notice codes and accepts codes this client does not recognize", () => {
+    const known = SessionOutboundMessageSchema.parse({
+      type: "set_agent_thinking_response",
+      payload: {
+        requestId: "req-known",
+        agentId: "agent-1",
+        accepted: true,
+        error: null,
+        notice: {
+          type: "warning",
+          message: "Thinking level applies next turn",
+          code: "thinking_applies_next_turn",
+        },
+      },
+    });
+    const unknown = SessionOutboundMessageSchema.parse({
+      type: "set_agent_mode_response",
+      payload: {
+        requestId: "req-unknown",
+        agentId: "agent-1",
+        accepted: true,
+        error: null,
+        notice: { type: "warning", message: "Some future notice", code: "invented_next_version" },
+      },
+    });
+
+    if (
+      known.type !== "set_agent_thinking_response" ||
+      unknown.type !== "set_agent_mode_response"
+    ) {
+      throw new Error("Expected agent setting responses");
+    }
+    expect(known.payload.notice).toEqual({
+      type: "warning",
+      message: "Thinking level applies next turn",
+      code: "thinking_applies_next_turn",
+    });
+    // A newer daemon must be able to introduce codes this client has never seen.
+    expect(unknown.payload.notice).toEqual({
+      type: "warning",
+      message: "Some future notice",
+      code: "invented_next_version",
+    });
+  });
 });
 
 describe("file explorer request compatibility", () => {
@@ -517,6 +565,68 @@ describe("viewed timeline subscription messages", () => {
           requestId: "timeline-subscription-1",
         },
       },
+    });
+  });
+});
+
+describe("idleAutoRestart config schema", () => {
+  // `mcp` is the only field on MutableDaemonConfigSchema without a default;
+  // supply it so parse failures isolate the idleAutoRestart node.
+  const baseConfig = { mcp: { injectIntoAgents: false } };
+
+  it("accepts a full node on the mutable config", () => {
+    const parsed = MutableDaemonConfigSchema.parse({
+      ...baseConfig,
+      idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 },
+    });
+    expect(parsed.idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 240,
+      idleThresholdMinutes: 10,
+    });
+  });
+
+  it("rejects out-of-range thresholds", () => {
+    const base = { enabled: true, idleThresholdMinutes: 10 };
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { ...base, uptimeThresholdMinutes: 0 },
+      }),
+    ).toThrow();
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { ...base, uptimeThresholdMinutes: 10081 },
+      }),
+    ).toThrow();
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240, idleThresholdMinutes: 1441 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects non-integer thresholds", () => {
+    expect(() =>
+      MutableDaemonConfigSchema.parse({
+        ...baseConfig,
+        idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 240.5, idleThresholdMinutes: 10 },
+      }),
+    ).toThrow();
+  });
+
+  it("accepts partial nodes on the patch schema", () => {
+    const patch = MutableDaemonConfigPatchSchema.parse({ idleAutoRestart: { enabled: true } });
+    expect(patch.idleAutoRestart).toEqual({ enabled: true });
+  });
+
+  it("exposes the default config constant", () => {
+    expect(DEFAULT_IDLE_AUTO_RESTART_CONFIG).toEqual({
+      enabled: false,
+      uptimeThresholdMinutes: 240,
+      idleThresholdMinutes: 10,
     });
   });
 });

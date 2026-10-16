@@ -142,6 +142,55 @@ test("resuming a stored agent keeps its unread flag and its last-activity time",
   }
 });
 
+test("resuming a stored agent keeps its session stats", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-loading-stats-"));
+  const logger = createTestLogger();
+  const storage = new AgentStorage(path.join(root, "agents"), logger);
+  const manager = new AgentManager({
+    clients: createTestAgentClients(),
+    registry: storage,
+    logger,
+  });
+
+  const agentId = "00000000-0000-4000-8000-000000000402";
+  const stats = {
+    sessionInputTokens: 12_000,
+    sessionOutputTokens: 3_400,
+    requestCount: 27,
+    toolCalls: [{ tool: "Bash", count: 12, errors: 1 }],
+  };
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: root }, agentId, {
+      workspaceId: "workspace-a",
+    });
+    await manager.closeAgent(agent.id);
+    await manager.flush();
+    await storage.flush();
+
+    const stored = await storage.get(agentId);
+    if (!stored) {
+      throw new Error("expected a stored agent");
+    }
+    // The daemon restarted, so the only copy of the snapshot is the one on disk.
+    await storage.upsert({ ...stored, stats });
+
+    await ensureAgentLoaded(agentId, { agentManager: manager, agentStorage: storage, logger });
+    await manager.flush();
+    await storage.flush();
+
+    // Dropping it here would be permanent: the claude aggregator does not replay history, so a
+    // resumed session starts counting from zero and the totals never come back.
+    expect(manager.getAgent(agentId)?.stats).toEqual(stats);
+    expect((await storage.get(agentId))?.stats).toEqual(stats);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("loads an archived agent's history after its working directory is removed", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "agent-loading-missing-cwd-"));
   const worktree = path.join(root, "managed-worktree");

@@ -158,10 +158,13 @@ describe("useFileLink", () => {
       result.current.onPress();
     });
     await waitFor(() => {
-      expect(toast.show).toHaveBeenCalledWith("No file found for dumm.md", {
-        variant: "error",
-        testID: "assistant-file-link-not-found-toast",
-      });
+      expect(toast.show).toHaveBeenCalledWith(
+        "No file found for dumm.md\nTried path: /Users/test/project/dumm.md",
+        {
+          variant: "error",
+          testID: "assistant-file-link-not-found-toast",
+        },
+      );
     });
 
     act(() => {

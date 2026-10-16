@@ -50,6 +50,8 @@ export interface DaemonSessionOptions {
   listProviderAvailability: () => Promise<ProviderAvailability[]>;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   getObservationMetrics?: () => Record<string, number>;
+  getIdleRestartIdleSince?: () => number | null;
+  getIdleRestartStartedAt?: () => number | null;
   logger: pino.Logger;
   hubRelationships?: HubRelationshipManagement;
   reloadConfig: () => DaemonConfigReloadResult;
@@ -57,10 +59,11 @@ export interface DaemonSessionOptions {
 
 /**
  * A client's read surface for the daemon process itself: its runtime status
- * (pid-lock start time, listen address, relay config, provider availability) and
- * a fresh local pairing offer for connecting a new client. Owns the `daemon.*`
- * RPCs. Reaches no state beyond the never-mutated runtime values injected at
- * construction and the outbound channel.
+ * (worker start time from the idle-restart watchdog, listen address, relay
+ * config, provider availability) and a fresh local pairing offer for connecting
+ * a new client. Owns the `daemon.*` RPCs. Reaches no state beyond the
+ * never-mutated runtime values injected at construction and the outbound
+ * channel.
  */
 export class DaemonSession {
   private readonly host: DaemonSessionHost;
@@ -75,6 +78,8 @@ export class DaemonSession {
   private readonly listProviderAvailability: () => Promise<ProviderAvailability[]>;
   private readonly getWebSocketRuntimeMetrics: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   private readonly getObservationMetrics: DaemonSessionOptions["getObservationMetrics"];
+  private readonly getIdleRestartIdleSince: () => number | null;
+  private readonly getIdleRestartStartedAt: (() => number | null) | null;
   private readonly logger: pino.Logger;
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
@@ -93,6 +98,8 @@ export class DaemonSession {
     this.listProviderAvailability = options.listProviderAvailability;
     this.getWebSocketRuntimeMetrics = options.getWebSocketRuntimeMetrics ?? (() => null);
     this.getObservationMetrics = options.getObservationMetrics;
+    this.getIdleRestartIdleSince = options.getIdleRestartIdleSince ?? (() => null);
+    this.getIdleRestartStartedAt = options.getIdleRestartStartedAt ?? null;
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
     this.reloadConfig = options.reloadConfig;
@@ -179,6 +186,10 @@ export class DaemonSession {
         available: p.available,
         error: p.error ?? null,
       }));
+      const idleSinceMs = this.getIdleRestartIdleSince();
+      // startedAt 优先取 watchdog 的 uptime 判定基线（worker bootstrap 时刻），与"已运行"
+      // 的实际判定口径一致；getter 未注入（测试 stub 等）时回退 pid 锁的 supervisor 时间。
+      const startedAtMs = this.getIdleRestartStartedAt?.() ?? null;
       this.host.emit({
         type: "daemon.get_status.response",
         payload: {
@@ -187,7 +198,11 @@ export class DaemonSession {
           version: this.daemonVersion ?? null,
           pid: process.pid,
           nodePath: process.execPath,
-          startedAt: pidInfo?.startedAt ?? null,
+          startedAt:
+            startedAtMs === null
+              ? (pidInfo?.startedAt ?? null)
+              : new Date(startedAtMs).toISOString(),
+          idleSince: idleSinceMs === null ? null : new Date(idleSinceMs).toISOString(),
           listen: this.daemonRuntimeConfig?.listen ?? null,
           relay: this.daemonRuntimeConfig?.getRelayConfig() ?? null,
           providers,
@@ -204,6 +219,7 @@ export class DaemonSession {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          idleSince: null,
           listen: null,
           relay: null,
           providers: [],

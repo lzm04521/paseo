@@ -1,0 +1,11 @@
+{
+  "name": "paseo-skills",
+  "version": "0.3.1",
+  "description": "Paseo skills for Claude Code — workspaces, agents, loops, handoffs, and committee orchestration.",
+  "homepage": "https://paseo.sh",
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "Mohamed Boudra",
+    "url": "https://paseo.sh"
+  }
+}

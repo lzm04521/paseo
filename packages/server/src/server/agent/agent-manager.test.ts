@@ -6887,6 +6887,16 @@ test("applies live autonomous events and preserves usage omitted from completion
     turnId: autonomousTurnId,
   });
   capturedSession!.pushEvent({
+    type: "stats_updated",
+    provider: "codex",
+    stats: {
+      sessionInputTokens: 12_000,
+      sessionOutputTokens: 3_400,
+      requestCount: 2,
+      toolCalls: [{ tool: "Bash", count: 2, errors: 1 }],
+    },
+  });
+  capturedSession!.pushEvent({
     type: "timeline",
     provider: "codex",
     item: { type: "assistant_message", text: "AUTONOMOUS_PUMP_MESSAGE" },
@@ -6907,6 +6917,13 @@ test("applies live autonomous events and preserves usage omitted from completion
     contextWindowMaxTokens: 200_000,
     contextWindowUsedTokens: 175,
   });
+  expect(updated?.stats).toEqual({
+    sessionInputTokens: 12_000,
+    sessionOutputTokens: 3_400,
+    requestCount: 2,
+    toolCalls: [{ tool: "Bash", count: 2, errors: 1 }],
+  });
+  expect(updated ? toAgentPayload(updated).stats : undefined).toEqual(updated?.stats);
   expect(manager.getTimeline(snapshot.id)).toContainEqual({
     type: "assistant_message",
     text: "AUTONOMOUS_PUMP_MESSAGE",

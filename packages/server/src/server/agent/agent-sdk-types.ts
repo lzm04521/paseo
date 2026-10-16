@@ -222,6 +222,43 @@ export interface AgentUsage {
   contextWindowUsedTokens?: number;
 }
 
+export interface AgentToolCallStat {
+  tool: string;
+  count: number;
+  errors: number;
+}
+
+export interface AgentSubagentUsageStat {
+  agentId: string;
+  label?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  running: boolean;
+}
+
+/**
+ * Server-side twin of the protocol `AgentSessionStats`. Same fields: providers
+ * fill what they can and the projection sanitizes the rest.
+ */
+export interface AgentSessionStats {
+  sessionInputTokens?: number;
+  sessionCachedInputTokens?: number;
+  sessionOutputTokens?: number;
+  sessionCacheWriteTokens?: number;
+  sessionTotalCostUsd?: number;
+  requestCount?: number;
+  turnCount?: number;
+  lastGenTokensPerSec?: number;
+  lastFirstTokenLatencyMs?: number;
+  lastRequestDurationMs?: number;
+  lastTurnDurationMs?: number;
+  cacheHitRate?: number;
+  toolCallTotal?: number;
+  toolCallErrors?: number;
+  toolCalls?: AgentToolCallStat[];
+  subagents?: AgentSubagentUsageStat[];
+}
+
 export const TOOL_CALL_ICON_NAMES = [
   "wrench",
   "square_terminal",
@@ -407,6 +444,8 @@ export type AgentStreamEvent =
   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
   | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  | { type: "stats_updated"; provider: AgentProvider; stats: AgentSessionStats }
   | {
       type: "mode_changed";
       provider: AgentProvider;

@@ -7,9 +7,24 @@ export interface AgentMetadata {
 }
 
 export type AgentProviderNotice =
-  | { type: "info"; message: string }
-  | { type: "warning"; message: string }
-  | { type: "error"; message: string };
+  | { type: "info"; message: string; code?: AgentProviderNoticeCode }
+  | { type: "warning"; message: string; code?: AgentProviderNoticeCode }
+  | { type: "error"; message: string; code?: AgentProviderNoticeCode };
+
+/**
+ * Stable identifier for a notice the client knows how to localize. `message` stays the
+ * English fallback, so a client that does not recognize the code shows readable text.
+ *
+ * Typed as `string` on the wire: a newer daemon may introduce codes an older client has
+ * never seen, and rejecting the whole message for an unknown code would break the protocol
+ * contract. Clients look the code up and fall back to `message` when it is not recognized.
+ */
+export type AgentProviderNoticeCode = string;
+
+export const AGENT_PROVIDER_NOTICE_CODES = {
+  modeAppliesNextTurn: "mode_applies_next_turn",
+  thinkingAppliesNextTurn: "thinking_applies_next_turn",
+} as const;
 
 /**
  * Stdio-based MCP server (spawns a subprocess).
@@ -195,6 +210,47 @@ export interface AgentUsage {
   totalCostUsd?: number;
   contextWindowMaxTokens?: number;
   contextWindowUsedTokens?: number;
+}
+
+export interface AgentToolCallStat {
+  tool: string;
+  count: number;
+  errors: number;
+}
+
+export interface AgentSubagentUsageStat {
+  agentId: string;
+  label?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  running: boolean;
+}
+
+/**
+ * Cumulative session statistics for one agent, aggregated by the daemon.
+ *
+ * `sessionInputTokens` is input + cache write + cache read, the same sum the
+ * claude provider already reports as request input tokens. That is NOT
+ * `AgentUsage.inputTokens`, which counts only uncached input. Never assign one
+ * from the other.
+ */
+export interface AgentSessionStats {
+  sessionInputTokens?: number;
+  sessionCachedInputTokens?: number;
+  sessionOutputTokens?: number;
+  sessionCacheWriteTokens?: number;
+  sessionTotalCostUsd?: number;
+  requestCount?: number;
+  turnCount?: number;
+  lastGenTokensPerSec?: number;
+  lastFirstTokenLatencyMs?: number;
+  lastRequestDurationMs?: number;
+  lastTurnDurationMs?: number;
+  cacheHitRate?: number;
+  toolCallTotal?: number;
+  toolCallErrors?: number;
+  toolCalls?: AgentToolCallStat[];
+  subagents?: AgentSubagentUsageStat[];
 }
 
 export const TOOL_CALL_ICON_NAMES = [
@@ -390,6 +446,8 @@ export type AgentStreamEvent =
   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
   | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
+  // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+  | { type: "stats_updated"; provider: AgentProvider; stats: AgentSessionStats }
   | {
       type: "mode_changed";
       provider: AgentProvider;

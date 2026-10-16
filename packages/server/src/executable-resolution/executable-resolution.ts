@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import type { ProcessEnvRecord } from "../server/paseo-env.js";
+import { dirname, resolve } from "node:path";
 import { execCommand } from "../utils/spawn.js";
 import { windowsExecutableResolution } from "./windows.js";
 
@@ -18,10 +19,43 @@ function hasPathSeparator(value: string): boolean {
 }
 
 async function enumerateCandidates(name: string, env?: ProcessEnvRecord): Promise<string[]> {
-  if (process.platform !== "win32" && existsSync("/usr/bin/which")) {
+  if (process.platform === "win32") {
+    const viaWhere = await enumerateCandidatesViaWindowsWhere(name, env);
+    if (viaWhere.length > 0) {
+      return viaWhere;
+    }
+    return enumerateCandidatesViaLibrary(name, env);
+  }
+  if (existsSync("/usr/bin/which")) {
     return enumerateCandidatesViaSystemWhich(name, env);
   }
   return enumerateCandidatesViaLibrary(name, env);
+}
+
+// 单次子进程完成 PATH 枚举（实测空载 ~0.45s），替代 which 库上百次串行 fs 探测——
+// 后者在事件循环饥饿下会被放大到分钟级（见 F5 诊断 R-B）。
+// where.exe 会先搜当前目录，命中需过滤掉。
+async function enumerateCandidatesViaWindowsWhere(
+  name: string,
+  env?: ProcessEnvRecord,
+): Promise<string[]> {
+  try {
+    const { stdout } = await execCommand("where.exe", [name], {
+      baseEnv: env,
+      timeout: 3000,
+      killSignal: "SIGKILL",
+    });
+    const cwd = resolve(process.cwd()).toLowerCase();
+    return Array.from(new Set(stdout.trim().split(/\r?\n/).filter(Boolean))).filter((candidate) => {
+      try {
+        return dirname(resolve(candidate)).toLowerCase() !== cwd;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return [];
+  }
 }
 
 async function enumerateCandidatesViaSystemWhich(
@@ -125,6 +159,32 @@ export interface ExecutableResolutionOptions {
   env?: ProcessEnvRecord;
 }
 
+export const EXECUTABLE_RESOLUTION_FOUND_TTL_MS = 30 * 60_000;
+export const EXECUTABLE_RESOLUTION_NOT_FOUND_TTL_MS = 30_000;
+
+interface ExecutableResolutionCacheEntry {
+  promise: Promise<string | null>;
+  settledAtMs: number | null;
+  value: string | null;
+}
+
+const executableResolutionCache = new Map<string, ExecutableResolutionCacheEntry>();
+
+export function clearExecutableResolutionCacheForTests(): void {
+  executableResolutionCache.clear();
+}
+
+function isFreshCacheEntry(entry: ExecutableResolutionCacheEntry, nowMs: number): boolean {
+  if (entry.settledAtMs === null) {
+    return true; // in-flight：并发调用共享同一次解析
+  }
+  const ttlMs =
+    entry.value === null
+      ? EXECUTABLE_RESOLUTION_NOT_FOUND_TTL_MS
+      : EXECUTABLE_RESOLUTION_FOUND_TTL_MS;
+  return nowMs - entry.settledAtMs < ttlMs;
+}
+
 export async function findExecutable(
   name: string,
   options: number | ExecutableResolutionOptions = PROBE_TIMEOUT_MS,
@@ -136,6 +196,43 @@ export async function findExecutable(
     return null;
   }
 
+  // 缓存键只含 name（不含 env）——自定义 env 的解析结果不同，直接绕过缓存防污染。
+  if (env) {
+    return findExecutableUncached(trimmed, probeTimeoutMs, env);
+  }
+
+  const cached = executableResolutionCache.get(trimmed);
+  if (cached && isFreshCacheEntry(cached, Date.now())) {
+    return cached.promise;
+  }
+
+  const entry: ExecutableResolutionCacheEntry = {
+    promise: Promise.resolve(null),
+    settledAtMs: null,
+    value: null,
+  };
+  executableResolutionCache.set(trimmed, entry);
+  entry.promise = (async () => {
+    try {
+      const resolved = await findExecutableUncached(trimmed, probeTimeoutMs, env);
+      entry.value = resolved;
+      return resolved;
+    } catch (error) {
+      executableResolutionCache.delete(trimmed);
+      throw error;
+    } finally {
+      entry.settledAtMs = Date.now();
+    }
+  })();
+  return entry.promise;
+}
+
+// 缓存键只含 name（不含 probeTimeoutMs）——全局 probe 超时一致，避免键组合爆炸。
+async function findExecutableUncached(
+  trimmed: string,
+  probeTimeoutMs: number,
+  env?: ProcessEnvRecord,
+): Promise<string | null> {
   if (process.platform === "win32") {
     return windowsExecutableResolution.find(trimmed, {
       enumeratePathCandidates: (command) => enumerateCandidates(command, env),
