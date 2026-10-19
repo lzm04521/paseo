@@ -187,7 +187,8 @@ function MobileWorkspaceTabOption({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
-      copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+      copyFileRelativePath: t("workspace.tabs.menu.copyFileRelativePath"),
+      copyFileFullPath: t("workspace.tabs.menu.copyFilePath"),
       rename: t("workspace.tabs.menu.rename"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
@@ -210,7 +211,14 @@ function MobileWorkspaceTabOption({
     onCopyResumeCommand,
     onCopyAgentId,
     onCopyTerminalId,
-    onCopyFilePath,
+    // The fork's menu builder takes the split copy handlers; the single mobile handler feeds
+    // both. No workspaceRoot is passed, so only the full-path entry renders.
+    onCopyFileRelativePath: (path) => {
+      void onCopyFilePath(path);
+    },
+    onCopyFileFullPath: (path) => {
+      void onCopyFilePath(path);
+    },
     onReloadAgent,
     onRenameTab,
     onCloseTab,

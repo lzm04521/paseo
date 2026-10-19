@@ -309,6 +309,24 @@ describe("editor target registry", () => {
     expect(runtime.revealedPaths).toEqual(["C:/repo/src/app.ts"]);
   });
 
+  it("prefers Directory Opus over Windows Explorer when installed", async () => {
+    const runtime = new FakeEditorTargets("win32");
+    runtime.installCommand("dopusrt.exe");
+
+    await explorerTarget.launch({ workspacePath: "C:/repo" }, runtime);
+    await explorerTarget.launch(
+      { workspacePath: "C:/repo", filePath: "C:/repo/src/app.ts" },
+      runtime,
+    );
+
+    expect(runtime.launches).toEqual([
+      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo", "NEWTAB=tofront"] },
+      { command: "/bin/dopusrt.exe", args: ["/acmd", "Go", "C:/repo/src", "NEWTAB=tofront"] },
+    ]);
+    expect(runtime.openedPaths).toEqual([]);
+    expect(runtime.revealedPaths).toEqual([]);
+  });
+
   it("keeps the platform file-manager ids used by stored preferences", async () => {
     const macTargets = await listAvailableEditorTargets(new FakeEditorTargets("darwin"), [
       finderTarget,

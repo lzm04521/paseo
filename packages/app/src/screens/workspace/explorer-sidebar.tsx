@@ -23,7 +23,9 @@ interface ExplorerSidebarDockProps extends Pick<
   | "onCopyResumeCommand"
   | "onCopyAgentId"
   | "onCopyTerminalId"
-  | "onCopyFilePath"
+  | "onCopyFileRelativePath"
+  | "onCopyFileFullPath"
+  | "workspaceRoot"
   | "onReloadAgent"
   | "onRenameTab"
   | "onCreateNewTab"
@@ -69,7 +71,9 @@ export function ExplorerSidebarDock({
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
+  workspaceRoot,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -136,7 +140,9 @@ export function ExplorerSidebarDock({
                 onCopyResumeCommand={onCopyResumeCommand}
                 onCopyAgentId={onCopyAgentId}
                 onCopyTerminalId={onCopyTerminalId}
-                onCopyFilePath={onCopyFilePath}
+                onCopyFileRelativePath={onCopyFileRelativePath}
+                onCopyFileFullPath={onCopyFileFullPath}
+                workspaceRoot={workspaceRoot}
                 onReloadAgent={onReloadAgent}
                 onRenameTab={onRenameTab}
                 onCloseTabsToLeft={handleCloseTabsToLeft}

@@ -1,0 +1,17 @@
+{
+  "name": "paseo",
+  "owner": {
+    "name": "Paseo",
+    "url": "https://paseo.sh"
+  },
+  "plugins": [
+    {
+      "name": "paseo-skills",
+      "source": ".",
+      "description": "Paseo skills for Claude Code — workspaces, agents, loops, handoffs, and committee orchestration.",
+      "version": "0.3.1",
+      "homepage": "https://paseo.sh",
+      "license": "AGPL-3.0-or-later"
+    }
+  ]
+}

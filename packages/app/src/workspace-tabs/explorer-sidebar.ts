@@ -122,3 +122,17 @@ export function isExplorerSidebarOpen(input: ExplorerSidebarQuery): boolean {
     selectIsExplorerSidebarVisible(useWorkspaceLayoutStore.getState(), input.workspaceKey),
   );
 }
+
+/**
+ * Whether the workspace-open moment should reveal the Explorer sidebar: only on
+ * wide layouts (the compact overlay would cover the conversation), only once the
+ * persisted layouts have hydrated, and only while it is actually hidden.
+ */
+export function shouldAutoRevealExplorerSidebar(
+  input: ExplorerSidebarQuery & { enabled: boolean; hydrated: boolean },
+): boolean {
+  if (!input.enabled || !input.hydrated || input.isCompact || !input.workspaceKey) {
+    return false;
+  }
+  return !isExplorerSidebarOpen(input);
+}

@@ -24,6 +24,8 @@ import {
   Minimize,
   Plus,
   X,
+  FolderOpen,
+  Code,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import Animated from "react-native-reanimated";
@@ -86,6 +88,10 @@ import {
   useHorizontalScrollBoundary,
 } from "@/components/ui/horizontal-scroll-boundary";
 import { useSessionStore } from "@/stores/session-store";
+import { useToast } from "@/contexts/toast-context";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 
 const DROPDOWN_WIDTH = 220;
 const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
@@ -124,6 +130,8 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedFolderOpen = withUnistyles(FolderOpen);
+const ThemedCode = withUnistyles(Code);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
@@ -428,6 +436,10 @@ function TabContextMenuItem({
         return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
       case "pencil":
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+      case "folder-open":
+        return <ThemedFolderOpen size={16} uniProps={mutedColorMapping} />;
+      case "code":
+        return <ThemedCode size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
       default:
@@ -524,10 +536,12 @@ export interface WorkspaceDesktopTabsRowProps {
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -1022,10 +1036,12 @@ function ResolvedWorkspaceDesktopTabsRow({
   setHoveredCloseTabKey,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1105,7 +1121,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
-      copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+      copyFileRelativePath: t("workspace.tabs.menu.copyFileRelativePath"),
+      copyFileFullPath: t("workspace.tabs.menu.copyFileFullPath"),
       rename: t("workspace.tabs.menu.rename"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
@@ -1118,6 +1135,42 @@ function ResolvedWorkspaceDesktopTabsRow({
     }),
     [t],
   );
+  // 文件 tab 右键的"在文件管理器中显示/在 VS Code 中打开"：仅本地 daemon + 桌面桥接就绪时提供。
+  const toast = useToast();
+  const isLocalDaemon = useIsLocalDaemon(normalizedServerId);
+  const { targets: desktopOpenTargets } = useDesktopOpenTargets({
+    isLocalExecution: isLocalDaemon,
+  });
+  const fileManagerTarget = desktopOpenTargets.find((target) => target.kind === "file-manager");
+  const openInVSCode = useOpenInVSCode();
+  const handleRevealFile = useCallback(
+    (absolutePath: string) => {
+      if (!fileManagerTarget || !workspaceRoot) return;
+      void openDesktopTarget({
+        editorId: fileManagerTarget.id,
+        workspacePath: workspaceRoot,
+        filePath: absolutePath,
+      }).catch((error: unknown) => {
+        toast.error(
+          error instanceof Error ? error.message : t("workspace.fileExplorer.errors.revealFailed"),
+        );
+      });
+    },
+    [fileManagerTarget, workspaceRoot, t, toast],
+  );
+  const handleOpenFileInVSCode = useCallback(
+    (absolutePath: string) => {
+      if (!workspaceRoot) return;
+      openInVSCode.open({ workspacePath: workspaceRoot, filePath: absolutePath });
+    },
+    [openInVSCode, workspaceRoot],
+  );
+  const revealFileLabel =
+    fileManagerTarget && workspaceRoot
+      ? t("workspace.fileActions.revealIn", { target: fileManagerTarget.label })
+      : undefined;
+  const openFileInVSCodeLabel =
+    openInVSCode.isAvailable && workspaceRoot ? t("workspace.fileActions.openInVSCode") : undefined;
   const tabLabels = useMemo(
     () =>
       tabs.map((tab) => {
@@ -1281,10 +1334,16 @@ function ResolvedWorkspaceDesktopTabsRow({
           isDragging={isActive}
           index={index}
           tabCount={displayedTabs.length}
+          workspaceRoot={workspaceRoot}
           onCopyResumeCommand={onCopyResumeCommand}
           onCopyAgentId={onCopyAgentId}
           onCopyTerminalId={onCopyTerminalId}
-          onCopyFilePath={onCopyFilePath}
+          onCopyFileRelativePath={onCopyFileRelativePath}
+          onCopyFileFullPath={onCopyFileFullPath}
+          onRevealFile={handleRevealFile}
+          revealFileLabel={revealFileLabel}
+          onOpenFileInVSCode={handleOpenFileInVSCode}
+          openFileInVSCodeLabel={openFileInVSCodeLabel}
           onReloadAgent={onReloadAgent}
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
@@ -1315,15 +1374,21 @@ function ResolvedWorkspaceDesktopTabsRow({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyTerminalId,
-      onCopyFilePath,
+      onCopyFileRelativePath,
+      onCopyFileFullPath,
       onCopyResumeCommand,
+      handleOpenFileInVSCode,
+      handleRevealFile,
       onNavigateTab,
       onReloadAgent,
       onRenameTab,
+      openFileInVSCodeLabel,
+      revealFileLabel,
       setHoveredCloseTabKey,
       tabMenuLabels,
       tabDropPreviewIndex,
       displayedTabs.length,
+      workspaceRoot,
     ],
   );
 
@@ -1434,10 +1499,16 @@ function ResolvedDesktopTabChip({
   isDragging,
   index,
   tabCount,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
+  onRevealFile,
+  revealFileLabel,
+  onOpenFileInVSCode,
+  openFileInVSCodeLabel,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -1460,10 +1531,16 @@ function ResolvedDesktopTabChip({
   isDragging: boolean;
   index: number;
   tabCount: number;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
+  onRevealFile?: (absolutePath: string) => void;
+  revealFileLabel?: string;
+  onOpenFileInVSCode?: (absolutePath: string) => void;
+  openFileInVSCodeLabel?: string;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -1488,10 +1565,16 @@ function ResolvedDesktopTabChip({
         tab: item.tab,
         index,
         tabCount,
+        workspaceRoot,
         onCopyResumeCommand,
         onCopyAgentId,
         onCopyTerminalId,
-        onCopyFilePath,
+        onCopyFileRelativePath,
+        onCopyFileFullPath,
+        onRevealFile,
+        revealFileLabel,
+        onOpenFileInVSCode,
+        openFileInVSCodeLabel,
         onReloadAgent,
         onRenameTab,
         onCloseTab,
@@ -1509,12 +1592,18 @@ function ResolvedDesktopTabChip({
       onCloseTabsToRight,
       onCopyAgentId,
       onCopyTerminalId,
-      onCopyFilePath,
+      onCopyFileRelativePath,
+      onCopyFileFullPath,
       onCopyResumeCommand,
+      onOpenFileInVSCode,
+      onRevealFile,
+      openFileInVSCodeLabel,
+      revealFileLabel,
       labels,
       onReloadAgent,
       onRenameTab,
       tabCount,
+      workspaceRoot,
     ],
   );
 
