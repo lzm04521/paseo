@@ -7,7 +7,12 @@ import type {
 
 export type LifecycleOriginalKind = "string" | "array" | "missing";
 
-export const METADATA_PROMPT_KEYS = ["branchName", "commitMessage", "pullRequest"] as const;
+export const METADATA_PROMPT_KEYS = [
+  "title",
+  "branchName",
+  "commitMessage",
+  "pullRequest",
+] as const;
 export type MetadataPromptKey = (typeof METADATA_PROMPT_KEYS)[number];
 
 export interface ProjectScriptDraft {
@@ -100,6 +105,7 @@ function nextScriptDraftId(): string {
 
 function emptyMetadataPrompts(): Record<MetadataPromptKey, string> {
   return {
+    title: "",
     branchName: "",
     commitMessage: "",
     pullRequest: "",

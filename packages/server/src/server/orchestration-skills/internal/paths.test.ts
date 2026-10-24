@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveBundledSkillsDir, resolveSkillTargets } from "./paths.js";
+import { resolveBundledSkillsDir, resolveSkillTargets, resolveSkillsHome } from "./paths.js";
 
 const roots: string[] = [];
 
@@ -39,6 +39,18 @@ describe("orchestration skill paths", () => {
     );
 
     expect(resolveBundledSkillsDir(pathToFileURL(emittedModule))).toBe(catalog);
+  });
+
+  it("prefers the skills home the daemon config names", () => {
+    expect(resolveSkillsHome("/configured", {})).toBe("/configured");
+  });
+
+  it("falls back to PASEO_SKILLS_HOME so a test run cannot reach the developer's home", () => {
+    expect(resolveSkillsHome(undefined, { PASEO_SKILLS_HOME: "/sandbox" })).toBe("/sandbox");
+  });
+
+  it("installs under the daemon user's home when nothing says otherwise", () => {
+    expect(resolveSkillsHome(undefined, {})).toBe(os.homedir());
   });
 
   it("keeps the original fixed managed directories under the daemon user's home", () => {
