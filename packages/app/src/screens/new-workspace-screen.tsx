@@ -6,24 +6,54 @@ import type { AgentSnapshotPayload, CreationSnapshot } from "@getpaseo/protocol/
 import { encodeImages } from "@/utils/encode-images";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
-import { Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import ReanimatedAnimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { Gesture } from "react-native-gesture-handler";
+import { scheduleOnRN } from "react-native-worklets";
+import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronLeft,
+  Folder,
+  FolderPlus,
+  GitBranch,
+  GitPullRequest,
+  PanelRight,
+} from "lucide-react-native";
+import { ProjectIconView } from "@/components/project-icon-view";
+import { ComboboxItem } from "@/components/ui/combobox";
+import type { ComboboxOption as ComboboxOptionType } from "@/components/ui/combobox";
+import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Shortcut } from "@/components/ui/shortcut";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { Composer } from "@/composer";
 import { ComposerDock } from "@/composer/dock";
 import { useComposerEditingSession, useComposerFullscreen } from "@/composer/editing-session";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
+import { FileExplorerPane } from "@/components/file-explorer-pane";
+import { FilePane } from "@/file-pane/pane";
 import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
 } from "@/composer/attachments/submit";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { MenuHeader } from "@/components/headers/menu-header";
+import { SidebarMenuToggle } from "@/components/headers/sidebar-menu-toggle";
+import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
+import { ScreenHeader } from "@/components/headers/screen-header";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { isWeb } from "@/constants/platform";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
@@ -49,6 +79,12 @@ import {
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { normalizeWorkspaceDescriptor, type WorkspaceDescriptor } from "@/stores/session-store";
+import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
+import {
+  SIDEBAR_RESIZE_ACTIVATION_OFFSET,
+  SIDEBAR_RESIZE_FAIL_OFFSET,
+} from "@/components/sidebar-resize-handle-layout";
+import { usePanelStore, MIN_FILE_NAV_WIDTH, MAX_FILE_NAV_WIDTH } from "@/stores/panel-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -63,7 +99,10 @@ import { useFormPreferences } from "@/hooks/use-form-preferences";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { toErrorMessage } from "@/utils/error-messages";
 import { buildSettingsAddHostRoute } from "@/utils/host-routes";
+import type { ShortcutKey } from "@/utils/format-shortcut";
+import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import {
+  getHostProjectSourceDirectory,
   getHostProjectId,
   getWorktreeSupportForHostProject,
   hostProjectFromRoute,
@@ -118,6 +157,18 @@ import {
 } from "./workspace/terminals/state";
 import { captureWorkspaceDraftCleanup } from "./new-workspace/background-handoff";
 import { useNewWorkspaceScreenPresence } from "./new-workspace/screen-presence";
+
+const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedPanelRight = withUnistyles(PanelRight);
+const ThemedChevronLeft = withUnistyles(ChevronLeft);
+const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const foregroundExtraMutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundExtraMuted,
+});
+const addProjectIcon = (
+  <ThemedFolderPlus size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
+);
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
   draftId: string | undefined;
@@ -179,8 +230,706 @@ const NO_TERMINAL_ATTACHMENTS: UserComposerAttachment[] = [];
 function noopChangeAttachments() {}
 function noopClearDraft() {}
 
+const PROJECT_ICON_FALLBACK_FONT_SIZE = 10;
+const ThemedChevronDown = withUnistyles(ChevronDown);
+const chevronExtraMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundExtraMuted });
+
+// Every picker chip on this screen shares one chevron so they stay a single
+// visual family. Extra-muted: the chevron is an affordance, not information,
+// and it should sit behind the label it belongs to.
+function MetaChevron(): ReactElement {
+  return (
+    <View style={styles.chevronContainer}>
+      <ThemedChevronDown size={ICON_SIZE.sm} uniProps={chevronExtraMutedMapping} />
+    </View>
+  );
+}
+
+const metaChevron = <MetaChevron />;
+
 // Stable reference so the keyboard-action handler doesn't re-register each render.
 const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pick"];
+const NAV_TOGGLE_ACTIONS: readonly KeyboardActionId[] = ["sidebar.toggle.right"];
+// Mirrors the workspace side-panel toggle (Ctrl/Cmd+E), shown in the button tooltip.
+const FILE_NAV_TOGGLE_KEYS: ShortcutKey[] = ["mod", "E"];
+// Height of a single picker-trigger badge. The Base-row spacer reserves exactly
+// this so toggling Isolation to Local hides the row without shifting the form.
+const BADGE_HEIGHT = 28;
+// Leaves at least this much room for the centered form when clamping the nav
+// column's drag width on narrow windows.
+const FILE_NAV_FORM_RESERVE_WIDTH = 520;
+
+// Worklet: clamps the nav column's drag width, keeping the centered form usable.
+function resolveFileNavWidth(requestedWidth: number, viewportWidth: number): number {
+  "worklet";
+  return Math.max(
+    MIN_FILE_NAV_WIDTH,
+    Math.min(MAX_FILE_NAV_WIDTH, requestedWidth, viewportWidth - FILE_NAV_FORM_RESERVE_WIDTH),
+  );
+}
+
+// Desktop-only navigation column state: open flag, drag-to-resize gesture, and
+// the file preview stack. Extracted so its callbacks don't count against the
+// screen component's complexity budget.
+function useNewWorkspaceFileNav(input: {
+  isCompact: boolean;
+  hasSourceDirectory: boolean;
+  sourceDirectory: string | null;
+}) {
+  const fileNavOpen = usePanelStore((state) => state.newWorkspaceFileNavOpen);
+  const toggleFileNav = usePanelStore((state) => state.toggleNewWorkspaceFileNav);
+  const fileNavWidth = usePanelStore((state) => state.newWorkspaceFileNavWidth);
+  const setNewWorkspaceFileNavWidth = usePanelStore((state) => state.setNewWorkspaceFileNavWidth);
+  const showNavPanel = !input.isCompact && input.hasSourceDirectory && fileNavOpen;
+  const workspaceRoot = input.sourceDirectory ?? "";
+  const { width: viewportWidth } = useWindowDimensions();
+  const visibleFileNavWidth = resolveFileNavWidth(fileNavWidth, viewportWidth);
+
+  // Clicking a file previews it inside the column (push/pop over the tree, tree
+  // expansion state survives). Any project switch resets to the tree.
+  const [navPreviewPath, setNavPreviewPath] = useState<string | null>(null);
+  useEffect(() => {
+    setNavPreviewPath(null);
+  }, [input.sourceDirectory]);
+  const closeNavPreview = useCallback(() => setNavPreviewPath(null), []);
+
+  const fileNavStartWidthRef = useRef(visibleFileNavWidth);
+  const fileNavResizeWidth = useSharedValue(visibleFileNavWidth);
+  const [fileNavResizePressed, setFileNavResizePressed] = useState(false);
+  const showFileNavGrip = useCallback(() => setFileNavResizePressed(true), []);
+  const hideFileNavGrip = useCallback(() => setFileNavResizePressed(false), []);
+
+  useEffect(() => {
+    fileNavResizeWidth.value = visibleFileNavWidth;
+  }, [fileNavResizeWidth, visibleFileNavWidth]);
+
+  // Mirror of the left sidebar's gesture: the handle sits on the column's LEFT
+  // edge, so dragging left (negative translationX) widens it — the anchor is
+  // offset accordingly. Width persists to panel-store on release.
+  const fileNavResizeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .hitSlop({ left: 8, right: 8, top: 0, bottom: 0 })
+        .onBegin(() => {
+          scheduleOnRN(showFileNavGrip);
+        })
+        .activeOffsetX([-SIDEBAR_RESIZE_ACTIVATION_OFFSET, SIDEBAR_RESIZE_ACTIVATION_OFFSET])
+        .failOffsetY([-SIDEBAR_RESIZE_FAIL_OFFSET, SIDEBAR_RESIZE_FAIL_OFFSET])
+        .onStart((event) => {
+          fileNavStartWidthRef.current = visibleFileNavWidth + event.translationX;
+          fileNavResizeWidth.value = visibleFileNavWidth;
+        })
+        .onUpdate((event) => {
+          fileNavResizeWidth.value = resolveFileNavWidth(
+            fileNavStartWidthRef.current - event.translationX,
+            viewportWidth,
+          );
+        })
+        .onEnd(() => {
+          runOnJS(setNewWorkspaceFileNavWidth)(fileNavResizeWidth.value);
+        })
+        .onFinalize(() => {
+          scheduleOnRN(hideFileNavGrip);
+        }),
+    [
+      fileNavResizeWidth,
+      hideFileNavGrip,
+      setNewWorkspaceFileNavWidth,
+      showFileNavGrip,
+      viewportWidth,
+      visibleFileNavWidth,
+    ],
+  );
+
+  const fileNavPanelStyle = useAnimatedStyle(() => ({
+    width: fileNavResizeWidth.value,
+  }));
+  const contentNavPadStyle = useAnimatedStyle(
+    () => ({
+      paddingRight: showNavPanel ? fileNavResizeWidth.value : 0,
+    }),
+    [showNavPanel],
+  );
+
+  return {
+    showNavPanel,
+    workspaceRoot,
+    toggleFileNav,
+    navPreviewPath,
+    setNavPreviewPath,
+    closeNavPreview,
+    fileNavResizeGesture,
+    fileNavResizePressed,
+    fileNavPanelStyle,
+    contentNavPadStyle,
+  };
+}
+
+// The navigation column itself. Rendered only while `showNavPanel` holds; lives
+// outside the screen component so its preview/tree branching stays off the
+// screen's complexity budget.
+function NewWorkspaceFileNavPanel(input: {
+  serverId: string;
+  workspaceRoot: string;
+  navPreviewPath: string | null;
+  panelStyle: React.ComponentProps<typeof ReanimatedAnimated.View>["style"];
+  resizeGesture: React.ComponentProps<typeof SidebarResizeHandle>["gesture"];
+  resizePressed: boolean;
+  onClosePreview: () => void;
+  onOpenFile: (path: string) => void;
+}) {
+  const { t } = useTranslation();
+  const {
+    serverId,
+    workspaceRoot,
+    navPreviewPath,
+    panelStyle,
+    resizeGesture,
+    resizePressed,
+    onClosePreview,
+    onOpenFile,
+  } = input;
+  const previewTitle = useMemo(
+    () => navPreviewPath?.split("/").findLast(Boolean) ?? navPreviewPath,
+    [navPreviewPath],
+  );
+  const previewLocation = useMemo(
+    () => (navPreviewPath === null ? null : { path: navPreviewPath }),
+    [navPreviewPath],
+  );
+  return (
+    <ReanimatedAnimated.View style={[styles.fileNavPanel, panelStyle]}>
+      {navPreviewPath ? (
+        <>
+          <View style={styles.fileNavPreviewHeader}>
+            <Pressable
+              onPress={onClosePreview}
+              testID="new-workspace-file-nav-back"
+              accessibilityRole="button"
+              accessibilityLabel={t("common.actions.back")}
+              style={styles.fileNavBackButton}
+            >
+              <ThemedChevronLeft size={16} uniProps={foregroundMutedColorMapping} />
+            </Pressable>
+            <Text style={styles.fileNavPreviewTitle} numberOfLines={1}>
+              {previewTitle}
+            </Text>
+          </View>
+          {previewLocation ? (
+            <FilePane
+              serverId={serverId}
+              workspaceRoot={workspaceRoot}
+              location={previewLocation}
+              navigationRevision={0}
+              readOnly
+            />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Text style={styles.fileNavHeader}>{t("panels.fileNav.label")}</Text>
+          <FileExplorerPane
+            serverId={serverId}
+            workspaceId={null}
+            workspaceRoot={workspaceRoot}
+            onOpenFile={onOpenFile}
+          />
+        </>
+      )}
+      <SidebarResizeHandle
+        edge="left"
+        gesture={resizeGesture}
+        pressed={resizePressed}
+        testID="new-workspace-file-nav-resize-handle"
+      />
+    </ReanimatedAnimated.View>
+  );
+}
+
+function FileNavToggleIcon({ hovered }: { hovered: boolean }) {
+  return (
+    <ThemedPanelRight
+      size={16}
+      uniProps={hovered ? foregroundColorMapping : foregroundExtraMutedColorMapping}
+    />
+  );
+}
+
+function RefPickerBadgeContent({
+  selectedItem,
+  triggerLabel,
+  iconColor,
+  iconSize,
+}: {
+  selectedItem: PickerItem | null;
+  triggerLabel: string;
+  iconColor: string;
+  iconSize: number;
+}) {
+  return (
+    <>
+      <View style={styles.badgeIconBox}>
+        {selectedItem?.kind === "github-pr" ? (
+          <GitPullRequest size={iconSize} color={iconColor} />
+        ) : (
+          <GitBranch size={iconSize} color={iconColor} />
+        )}
+      </View>
+      <Text style={styles.badgeText} numberOfLines={1}>
+        {triggerLabel}
+      </Text>
+    </>
+  );
+}
+
+function RefPickerTrigger({
+  pickerAnchorRef,
+  onPress,
+  disabled,
+  badgePressableStyle,
+  selectedItem,
+  triggerLabel,
+  accessibilityLabel,
+  tooltipLabel,
+  iconColor,
+  iconSize,
+}: {
+  pickerAnchorRef: React.RefObject<View | null>;
+  onPress: () => void;
+  disabled: boolean;
+  badgePressableStyle: React.ComponentProps<typeof Pressable>["style"];
+  selectedItem: PickerItem | null;
+  triggerLabel: string;
+  accessibilityLabel: string;
+  tooltipLabel: string;
+  iconColor: string;
+  iconSize: number;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <ComboboxTrigger
+          chevron={metaChevron}
+          ref={pickerAnchorRef}
+          testID="new-workspace-ref-picker-trigger"
+          onPress={onPress}
+          disabled={disabled}
+          style={badgePressableStyle}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          <RefPickerBadgeContent
+            selectedItem={selectedItem}
+            triggerLabel={triggerLabel}
+            iconColor={iconColor}
+            iconSize={iconSize}
+          />
+        </ComboboxTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{tooltipLabel}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ProjectPickerTrigger({
+  pickerAnchorRef,
+  onPress,
+  disabled,
+  badgePressableStyle,
+  label,
+  tooltipLabel,
+  projectViewKey,
+  iconDataUri,
+  iconColor,
+  iconSize,
+}: {
+  pickerAnchorRef: React.RefObject<View | null>;
+  onPress: () => void;
+  disabled: boolean;
+  badgePressableStyle: React.ComponentProps<typeof Pressable>["style"];
+  label: string;
+  tooltipLabel: string;
+  projectViewKey: string | null;
+  iconDataUri: string | null;
+  iconColor: string;
+  iconSize: number;
+}) {
+  const placeholderLabel = projectIconPlaceholderLabelFromDisplayName(label);
+  const placeholderInitial = placeholderLabel.charAt(0).toUpperCase() || "?";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <ComboboxTrigger
+          chevron={metaChevron}
+          ref={pickerAnchorRef}
+          testID="new-workspace-project-picker-trigger"
+          onPress={onPress}
+          disabled={disabled}
+          style={badgePressableStyle}
+          accessibilityRole="button"
+          accessibilityLabel="Workspace project"
+        >
+          <View style={styles.badgeIconBox}>
+            {projectViewKey ? (
+              <ProjectIconView
+                iconDataUri={iconDataUri}
+                initial={placeholderInitial}
+                projectViewKey={projectViewKey}
+                size={ICON_SIZE.md}
+                textStyle={styles.projectIconFallbackText}
+              />
+            ) : (
+              <Folder size={iconSize} color={iconColor} />
+            )}
+          </View>
+          <Text style={styles.badgeText} numberOfLines={1}>
+            {label}
+          </Text>
+        </ComboboxTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{tooltipLabel}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function PickerOptionItem({
+  testID,
+  label,
+  description,
+  selected,
+  active,
+  disabled,
+  onPress,
+  isBranch,
+  trailingLabel,
+  accessibilityLabel,
+  iconColor,
+  iconSize,
+}: {
+  testID: string;
+  label: string;
+  description: string | undefined;
+  selected: boolean;
+  active: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  isBranch: boolean;
+  trailingLabel?: string;
+  accessibilityLabel?: string;
+  iconColor: string;
+  iconSize: number;
+}) {
+  const leadingSlot = useMemo(
+    () => (
+      <View style={styles.rowIconBox}>
+        {isBranch ? (
+          <GitBranch size={iconSize} color={iconColor} />
+        ) : (
+          <GitPullRequest size={iconSize} color={iconColor} />
+        )}
+      </View>
+    ),
+    [isBranch, iconSize, iconColor],
+  );
+  const trailingSlot = useMemo(
+    () =>
+      trailingLabel ? <Text style={styles.refDivergenceLabel}>{trailingLabel}</Text> : undefined,
+    [trailingLabel],
+  );
+  return (
+    <ComboboxItem
+      testID={testID}
+      label={label}
+      description={description}
+      selected={selected}
+      active={active}
+      disabled={disabled}
+      onPress={onPress}
+      leadingSlot={leadingSlot}
+      trailingSlot={trailingSlot}
+      accessibilityLabel={accessibilityLabel}
+    />
+  );
+}
+
+function IsolationOptionItem({
+  optionId,
+  label,
+  selected,
+  active,
+  disabled,
+  onPress,
+  iconColor,
+  iconSize,
+}: {
+  optionId: string;
+  label: string;
+  selected: boolean;
+  active: boolean;
+  disabled: boolean;
+  onPress: () => void;
+  iconColor: string;
+  iconSize: number;
+}) {
+  const leadingSlot = useMemo(
+    () => (
+      <View style={styles.rowIconBox}>
+        {optionId === "worktree" ? (
+          <GitBranch size={iconSize} color={iconColor} />
+        ) : (
+          <Folder size={iconSize} color={iconColor} />
+        )}
+      </View>
+    ),
+    [optionId, iconSize, iconColor],
+  );
+  return (
+    <ComboboxItem
+      testID={`workspace-create-isolation-${optionId}`}
+      label={label}
+      selected={selected}
+      active={active}
+      disabled={disabled}
+      onPress={onPress}
+      leadingSlot={leadingSlot}
+    />
+  );
+}
+
+function ProjectOptionItem({
+  testID,
+  projectViewKey,
+  iconDataUri,
+  label,
+  description,
+  selected,
+  active,
+  disabled,
+  onPress,
+}: {
+  testID: string;
+  projectViewKey: string;
+  iconDataUri: string | null;
+  label: string;
+  description: string | undefined;
+  selected: boolean;
+  active: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const placeholderLabel = projectIconPlaceholderLabelFromDisplayName(label);
+  const placeholderInitial = placeholderLabel.charAt(0).toUpperCase() || "?";
+  const leadingSlot = useMemo(
+    () => (
+      <View style={styles.rowIconBox}>
+        <ProjectIconView
+          iconDataUri={iconDataUri}
+          initial={placeholderInitial}
+          projectViewKey={projectViewKey}
+          size={ICON_SIZE.md}
+          textStyle={styles.projectIconFallbackText}
+        />
+      </View>
+    ),
+    [iconDataUri, placeholderInitial, projectViewKey],
+  );
+
+  return (
+    <ComboboxItem
+      testID={testID}
+      label={label}
+      description={description}
+      selected={selected}
+      active={active}
+      disabled={disabled}
+      onPress={onPress}
+      leadingSlot={leadingSlot}
+    />
+  );
+}
+
+function NewWorkspacePickerOption({
+  option,
+  selected,
+  active,
+  onPress,
+  itemById,
+  isPending,
+}: {
+  option: ComboboxOptionType;
+  selected: boolean;
+  active: boolean;
+  onPress: () => void;
+  itemById: Map<string, PickerItem>;
+  isPending: boolean;
+}) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const item = itemById.get(option.id);
+  if (!item) return <View key={option.id} />;
+
+  const isBranch = item.kind === "branch";
+  const testID = isBranch
+    ? `new-workspace-ref-picker-branch-${item.name}`
+    : `new-workspace-ref-picker-pr-${item.item.number}`;
+  const description =
+    !isBranch && item.item.baseRefName
+      ? t("newWorkspace.refPicker.intoBase", { baseRef: item.item.baseRefName })
+      : undefined;
+
+  return (
+    <PickerOptionItem
+      testID={testID}
+      label={pickerItemLabel(item)}
+      description={description}
+      selected={selected}
+      active={active}
+      disabled={isPending}
+      onPress={onPress}
+      isBranch={isBranch}
+      trailingLabel={isBranch ? item.divergenceLabel : undefined}
+      accessibilityLabel={isBranch ? item.accessibilityLabel : undefined}
+      iconColor={theme.colors.foregroundMuted}
+      iconSize={theme.iconSize.sm}
+    />
+  );
+}
+
+function NewWorkspaceProjectPickerOption({
+  option,
+  selected,
+  active,
+  onPress,
+  projectByOptionId,
+  projectIconDataByProjectViewKey,
+  selectedServerId,
+  isPending,
+  supportsWorkspaceMultiplicity,
+}: {
+  option: ComboboxOptionType;
+  selected: boolean;
+  active: boolean;
+  onPress: () => void;
+  projectByOptionId: Map<string, HostProjectListItem>;
+  projectIconDataByProjectViewKey: Map<string, string | null>;
+  selectedServerId: string;
+  isPending: boolean;
+  supportsWorkspaceMultiplicity: boolean;
+}) {
+  const project = projectByOptionId.get(option.id);
+  if (!project) return <View key={option.id} />;
+  const sourceDirectory =
+    getHostProjectSourceDirectory(project, selectedServerId) ?? project.iconWorkingDir;
+
+  return (
+    <ProjectOptionItem
+      testID={`new-workspace-project-picker-option-${project.viewKey}`}
+      projectViewKey={project.viewKey}
+      iconDataUri={projectIconDataByProjectViewKey.get(project.viewKey) ?? null}
+      label={project.projectName}
+      description={sourceDirectory}
+      selected={selected}
+      active={active}
+      disabled={
+        isPending ||
+        (!supportsWorkspaceMultiplicity &&
+          !project.hosts.some((host) => host.worktreeSupport !== "unsupported"))
+      }
+      onPress={onPress}
+    />
+  );
+}
+
+function AddProjectPickerAction({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation();
+  const openProjectKeys = useShortcutKeys("new-agent");
+  const shortcut = useMemo(
+    () => (openProjectKeys ? <Shortcut chord={openProjectKeys} /> : null),
+    [openProjectKeys],
+  );
+
+  return (
+    <ComboboxItem
+      testID="new-workspace-project-picker-add-project"
+      label={t("sidebar.actions.addProject")}
+      onPress={onPress}
+      leadingSlot={addProjectIcon}
+      trailingSlot={shortcut}
+    />
+  );
+}
+
+function newWorkspaceHostOptionTestID(serverId: string): string {
+  return `new-workspace-host-picker-option-${serverId}`;
+}
+
+function IsolationPickerTrigger({
+  pickerAnchorRef,
+  onPress,
+  disabled,
+  badgePressableStyle,
+  isolation,
+  label,
+  tooltipLabel,
+  iconColor,
+  iconSize,
+}: {
+  pickerAnchorRef: React.RefObject<View | null>;
+  onPress: () => void;
+  disabled: boolean;
+  badgePressableStyle: React.ComponentProps<typeof Pressable>["style"];
+  isolation: "local" | "worktree";
+  label: string;
+  tooltipLabel: string;
+  iconColor: string;
+  iconSize: number;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <ComboboxTrigger
+          chevron={metaChevron}
+          ref={pickerAnchorRef}
+          testID="workspace-create-isolation-trigger"
+          onPress={onPress}
+          disabled={disabled}
+          style={badgePressableStyle}
+          accessibilityRole="button"
+          accessibilityLabel="Workspace isolation"
+        >
+          <View style={styles.badgeIconBox}>
+            {isolation === "worktree" ? (
+              <GitBranch size={iconSize} color={iconColor} />
+            ) : (
+              <Folder size={iconSize} color={iconColor} />
+            )}
+          </View>
+          <Text style={styles.badgeText} numberOfLines={1}>
+            {label}
+          </Text>
+        </ComboboxTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{tooltipLabel}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Wraps a single argument control in the mobile vertical stack. On desktop the
+// controls are laid out in one horizontal row, so no per-control wrapper is used.
+// Decorative padding must not block the dock background from iOS hit testing.
+function FormRow({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.row} pointerEvents="box-none">
+      {children}
+    </View>
+  );
+}
 
 interface WorkspaceIsolationState {
   isolation: "local" | "worktree";
@@ -1034,6 +1783,26 @@ export function NewWorkspaceScreen({
     cwd: selectedSourceDirectory ?? "",
   });
 
+  // Desktop-only navigation column for the directory being configured. Without
+  // a workspaceId the pane keys its explorer state by `root:<dir>`, so switching
+  // projects re-keys the tree and it re-initializes on its own.
+  const {
+    showNavPanel,
+    workspaceRoot: fileNavWorkspaceRoot,
+    toggleFileNav: toggleNewWorkspaceFileNav,
+    navPreviewPath,
+    setNavPreviewPath,
+    closeNavPreview,
+    fileNavResizeGesture,
+    fileNavResizePressed,
+    fileNavPanelStyle,
+    contentNavPadStyle,
+  } = useNewWorkspaceFileNav({
+    isCompact,
+    hasSourceDirectory: hasSelectedSourceDirectory,
+    sourceDirectory: selectedSourceDirectory,
+  });
+
   const worktreeSupport = selectedProject
     ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
     : "unsupported";
@@ -1192,6 +1961,20 @@ export function NewWorkspaceScreen({
     enabled: projectPickerOptions.length > 0,
     priority: 0,
     handle: handleProjectPick,
+  });
+
+  // Same binding as the workspace side panel (Ctrl/Cmd+E). The workspace screen
+  // registers its own handler while mounted; this screen's registration is
+  // newer, so the dispatcher reaches it first while /new is up.
+  useKeyboardActionHandler({
+    handlerId: "new-workspace-file-nav-toggle",
+    actions: NAV_TOGGLE_ACTIONS,
+    enabled: !isCompact,
+    priority: 0,
+    handle: () => {
+      toggleNewWorkspaceFileNav();
+      return true;
+    },
   });
 
   const openIsolationPicker = useCallback(() => {
@@ -1520,6 +2303,7 @@ export function NewWorkspaceScreen({
     },
   });
 
+  const screenHeaderLeft = useMemo(() => <SidebarMenuToggle />, []);
   const importSession = useImportSession({ serverId: selectedServerId });
 
   const isComposerFullscreen = composerEditing.isFullscreen(isTerminalLaunch);
@@ -1583,18 +2367,75 @@ export function NewWorkspaceScreen({
       agentControls={agentControlsWithDisabled}
     />
   );
+
+  const sidePanelToggleLabel = t("workspace.tabs.sidePanel.toggle");
+  const sidePanelAccessibilityState = useMemo(() => ({ expanded: showNavPanel }), [showNavPanel]);
+  const fileNavPanelElement = useMemo(
+    () =>
+      showNavPanel ? (
+        <NewWorkspaceFileNavPanel
+          serverId={selectedServerId}
+          workspaceRoot={fileNavWorkspaceRoot}
+          navPreviewPath={navPreviewPath}
+          panelStyle={fileNavPanelStyle}
+          resizeGesture={fileNavResizeGesture}
+          resizePressed={fileNavResizePressed}
+          onClosePreview={closeNavPreview}
+          onOpenFile={setNavPreviewPath}
+        />
+      ) : null,
+    [
+      showNavPanel,
+      selectedServerId,
+      fileNavWorkspaceRoot,
+      navPreviewPath,
+      fileNavPanelStyle,
+      fileNavResizeGesture,
+      fileNavResizePressed,
+      closeNavPreview,
+      setNavPreviewPath,
+    ],
+  );
+  const screenHeaderRight = useMemo(() => {
+    if (isCompact) {
+      return null;
+    }
+    return (
+      <HeaderToggleButton
+        testID="new-workspace-file-nav-toggle"
+        onPress={toggleNewWorkspaceFileNav}
+        tooltipLabel={sidePanelToggleLabel}
+        tooltipKeys={FILE_NAV_TOGGLE_KEYS}
+        tooltipSide="left"
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={sidePanelToggleLabel}
+        accessibilityState={sidePanelAccessibilityState}
+      >
+        {({ hovered }) => <FileNavToggleIcon hovered={hovered} />}
+      </HeaderToggleButton>
+    );
+  }, [isCompact, sidePanelAccessibilityState, sidePanelToggleLabel, toggleNewWorkspaceFileNav]);
+
   return (
     <FileDropZone style={styles.container}>
-      <NewWorkspaceLayout
-        isCompact={isCompact}
-        fullscreen={isComposerFullscreen}
-        title={t("newWorkspace.title")}
-        formStack={formStack}
-        onImportSession={importSession.open}
-      >
-        {composer}
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-      </NewWorkspaceLayout>
+      {isComposerFullscreen ? null : (
+        <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
+      )}
+      <ReanimatedAnimated.View style={[styles.content, contentNavPadStyle]}>
+        <TitlebarDragRegion />
+        <NewWorkspaceLayout
+          isCompact={isCompact}
+          fullscreen={isComposerFullscreen}
+          title={t("newWorkspace.title")}
+          formStack={formStack}
+          onImportSession={importSession.open}
+        >
+          {composer}
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        </NewWorkspaceLayout>
+        {fileNavPanelElement}
+      </ReanimatedAnimated.View>
       {importSession.sheet}
     </FileDropZone>
   );
@@ -1656,19 +2497,18 @@ function NewWorkspaceLayout({
   );
   return (
     <>
-      {fullscreen ? null : (
-        <MenuHeader borderless rightContent={isCompact ? importSessionButton : undefined} />
+      {/* Compact keeps upstream's mobile MenuHeader; the desktop fork renders its own
+          ScreenHeader (with the file-nav column toggle) outside this layout. */}
+      {fullscreen || !isCompact ? null : (
+        <MenuHeader borderless rightContent={importSessionButton} />
       )}
-      <View style={styles.content}>
-        <TitlebarDragRegion />
-        <ComposerDock centered={!isCompact} fullscreen={fullscreen}>
-          {setupFields}
-          <>
-            {children}
-            {isCompact || fullscreen ? null : importSessionButton}
-          </>
-        </ComposerDock>
-      </View>
+      <ComposerDock centered={!isCompact} fullscreen={fullscreen}>
+        {setupFields}
+        <>
+          {children}
+          {isCompact || fullscreen ? null : importSessionButton}
+        </>
+      </ComposerDock>
     </>
   );
 }
@@ -1685,6 +2525,90 @@ const styles = StyleSheet.create((theme) => ({
   },
   compactSetupSpace: {
     flex: 1,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: theme.spacing[4],
+    gap: theme.spacing[1],
+  },
+  badgeText: {
+    minWidth: 0,
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foregroundMuted,
+    flexShrink: 1,
+  },
+  tooltipText: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.popoverForeground,
+  },
+  refDivergenceLabel: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+    fontVariant: ["tabular-nums"],
+  },
+  chevronContainer: {
+    flexShrink: 0,
+    transform: [{ translateY: 1 }],
+  },
+  badgeIconBox: {
+    width: theme.iconSize.md,
+    height: theme.iconSize.md,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  projectIconFallbackText: {
+    // Single uppercase initial inside an iconSize.md (16px) square — below the
+    // smallest font-size token, so it stays a literal sized to the box.
+    fontSize: PROJECT_ICON_FALLBACK_FONT_SIZE,
+    fontWeight: "600",
+  },
+  rowIconBox: {
+    width: theme.iconSize.md,
+    height: theme.iconSize.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Absolute-positioned nav column; its width (and the content's matching
+  // paddingRight) come from the animated resize style, not a static value.
+  fileNavPanel: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
+    // The titlebar drag overlay covers the whole content area; the nav column
+    // must opt out so file previews scroll and their text stays selectable.
+    ...(isWeb ? { WebkitAppRegion: "no-drag" } : null),
+    userSelect: "text",
+  },
+  fileNavHeader: {
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foregroundMuted,
+  },
+  fileNavPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingLeft: theme.spacing[1],
+    paddingRight: theme.spacing[3],
+    minHeight: 32,
+  },
+  fileNavBackButton: {
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+  },
+  fileNavPreviewTitle: {
+    flex: 1,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
   },
   composerTitleContainer: {
     marginBottom: theme.spacing[8],

@@ -76,6 +76,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     const message = await generator.generateCommitMessage("/repo");
@@ -103,6 +104,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
@@ -120,6 +122,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
@@ -134,6 +137,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     await expect(generator.generateCommitMessage("/repo")).rejects.toThrow("network down");
@@ -149,6 +153,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     const result = await generator.generatePullRequestText("/repo", "main");
@@ -177,6 +182,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      readDaemonConfig: () => ({}),
     });
 
     await expect(generator.generatePullRequestText("/repo")).resolves.toEqual({
@@ -206,6 +212,7 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger,
+      readDaemonConfig: () => ({}),
     });
 
     await run(generator);

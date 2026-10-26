@@ -206,6 +206,10 @@ const NewTabPanel = memo(function NewTabPanel(): ReactElement {
         itemsById.get("terminal")?.launch({ kind: "replace", tabId });
         return true;
       }
+      if (action.id === "workspace.terminal.new.powershell") {
+        itemsById.get("powershell")?.launch({ kind: "replace", tabId });
+        return true;
+      }
       if (action.id === "workspace.browser.new" || action.id === "workspace.tab.target.browser") {
         itemsById.get("browser")?.launch({ kind: "replace", tabId });
         return true;
@@ -231,6 +235,7 @@ const NewTabPanel = memo(function NewTabPanel(): ReactElement {
     actions: [
       "workspace.agent.new",
       "workspace.terminal.new",
+      "workspace.terminal.new.powershell",
       "workspace.browser.new",
       "workspace.tab.target.agent",
       "workspace.tab.target.browser",

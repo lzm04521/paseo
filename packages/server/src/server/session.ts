@@ -48,6 +48,10 @@ import type {
   TerminalWorkspaceContributionChangedEvent,
 } from "../terminal/terminal-manager.js";
 import { TerminalSessionController } from "../terminal/terminal-session-controller.js";
+import {
+  BUILTIN_POWERSHELL_COMMAND,
+  resolveBuiltinPowerShellCommand,
+} from "../terminal/powershell.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import { CursorError } from "./pagination/cursor.js";
@@ -564,6 +568,8 @@ export interface SessionOptions {
   daemonVersion?: string;
   daemonRuntimeConfig?: DaemonRuntimeConfig;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
+  getIdleRestartIdleSince?: () => number | null;
+  getIdleRestartStartedAt?: () => number | null;
 }
 
 export type SessionLifecycleIntent =
@@ -879,6 +885,8 @@ export class Session {
       daemonVersion,
       daemonRuntimeConfig,
       getWebSocketRuntimeMetrics,
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
     } = options;
     this.browserToolsBroker = options.browserToolsBroker;
     this.clientId = clientId;
@@ -973,6 +981,7 @@ export class Session {
       checkoutDiffManager,
       gitMetadataGenerator: createGitMetadataGenerator({
         workspaceGitService: this.workspaceGitService,
+        readDaemonConfig: () => this.readStructuredGenerationDaemonConfig(),
         generation: createAgentStructuredTextGeneration({
           agentManager: this.agentManager,
           providerSnapshotManager,
@@ -1093,6 +1102,8 @@ export class Session {
         "Terminal directories": this.terminalController.getMetrics().directorySubscriptionCount,
         "Terminal output": this.terminalController.getMetrics().streamSubscriptionCount,
       }),
+      getIdleRestartIdleSince,
+      getIdleRestartStartedAt,
       listProviderAvailability: () => this.agentManager.listProviderAvailability(),
       listAgents: () => this.agentManager.listAgents(),
       listProjects: () => this.projectRegistry.list(),
@@ -1121,6 +1132,16 @@ export class Session {
       clientSupportsWrapReflow: (source) =>
         this.supportsForSource(CLIENT_CAPS.terminalReflowableSnapshot, source),
       getClientBufferedAmount: (source) => this.getTransportBufferedAmount(source),
+      resolveTerminalCommand: async (command) => {
+        if (command !== BUILTIN_POWERSHELL_COMMAND) {
+          return undefined;
+        }
+        return (
+          (await resolveBuiltinPowerShellCommand({
+            configuredPath: daemonConfigStore.get().powershellPath,
+          })) ?? undefined
+        );
+      },
     });
     this.agentDirectory = new AgentDirectory({
       manager: this.agentManager,
@@ -5165,6 +5186,12 @@ export class Session {
       // show a consent prompt, and each blocked call holds a libuv threadpool thread.
       const excludedDiscoveryPaths =
         !searchesWorkspace && process.platform === "darwin" ? [join(homeRoot, "Library")] : [];
+      // Daemon-level global default (`fileSearch.gitIgnoreOverrides` in $PASEO_HOME/config.json).
+      // An explicit array, including empty, fully replaces the built-in
+      // DEFAULT_GIT_IGNORE_PATH_OVERRIDES; undefined falls back to it.
+      const fileSearchOverrides = searchesWorkspace
+        ? this.daemonConfigStore.get().fileSearch?.gitIgnoreOverrides
+        : undefined;
       const entries = await searchDirectoryEntries({
         root: workspaceCwd ? expandTilde(workspaceCwd) : homeRoot,
         query,
@@ -5178,6 +5205,7 @@ export class Session {
         confidentResultScanThreshold: searchesWorkspace ? undefined : 5_000,
         respectGitIgnore: searchesWorkspace,
         excludedDiscoveryPaths,
+        gitIgnorePathOverrides: fileSearchOverrides,
         includeFiles,
         includeDirectories,
         matchMode,

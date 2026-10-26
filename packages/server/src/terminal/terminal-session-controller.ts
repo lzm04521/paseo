@@ -99,6 +99,10 @@ export interface TerminalSessionControllerOptions {
   // Bytes queued on the client transport but not yet sent, or null when the
   // transport exposes no backpressure signal (e.g. the multiplexed relay socket).
   getClientBufferedAmount?: (source: object) => number | null;
+  // Resolves built-in shell sentinel commands (e.g. "powershell") to a concrete
+  // executable on this host before the terminal manager spawns them. Returning
+  // undefined (or no resolver) keeps the original command untouched.
+  resolveTerminalCommand?: (command?: string) => Promise<string | undefined>;
 }
 
 interface TerminalWorkspaceRef {
@@ -146,6 +150,9 @@ export class TerminalSessionController {
   private readonly listTerminalWorkspaceRoots: () => Promise<readonly string[]>;
   private readonly clientSupportsWrapReflow: (source: object) => boolean;
   private readonly getClientBufferedAmount: (source: object) => number | null;
+  private readonly resolveTerminalCommand:
+    | ((command?: string) => Promise<string | undefined>)
+    | undefined;
 
   private readonly subscribedDirectories = new Map<string, TerminalDirectorySubscription>();
   private unsubscribeTerminalsChanged: (() => void) | null = null;
@@ -164,6 +171,7 @@ export class TerminalSessionController {
       (async () => (await this.listTerminalWorkspaceRefs()).map((workspace) => workspace.cwd));
     this.clientSupportsWrapReflow = options.clientSupportsWrapReflow ?? (() => false);
     this.getClientBufferedAmount = options.getClientBufferedAmount ?? (() => 0);
+    this.resolveTerminalCommand = options.resolveTerminalCommand;
   }
 
   start(): void {
@@ -571,11 +579,12 @@ export class TerminalSessionController {
         throw new Error(`Workspace ${workspaceId} is not active or does not exist`);
       }
 
+      const resolvedCommand = (await this.resolveTerminalCommand?.(msg.command)) ?? msg.command;
       const session = await this.terminalManager.createTerminal({
         cwd: msg.cwd,
         workspaceId,
         name: msg.name,
-        command: msg.command,
+        command: resolvedCommand,
         args: msg.args,
         rows: msg.size?.rows,
         cols: msg.size?.cols,

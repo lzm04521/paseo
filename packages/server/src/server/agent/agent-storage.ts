@@ -42,6 +42,39 @@ const PERSISTENCE_HANDLE_SCHEMA = z
   .nullable()
   .optional();
 
+const STORED_AGENT_STATS_SCHEMA = z
+  .object({
+    sessionInputTokens: z.number().optional(),
+    sessionCachedInputTokens: z.number().optional(),
+    sessionOutputTokens: z.number().optional(),
+    sessionCacheWriteTokens: z.number().optional(),
+    sessionTotalCostUsd: z.number().optional(),
+    requestCount: z.number().optional(),
+    turnCount: z.number().optional(),
+    lastGenTokensPerSec: z.number().optional(),
+    lastFirstTokenLatencyMs: z.number().optional(),
+    lastRequestDurationMs: z.number().optional(),
+    lastTurnDurationMs: z.number().optional(),
+    cacheHitRate: z.number().optional(),
+    toolCallTotal: z.number().optional(),
+    toolCallErrors: z.number().optional(),
+    toolCalls: z
+      .array(z.object({ tool: z.string(), count: z.number(), errors: z.number() }))
+      .optional(),
+    subagents: z
+      .array(
+        z.object({
+          agentId: z.string(),
+          label: z.string().optional(),
+          inputTokens: z.number().optional(),
+          outputTokens: z.number().optional(),
+          running: z.boolean(),
+        }),
+      )
+      .optional(),
+  })
+  .optional();
+
 const STORED_AGENT_SCHEMA = z.object({
   id: z.string(),
   provider: z.string(),
@@ -67,6 +100,7 @@ const STORED_AGENT_SCHEMA = z.object({
     })
     .optional(),
   features: z.array(AgentFeatureSchema).optional(),
+  stats: STORED_AGENT_STATS_SCHEMA,
   persistence: PERSISTENCE_HANDLE_SCHEMA,
   lastError: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),

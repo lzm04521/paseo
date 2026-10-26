@@ -22,6 +22,10 @@ export const DEFAULT_TREE_RAIL_WIDTH = 260;
 export const MIN_TREE_RAIL_WIDTH = 180;
 export const MAX_TREE_RAIL_WIDTH = 600;
 
+export const DEFAULT_FILE_NAV_WIDTH = 300;
+export const MIN_FILE_NAV_WIDTH = 220;
+export const MAX_FILE_NAV_WIDTH = 720;
+
 export interface PanelLayoutInput {
   isCompact: boolean;
 }
@@ -44,6 +48,10 @@ export function clampSidebarWidth(width: number): number {
 
 export function clampTreeRailWidth(width: number): number {
   return clampNumber(width, MIN_TREE_RAIL_WIDTH, MAX_TREE_RAIL_WIDTH);
+}
+
+export function clampFileNavWidth(width: number): number {
+  return clampNumber(width, MIN_FILE_NAV_WIDTH, MAX_FILE_NAV_WIDTH);
 }
 
 export function selectIsAgentListOpen(state: PanelCoreState, input: PanelLayoutInput): boolean {
@@ -104,6 +112,8 @@ export const PanelPersistedStateSchema = z.strictObject({
   explorerFilesSplitRatio: z.number().optional(),
   treeRailWidth: z.number().optional(),
   fileTreeVisible: z.boolean().optional(),
+  newWorkspaceFileNavOpen: z.boolean().optional(),
+  newWorkspaceFileNavWidth: z.number().optional(),
 });
 
 type MigratablePanelState = z.infer<typeof PanelPersistedStateSchema>;
@@ -183,6 +193,14 @@ export function migratePanelState(persistedState: unknown, version: number): Mig
   migrateTreeRailWidth(state, version);
   if (typeof state.fileTreeVisible !== "boolean") {
     state.fileTreeVisible = true;
+  }
+  if (typeof state.newWorkspaceFileNavOpen !== "boolean") {
+    state.newWorkspaceFileNavOpen = true;
+  }
+  if (typeof state.newWorkspaceFileNavWidth !== "number") {
+    state.newWorkspaceFileNavWidth = DEFAULT_FILE_NAV_WIDTH;
+  } else {
+    state.newWorkspaceFileNavWidth = clampFileNavWidth(state.newWorkspaceFileNavWidth);
   }
   if (version < 12) {
     // Compact panel position is transient UI state. Cold starts always begin

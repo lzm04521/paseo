@@ -16,9 +16,12 @@ import {
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import {
+  hideExplorerSidebar,
   isExplorerSidebarOpen,
   openExplorerSidebarView,
   resolveExplorerSidebarPresentation,
+  shouldAutoRevealExplorerSidebar,
+  showExplorerSidebar,
   toggleExplorerSidebar,
 } from "@/workspace-tabs/explorer-sidebar";
 
@@ -104,5 +107,58 @@ describe("Explorer sidebar", () => {
     toggleExplorerSidebar(input);
 
     expect(isExplorerSidebarOpen(input)).toBe(true);
+  });
+
+  it("auto-reveals the Explorer sidebar only on wide layouts that have hydrated", () => {
+    const query = { isCompact: false, workspaceKey: WORKSPACE_KEY };
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: false, hydrated: true })).toBe(
+      false,
+    );
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: false })).toBe(
+      false,
+    );
+    expect(
+      shouldAutoRevealExplorerSidebar({
+        isCompact: true,
+        workspaceKey: WORKSPACE_KEY,
+        enabled: true,
+        hydrated: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoRevealExplorerSidebar({
+        isCompact: false,
+        workspaceKey: null,
+        enabled: true,
+        hydrated: true,
+      }),
+    ).toBe(false);
+    // The default layout keeps the Explorer hidden, so the workspace-open moment reveals it.
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: true })).toBe(true);
+    showExplorerSidebar(query);
+    expect(shouldAutoRevealExplorerSidebar({ ...query, enabled: true, hydrated: true })).toBe(
+      false,
+    );
+  });
+
+  it("lands the workspace-open reveal on the Files tab", () => {
+    const query = { isCompact: false, workspaceKey: WORKSPACE_KEY };
+    const input = { ...query };
+    // The user last left the Explorer on Changes, then closed it.
+    openExplorerSidebarView({ ...input, view: "changes" });
+    hideExplorerSidebar(input);
+    expect(isExplorerSidebarOpen(query)).toBe(false);
+
+    // The workspace-open moment reopens through the "files" view, as workspace-screen wires it.
+    openExplorerSidebarView({ ...input, view: "files" });
+    expect(isExplorerSidebarOpen(query)).toBe(true);
+    const state = useWorkspaceLayoutStore.getState();
+    const layout = state.layoutByWorkspace[WORKSPACE_KEY];
+    const paneId = selectExplorerSidebarPaneId(state, WORKSPACE_KEY);
+    const pane = layout && paneId ? findPaneById(layout.root, paneId) : null;
+    const focusedTab = layout
+      ? collectAllTabs(layout.root).find((tab) => tab.tabId === pane?.focusedTabId)
+      : null;
+    expect(focusedTab?.target.kind).toBe("files");
   });
 });
