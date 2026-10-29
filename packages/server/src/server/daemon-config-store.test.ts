@@ -294,6 +294,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
       { relayEnabledMutable: false },
@@ -326,6 +327,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
       { relayEnabledMutable: false },
@@ -413,6 +415,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -515,6 +518,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -563,6 +567,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -625,6 +630,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -676,6 +682,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -702,6 +709,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -727,6 +735,7 @@ describe("DaemonConfigStore", () => {
         metadataGeneration: { providers: [] },
         autoArchiveAfterMerge: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -751,6 +760,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -793,6 +803,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -818,6 +829,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -842,6 +854,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
       },
       undefined,
     );
@@ -894,6 +907,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
         metadataGeneration: { providers: [{ provider: "claude", model: "haiku" }] },
       },
       undefined,
@@ -955,6 +969,7 @@ describe("DaemonConfigStore", () => {
         autoArchiveAfterMerge: false,
         enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
         metadataGeneration: { providers: [] },
       },
       undefined,
@@ -980,6 +995,92 @@ describe("DaemonConfigStore", () => {
       command: ["npx", "-y", "--version"],
       env: {},
     });
+  });
+
+  test("patch persists claude image downgrade into config.json", async () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: { providers: [] },
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
+      },
+      undefined,
+    );
+
+    await store.patch({ claudeImageDowngrade: "on" });
+
+    expect(store.get().claudeImageDowngrade).toBe("on");
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.claudeImageDowngrade).toBe("on");
+  });
+
+  test("patch persists idle auto-restart into config.json", async () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+
+    // The daemon seeds the defaults before the store sees its first patch
+    // (config.ts resolveIdleAutoRestart, bootstrap.ts), so the in-memory node is
+    // runtime-complete and partial RPC patches deep-merge onto it.
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: { providers: [] },
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+        claudeImageDowngrade: "off",
+        idleAutoRestart: { enabled: false, uptimeThresholdMinutes: 240, idleThresholdMinutes: 10 },
+      },
+      undefined,
+    );
+
+    await store.patch({ idleAutoRestart: { enabled: true, uptimeThresholdMinutes: 60 } });
+
+    expect(store.get().idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 60,
+      idleThresholdMinutes: 10,
+    });
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.idleAutoRestart).toEqual({
+      enabled: true,
+      uptimeThresholdMinutes: 60,
+      idleThresholdMinutes: 10,
+    });
+  });
+
+  test("schema defaults missing claudeImageDowngrade to off", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+
+    // Old in-memory configs (pre-schema) without the field still parse with the default.
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: { providers: [] },
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+      } as MutableDaemonConfig,
+      undefined,
+    );
+
+    expect(store.get().claudeImageDowngrade).toBe("off");
   });
 });
 

@@ -70,10 +70,12 @@ interface SplitContainerProps {
   closingTabIds: Set<string>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
+  workspaceRoot: string | null;
   onCopyResumeCommand: (agentId: string) => Promise<void> | void;
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
-  onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyFileRelativePath: (path: string) => Promise<void> | void;
+  onCopyFileFullPath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => Promise<void> | void;
@@ -155,10 +157,12 @@ export function SplitContainer({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -252,10 +256,12 @@ export function SplitContainer({
                 closingTabIds={closingTabIds}
                 onNavigateTab={onNavigateTab}
                 onCloseTab={onCloseTab}
+                workspaceRoot={workspaceRoot}
                 onCopyResumeCommand={onCopyResumeCommand}
                 onCopyAgentId={onCopyAgentId}
                 onCopyTerminalId={onCopyTerminalId}
-                onCopyFilePath={onCopyFilePath}
+                onCopyFileRelativePath={onCopyFileRelativePath}
+                onCopyFileFullPath={onCopyFileFullPath}
                 onReloadAgent={onReloadAgent}
                 onRenameTab={onRenameTab}
                 onCloseTabsToLeft={onCloseTabsToLeft}
@@ -383,10 +389,12 @@ function SplitNodeView({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -471,10 +479,12 @@ function SplitNodeView({
             closingTabIds={closingTabIds}
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
+            workspaceRoot={workspaceRoot}
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
-            onCopyFilePath={onCopyFilePath}
+            onCopyFileRelativePath={onCopyFileRelativePath}
+            onCopyFileFullPath={onCopyFileFullPath}
             onReloadAgent={onReloadAgent}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={onCloseTabsToLeft}
@@ -523,10 +533,12 @@ function SplitNodeView({
               closingTabIds={closingTabIds}
               onNavigateTab={onNavigateTab}
               onCloseTab={onCloseTab}
+              workspaceRoot={workspaceRoot}
               onCopyResumeCommand={onCopyResumeCommand}
               onCopyAgentId={onCopyAgentId}
               onCopyTerminalId={onCopyTerminalId}
-              onCopyFilePath={onCopyFilePath}
+              onCopyFileRelativePath={onCopyFileRelativePath}
+              onCopyFileFullPath={onCopyFileFullPath}
               onReloadAgent={onReloadAgent}
               onRenameTab={onRenameTab}
               onCloseTabsToLeft={onCloseTabsToLeft}
@@ -583,10 +595,12 @@ const SplitPaneView = memo(function SplitPaneView({
   closingTabIds,
   onNavigateTab,
   onCloseTab,
+  workspaceRoot,
   onCopyResumeCommand,
   onCopyAgentId,
   onCopyTerminalId,
-  onCopyFilePath,
+  onCopyFileRelativePath,
+  onCopyFileFullPath,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -719,10 +733,12 @@ const SplitPaneView = memo(function SplitPaneView({
             setHoveredCloseTabKey={setHoveredCloseTabKey}
             onNavigateTab={onNavigateTab}
             onCloseTab={onCloseTab}
+            workspaceRoot={workspaceRoot}
             onCopyResumeCommand={onCopyResumeCommand}
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
-            onCopyFilePath={onCopyFilePath}
+            onCopyFileRelativePath={onCopyFileRelativePath}
+            onCopyFileFullPath={onCopyFileFullPath}
             onReloadAgent={onReloadAgent}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={handleCloseTabsToLeft}

@@ -177,9 +177,19 @@ const StructuredGenerationProviderConfigSchema = z
   })
   .strict();
 
+const AgentMetadataGenerationEntrySchema = z
+  .object({
+    instructions: z.string().min(1),
+  })
+  .strict();
+
 const AgentMetadataGenerationSchema = z
   .object({
     providers: z.array(StructuredGenerationProviderConfigSchema).optional(),
+    title: AgentMetadataGenerationEntrySchema.optional(),
+    branchName: AgentMetadataGenerationEntrySchema.optional(),
+    commitMessage: AgentMetadataGenerationEntrySchema.optional(),
+    pullRequest: AgentMetadataGenerationEntrySchema.optional(),
   })
   .strict();
 
@@ -275,6 +285,8 @@ export const PersistedConfigSchema = z
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
+        claudeImageDowngrade: z.enum(["off", "on"]).optional(),
+        powershellPath: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z
@@ -320,6 +332,20 @@ export const PersistedConfigSchema = z
               .url()
               .optional()
               .describe("Optional public base URL for service host aliases."),
+          })
+          .strict()
+          .optional(),
+        idleAutoRestart: z
+          .object({
+            enabled: z.boolean().optional(),
+            uptimeThresholdMinutes: z.number().int().min(1).max(10080).optional(),
+            idleThresholdMinutes: z.number().int().min(1).max(1440).optional(),
+          })
+          .strict()
+          .optional(),
+        fileSearch: z
+          .object({
+            gitIgnoreOverrides: z.array(z.string().min(1)).optional(),
           })
           .strict()
           .optional(),

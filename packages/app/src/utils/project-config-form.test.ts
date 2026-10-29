@@ -11,6 +11,7 @@ function emptyDraft(): ProjectConfigDraft {
     teardownOriginalKind: "missing",
     scripts: [],
     metadataPrompts: {
+      title: "",
       branchName: "",
       commitMessage: "",
       pullRequest: "",
@@ -219,12 +220,14 @@ describe("applyDraftToConfig", () => {
   it("reads metadata prompt instructions for visible keys", () => {
     const draft = configToDraft({
       metadataGeneration: {
+        title: { instructions: "Use sentence case." },
         branchName: { instructions: "feat/<slug>" },
         commitMessage: { instructions: "Conventional commits." },
         pullRequest: { instructions: "Include risk notes." },
       },
     });
     expect(draft.metadataPrompts).toEqual({
+      title: "Use sentence case.",
       branchName: "feat/<slug>",
       commitMessage: "Conventional commits.",
       pullRequest: "Include risk notes.",
@@ -236,6 +239,7 @@ describe("applyDraftToConfig", () => {
       metadataGeneration: { branchName: { instructions: "feat/<slug>" } },
     });
     expect(draft.metadataPrompts).toEqual({
+      title: "",
       branchName: "feat/<slug>",
       commitMessage: "",
       pullRequest: "",
@@ -253,6 +257,7 @@ describe("applyDraftToConfig", () => {
     );
 
     expect(draft.metadataPrompts).toEqual({
+      title: "",
       branchName: "feat/<slug>",
       commitMessage: "",
       pullRequest: "",
@@ -262,10 +267,12 @@ describe("applyDraftToConfig", () => {
   it("writes only metadata prompt entries with non-empty text", () => {
     const base: PaseoConfigRaw = {};
     const draft = configToDraft(base);
+    draft.metadataPrompts.title = "Use concise sentence-case titles.";
     draft.metadataPrompts.branchName = "Use mb/.";
     draft.metadataPrompts.commitMessage = "Conventional commits.";
     const next = applyDraftToConfig({ draft, base });
     expect(next.metadataGeneration).toEqual({
+      title: { instructions: "Use concise sentence-case titles." },
       branchName: { instructions: "Use mb/." },
       commitMessage: { instructions: "Conventional commits." },
     });

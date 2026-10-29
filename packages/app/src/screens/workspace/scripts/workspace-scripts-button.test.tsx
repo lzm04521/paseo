@@ -188,13 +188,17 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 vi.mock("lucide-react-native", () => {
-  const createIcon = (name: string) => (props: Record<string, unknown>) =>
-    React.createElement("span", {
-      "data-icon": name,
-      "data-color": props.color,
-      "data-size": props.size,
-      "data-testid": props.testID,
-    });
+  const createIcon = (name: string) => {
+    const Icon = (props: Record<string, unknown>) =>
+      React.createElement("span", {
+        "data-icon": name,
+        "data-color": props.color,
+        "data-size": props.size,
+        "data-testid": props.testID,
+      });
+    Icon.displayName = name;
+    return Icon;
+  };
   return {
     ChevronDown: createIcon("ChevronDown"),
     Copy: createIcon("Copy"),

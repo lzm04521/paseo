@@ -26,6 +26,7 @@ import {
   resolveTerminalProfiles,
 } from "@getpaseo/protocol/terminal-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { POWERSHELL_PROFILE } from "@/terminal/built-in-shell-profiles";
 import type { Theme } from "@/styles/theme";
 import {
   useWorkspaceScriptsMenuPages,
@@ -45,6 +46,7 @@ const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
+const MENU_NEW_TERMINAL_ICON = <TerminalProfileIcon iconKey={undefined} size={16} />;
 function WorkspaceHeaderMenuTriggerIcon() {
   return (
     <ThemedEllipsis
@@ -211,6 +213,7 @@ export interface WorkspaceHeaderMenuMobileProps extends WorkspaceHeaderWorkspace
   scripts: UseWorkspaceScriptsMenuPagesInput;
   showCreateBrowserTab: boolean;
   createTerminalDisabled: boolean;
+  onCreateTerminal: () => void;
   onCreateTerminalWithProfile: (profile: TerminalProfile) => void;
   onCreateBrowser: () => void;
 }
@@ -229,6 +232,7 @@ export function WorkspaceHeaderMenuMobile({
   scripts,
   showCreateBrowserTab,
   createTerminalDisabled,
+  onCreateTerminal,
   onCreateTerminalWithProfile,
   onCreateBrowser,
   ...workspaceActions
@@ -251,6 +255,10 @@ export function WorkspaceHeaderMenuMobile({
     () => [...scriptsMenu.pages, ...pluginMenu.pages],
     [scriptsMenu.pages, pluginMenu.pages],
   );
+
+  const handleCreatePowerShell = useCallback(() => {
+    onCreateTerminalWithProfile(POWERSHELL_PROFILE);
+  }, [onCreateTerminalWithProfile]);
 
   return (
     <DropdownMenu compactMode="sheet">
@@ -293,6 +301,22 @@ export function WorkspaceHeaderMenuMobile({
         <WorkspaceHeaderWorkspaceActionItems {...workspaceActions} />
         <DropdownMenuSeparator />
         <DropdownMenuLabel>{t("workspace.tabs.actions.terminalProfilesMenu")}</DropdownMenuLabel>
+        <DropdownMenuItem
+          testID="workspace-header-new-terminal"
+          leading={MENU_NEW_TERMINAL_ICON}
+          disabled={createTerminalDisabled}
+          onSelect={onCreateTerminal}
+        >
+          {t("workspace.tabs.actions.openCmd")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          testID="workspace-header-new-powershell"
+          leading={MENU_NEW_TERMINAL_ICON}
+          disabled={createTerminalDisabled}
+          onSelect={handleCreatePowerShell}
+        >
+          {t("workspace.tabs.actions.openPowerShell")}
+        </DropdownMenuItem>
         {profiles.map((profile) => (
           <HeaderMenuProfileItem
             key={profile.id}

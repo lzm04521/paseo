@@ -80,6 +80,7 @@ import {
   deriveRouteBottomAnchorRequest,
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
+import { useAgentStatsPillVisible } from "@/composer/stats-pill";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
 import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -1120,6 +1121,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
+    hasStats: useAgentStatsPillVisible(serverId, agentId),
   });
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({

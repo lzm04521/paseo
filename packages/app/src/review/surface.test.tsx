@@ -85,6 +85,23 @@ vi.mock("@/constants/platform", () => ({
   isWeb: true,
 }));
 
+vi.mock("lucide-react-native", () => {
+  const createIcon = (name: string) => {
+    const Icon = (props: Record<string, unknown>) =>
+      React.createElement("span", { ...props, "data-icon": name });
+    Icon.displayName = name;
+    return Icon;
+  };
+  return {
+    Check: createIcon("Check"),
+    CircleDot: createIcon("CircleDot"),
+    Pencil: createIcon("Pencil"),
+    Plus: createIcon("Plus"),
+    Trash2: createIcon("Trash2"),
+    X: createIcon("X"),
+  };
+});
+
 function target(overrides: Partial<ReviewableDiffTarget> = {}): ReviewableDiffTarget {
   return {
     filePath: "src/example.ts",
