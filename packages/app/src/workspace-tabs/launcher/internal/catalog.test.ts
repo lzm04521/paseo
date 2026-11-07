@@ -6,6 +6,7 @@ describe("getBuiltInLaunchOrder", () => {
     expect(getBuiltInLaunchOrder("primary")).toEqual([
       "agent",
       "terminal",
+      "powershell",
       "changes",
       "diff",
       "files",
@@ -18,6 +19,7 @@ describe("getBuiltInLaunchOrder", () => {
     expect(getBuiltInLaunchOrder("supporting")).toEqual([
       "changes",
       "terminal",
+      "powershell",
       "diff",
       "files",
       "agent",

@@ -57,6 +57,7 @@ import type {
 } from "@/stores/session-store";
 import { useSessionStore } from "@/stores/session-store";
 import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
+import { useOpenInVSCode } from "@/workspace/open-in-editor/use-open-in-vscode";
 import { ContextMenu, ContextMenuTrigger, useContextMenu } from "@/components/ui/context-menu";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
@@ -127,6 +128,7 @@ interface TreeRowItemProps {
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
+  onOpenInVSCodeEntry?: (entry: ExplorerEntry) => void;
   testID?: string;
 }
 
@@ -253,6 +255,7 @@ function TreeRowItem({
   onRenameEntry,
   onDuplicateEntry,
   onDeleteEntry,
+  onOpenInVSCodeEntry,
   testID,
 }: TreeRowItemProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -303,6 +306,10 @@ function TreeRowItem({
   const handleReveal = useCallback(() => {
     onRevealEntry?.(entry);
   }, [onRevealEntry, entry]);
+
+  const handleOpenInVSCode = useCallback(() => {
+    onOpenInVSCodeEntry?.(entry);
+  }, [onOpenInVSCodeEntry, entry]);
 
   const handleDownload = useCallback(() => {
     onDownloadEntry(entry);
@@ -382,6 +389,7 @@ function TreeRowItem({
         onCopyRelativePath={handleCopyRelativePath}
         onReveal={onRevealEntry ? handleReveal : undefined}
         revealTargetName={revealTargetName}
+        onOpenInVSCode={onOpenInVSCodeEntry ? handleOpenInVSCode : undefined}
         onDownload={handleDownload}
         onAddToChat={onAddToChat ? handleAddToChat : undefined}
         onOpenToSide={!isDirectory && onOpenFileToSide ? handleOpenToSide : undefined}
@@ -461,6 +469,9 @@ export function FileExplorerPane({
     workspaceDirectory: normalizedWorkspaceRoot,
     projectId,
   });
+  const openInVSCode = useOpenInVSCode();
+  const canOpenInVSCode = openInVSCode.isAvailable;
+  const openInVSCodeAction = openInVSCode.open;
   // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.
   const fsEntryOpsEnabled = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.fsEntryOps === true,
@@ -612,15 +623,26 @@ export function FileExplorerPane({
       if (!fileManagerTarget) {
         return;
       }
+      // Directories open themselves (like the VS Code action); only files are revealed
+      // inside their containing folder. Passing a directory as filePath would resolve to
+      // its parent in both the Opus and shell.showItemInFolder paths.
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
+      });
       try {
-        await openDesktopTarget({
-          editorId: fileManagerTarget.id,
-          workspacePath: normalizedWorkspaceRoot,
-          filePath: buildAbsoluteExplorerPath({
-            workspaceRoot: normalizedWorkspaceRoot,
-            entryPath: entry.path,
-          }),
-        });
+        await openDesktopTarget(
+          entry.kind === "directory"
+            ? {
+                editorId: fileManagerTarget.id,
+                workspacePath: absoluteEntryPath,
+              }
+            : {
+                editorId: fileManagerTarget.id,
+                workspacePath: normalizedWorkspaceRoot,
+                filePath: absoluteEntryPath,
+              },
+        );
       } catch (cause) {
         toast.error(
           cause instanceof Error ? cause.message : t("workspace.fileExplorer.errors.revealFailed"),
@@ -633,6 +655,20 @@ export function FileExplorerPane({
   const handleOpenDirectoryInEditor = useCallback(
     (entry: ExplorerEntry) => openDirectoryInEditor?.open(entry.path),
     [openDirectoryInEditor],
+  );
+
+  // Directories are covered by the upstream "Open in {preferred editor}" action;
+  // the fork only keeps the file-level VS Code entry.
+  const handleOpenInVSCodeEntry = useCallback(
+    (entry: ExplorerEntry) => {
+      if (!normalizedWorkspaceRoot || entry.kind !== "file") return;
+      const absoluteEntryPath = buildAbsoluteExplorerPath({
+        workspaceRoot: normalizedWorkspaceRoot,
+        entryPath: entry.path,
+      });
+      openInVSCodeAction({ workspacePath: normalizedWorkspaceRoot, filePath: absoluteEntryPath });
+    },
+    [normalizedWorkspaceRoot, openInVSCodeAction],
   );
 
   const handleDownloadEntry = useCallback(
@@ -990,6 +1026,7 @@ export function FileExplorerPane({
           editorTargetName={openDirectoryInEditor?.targetName}
           onRevealEntry={fileManagerTarget ? handleRevealEntry : undefined}
           revealTargetName={fileManagerTarget?.label}
+          onOpenInVSCodeEntry={canOpenInVSCode ? handleOpenInVSCodeEntry : undefined}
           onDownloadEntry={handleDownloadEntry}
           onAddToChat={onAddToChat}
           onOpenFileToSide={onOpenFileToSide}
@@ -1019,6 +1056,8 @@ export function FileExplorerPane({
       handleRenameCommit,
       handleRenameEntry,
       handleRevealEntry,
+      canOpenInVSCode,
+      handleOpenInVSCodeEntry,
       handleSelectEntry,
       isDirectoryLoading,
       fileManagerTarget,
@@ -1470,6 +1509,7 @@ function TreeRowDispatcher({
   onRenameEntry,
   onDuplicateEntry,
   onDeleteEntry,
+  onOpenInVSCodeEntry,
 }: {
   serverId: string;
   workspaceId?: string | null;
@@ -1494,6 +1534,7 @@ function TreeRowDispatcher({
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
+  onOpenInVSCodeEntry?: (entry: ExplorerEntry) => void;
 }) {
   const entry = row.entry;
   const depth = row.depth;
@@ -1519,6 +1560,7 @@ function TreeRowDispatcher({
       editorTargetName={editorTargetName}
       onRevealEntry={onRevealEntry}
       revealTargetName={revealTargetName}
+      onOpenInVSCodeEntry={onOpenInVSCodeEntry}
       onDownloadEntry={onDownloadEntry}
       onAddToChat={onAddToChat}
       onOpenFileToSide={onOpenFileToSide}

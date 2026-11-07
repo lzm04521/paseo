@@ -15,6 +15,7 @@ import {
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
 import {
   buildMetadataPrompt,
+  readDaemonMetadataGenerationInstructions,
   type MetadataConfigKey,
 } from "../../../utils/build-metadata-prompt.js";
 
@@ -96,8 +97,9 @@ export function createGitMetadataGenerator(deps: {
   workspaceGitService: GitMetadataDiffSource;
   generation: StructuredTextGeneration;
   logger: GitMetadataLogger;
+  readDaemonConfig: () => StructuredGenerationDaemonConfig;
 }): GitMetadataGenerator {
-  const { workspaceGitService, generation, logger } = deps;
+  const { workspaceGitService, generation, logger, readDaemonConfig } = deps;
 
   async function generateOrFallback<T>(
     request: StructuredTextGenerationRequest<T>,
@@ -129,6 +131,7 @@ export function createGitMetadataGenerator(deps: {
     return buildMetadataPrompt({
       cwd: input.cwd,
       workspaceGitService,
+      daemonInstructions: readDaemonMetadataGenerationInstructions(readDaemonConfig()),
       contract: input.contract,
       styles: [{ configKey: input.styleConfigKey, default: input.styleDefault }],
       after: [

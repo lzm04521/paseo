@@ -1,8 +1,15 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { SettingsSection, SettingsCard, SettingsSelect } from "@/components/settings";
+import {
+  SettingsSection,
+  SettingsCard,
+  SettingsSelect,
+  SettingsSwitch,
+} from "@/components/settings";
 import {
   useAppSettings,
+  type ExplorerFileOpenMode,
+  type ExplorerSidebarViewPreference,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
   type ServiceUrlBehavior,
@@ -25,6 +32,18 @@ const SERVICE_URL_LABEL_KEYS: Record<ServiceUrlBehavior, string> = {
 };
 
 type OpenLocationSource = keyof OpenInSidePanePreferences | "pullRequests";
+
+const AUTO_OPEN_VIEW_OPTIONS = [
+  "files",
+  "changes",
+] as const satisfies readonly ExplorerSidebarViewPreference[];
+
+const FILE_OPEN_MODE_OPTIONS = [
+  "preview",
+  "tab",
+] as const satisfies readonly ExplorerFileOpenMode[];
+
+const WIDTH_PERCENT_OPTIONS = [10, 15, 20, 25, 30, 35, 40, 45, 50];
 
 function OpenLocationRow({
   source,
@@ -53,7 +72,7 @@ function OpenLocationRow({
   );
   return (
     <SettingsSelect
-      label={t(`settings.layout.openInSidePane.sources.${source}.label`)}
+      label={t(`settings.layout.openInSidePane.sources.${source}.label}`)}
       value={destination}
       options={options}
       onValueChange={change}
@@ -99,25 +118,92 @@ export function OpenLocationSection() {
     },
     [settings.openInSidePane, updateSettings],
   );
+  const handleAutoOpenExplorerSidebarChange = useCallback(
+    (autoOpenExplorerSidebar: boolean) => void updateSettings({ autoOpenExplorerSidebar }),
+    [updateSettings],
+  );
+  const handleAutoOpenExplorerSidebarViewChange = useCallback(
+    (autoOpenExplorerSidebarView: ExplorerSidebarViewPreference) =>
+      void updateSettings({ autoOpenExplorerSidebarView }),
+    [updateSettings],
+  );
+  const handleExplorerFileOpenModeChange = useCallback(
+    (explorerFileOpenMode: ExplorerFileOpenMode) => void updateSettings({ explorerFileOpenMode }),
+    [updateSettings],
+  );
+  const handleExplorerSidebarWidthPercentChange = useCallback(
+    (explorerSidebarWidthPercent: number) => void updateSettings({ explorerSidebarWidthPercent }),
+    [updateSettings],
+  );
+  const handleExplorerSidebarWidthPercentSelect = useCallback(
+    (value: string) => handleExplorerSidebarWidthPercentChange(Number(value)),
+    [handleExplorerSidebarWidthPercentChange],
+  );
   return (
-    <SettingsSection title={t("settings.layout.openInSidePane.title")}>
-      <SettingsCard>
-        {SOURCES.map((source) => (
+    <>
+      <SettingsSection title={t("settings.layout.openInSidePane.title")}>
+        <SettingsCard>
+          {SOURCES.map((source) => (
+            <OpenLocationRow
+              key={source}
+              source={source}
+              destination={settings.openInSidePane[source] ? "side" : "main"}
+              onDestinationChange={handleDestinationChange}
+            />
+          ))}
           <OpenLocationRow
-            key={source}
-            source={source}
-            destination={settings.openInSidePane[source] ? "side" : "main"}
+            source="pullRequests"
+            destination={settings.pullRequestOpenLocation}
+            allowExplorer
             onDestinationChange={handleDestinationChange}
           />
-        ))}
-        <OpenLocationRow
-          source="pullRequests"
-          destination={settings.pullRequestOpenLocation}
-          allowExplorer
-          onDestinationChange={handleDestinationChange}
-        />
-        <ServiceUrlRow />
-      </SettingsCard>
-    </SettingsSection>
+          <ServiceUrlRow />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title={t("settings.layout.explorerSidebar.title")}>
+        <SettingsCard>
+          <SettingsSwitch
+            label={t("settings.layout.explorerSidebar.autoOpen")}
+            hint={t("settings.layout.explorerSidebar.autoOpenHint")}
+            testID="auto-open-explorer-sidebar-toggle"
+            value={settings.autoOpenExplorerSidebar}
+            onValueChange={handleAutoOpenExplorerSidebarChange}
+          />
+          <SettingsSelect<ExplorerSidebarViewPreference>
+            label={t("settings.layout.explorerSidebar.defaultView")}
+            hint={t("settings.layout.explorerSidebar.defaultViewHint")}
+            testID="auto-open-explorer-sidebar-view"
+            options={AUTO_OPEN_VIEW_OPTIONS.map((view) => ({
+              value: view,
+              label: t(`settings.layout.explorerSidebar.views.${view}`),
+            }))}
+            value={settings.autoOpenExplorerSidebarView}
+            onValueChange={handleAutoOpenExplorerSidebarViewChange}
+          />
+          <SettingsSelect<ExplorerFileOpenMode>
+            label={t("settings.layout.explorerSidebar.fileOpenMode")}
+            hint={t("settings.layout.explorerSidebar.fileOpenModeHint")}
+            testID="explorer-file-open-mode"
+            options={FILE_OPEN_MODE_OPTIONS.map((mode) => ({
+              value: mode,
+              label: t(`settings.layout.explorerSidebar.fileOpenModes.${mode}`),
+            }))}
+            value={settings.explorerFileOpenMode}
+            onValueChange={handleExplorerFileOpenModeChange}
+          />
+          <SettingsSelect<string>
+            label={t("settings.layout.explorerSidebar.defaultWidth")}
+            hint={t("settings.layout.explorerSidebar.defaultWidthHint")}
+            testID="explorer-sidebar-width-percent"
+            options={WIDTH_PERCENT_OPTIONS.map((percent) => ({
+              value: String(percent),
+              label: t("settings.layout.explorerSidebar.widthPercent", { percent }),
+            }))}
+            value={String(settings.explorerSidebarWidthPercent)}
+            onValueChange={handleExplorerSidebarWidthPercentSelect}
+          />
+        </SettingsCard>
+      </SettingsSection>
+    </>
   );
 }

@@ -519,6 +519,11 @@ const OWNER_SESSION_ADMISSION: SessionAdmission = {
   permissions: OWNER_PERMISSIONS,
 };
 
+export interface IdleRestartClock {
+  getIdleSince: () => number | null;
+  getStartedAt: () => number | null;
+}
+
 export class MissingDaemonVersionError extends Error {
   constructor() {
     super("VoiceAssistantWebSocketServer requires a non-empty daemonVersion.");
@@ -561,6 +566,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly serverId: string;
   private readonly daemonVersion: string;
   private readonly daemonRuntimeConfig: DaemonRuntimeConfig | undefined;
+  private readonly idleRestartClock: IdleRestartClock;
   private readonly agentManager: AgentManager;
   private readonly agentStorage: AgentStorage;
   private readonly messageReceipts: MessageReceipts;
@@ -693,6 +699,7 @@ export class VoiceAssistantWebSocketServer {
     pluginRuntime?: SessionOptions["pluginRuntime"],
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
+    idleRestartClock: IdleRestartClock = { getIdleSince: () => null, getStartedAt: () => null },
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -706,6 +713,7 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.credentialSource = auth;
     this.daemonRuntimeConfig = daemonRuntimeConfig;
+    this.idleRestartClock = idleRestartClock;
     this.browserToolsBroker = browserToolsBroker ?? null;
     this.hubRelationships = hubRelationships ?? null;
     this.pluginRuntime = pluginRuntime;
@@ -1721,6 +1729,8 @@ export class VoiceAssistantWebSocketServer {
       daemonVersion: this.daemonVersion,
       daemonRuntimeConfig: this.daemonRuntimeConfig,
       getWebSocketRuntimeMetrics: () => this.lastRuntimeMetricsSnapshot,
+      getIdleRestartIdleSince: this.idleRestartClock.getIdleSince,
+      getIdleRestartStartedAt: this.idleRestartClock.getStartedAt,
     });
   }
 
@@ -2080,6 +2090,8 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(terminalGraphemeWidths): added in v0.15.0, remove gate after 2027-05-01.
         "terminal-grapheme-widths": true,
         workspaceTerminals: true,
+        // COMPAT(agentSessionStats): added in v0.10.2, remove gate after 2027-03-30.
+        agentSessionStats: true,
         // COMPAT(rewind): added in v0.1.X, drop the gate when floor >= v0.1.X.
         rewind: true,
         // COMPAT(agentTimelinePromptIndex): added in v0.2.X, drop the gate when floor >= v0.2.X.
