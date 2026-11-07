@@ -4032,10 +4032,7 @@ export class AgentManager {
       foregroundTurnWaiters: new Set<ForegroundTurnWaiter>(),
       finalizedForegroundTurnIds: new Set<string>(),
       unsubscribeSession: null,
-      persistence: normalizePersistenceForConfig(
-        options?.persistence ?? session.describePersistence(),
-        config,
-      ),
+      persistence: this.resolveInitialPersistenceForRegister(options, session, config),
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,
       lastUserMessageAt: options?.lastUserMessageAt ?? null,
       lastUsage: options?.lastUsage,
@@ -4045,6 +4042,18 @@ export class AgentManager {
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
     } as ActiveManagedAgent;
+  }
+
+  // 抽出以控制 buildManagedAgentForRegister 的圈复杂度（persistence 默认链含两个分支）。
+  private resolveInitialPersistenceForRegister(
+    options: { persistence?: AgentPersistenceHandle } | undefined,
+    session: AgentSession,
+    config: AgentSessionConfig,
+  ) {
+    return normalizePersistenceForConfig(
+      options?.persistence ?? session.describePersistence(),
+      config,
+    );
   }
 
   private async loadCommittedTimelineSeed(

@@ -100,6 +100,8 @@
               "executable-resolution/windows.ts": ["readdirSync"],
               // TODO: live file-change classification is a synchronous event mapper; move the probe to async event ingestion.
               "server/agent/providers/claude/agent.ts": ["existsSync"],
+              // fork: 旧版图片降级 JSON 的一次性启动迁移（读后即删），发生在 daemon bootstrap 阶段。
+              "server/agent/providers/claude/image-downgrade.ts": ["readFileSync", "unlinkSync"],
               // TODO: new-session construction still resolves its project directory synchronously; move preparation before construction.
               "server/agent/providers/claude/project-dir.ts": ["realpathSync"],
               // TODO: live subagent output is read by a synchronous event mapper; add bounded async loading at ingestion.
