@@ -568,6 +568,9 @@ function startDaemonIdleRestartWatchdog(input: {
         clientId: "idle-auto-restart-watchdog",
         requestId: randomUUID(),
         reason: "idle_auto_restart",
+        // 上游 #7644：终端程序由独立 worker 托管，重启 daemon 时保留终端。
+        // idle 重启只为回收资源，不应顺带杀掉终端会话。
+        keepTerminals: true,
       });
     },
   });

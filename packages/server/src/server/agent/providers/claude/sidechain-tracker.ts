@@ -105,10 +105,11 @@ export class ClaudeSidechainTracker {
       } satisfies SubAgentActivityState);
     this.activeSidechains.set(parentToolUseId, state);
 
-    // The parent card is a launch marker: it changes only when the child is first seen or the
-    // task input names it differently, never with the child's activity.
-    const cardUpdated =
-      this.updateSubAgentContextFromTaskInput(state, parentToolUseId) || !existingState;
+    // The parent card is a launch marker: it changes only when the task input
+    // names the child differently, never with the child's activity. A bare
+    // first frame (e.g. a main-agent tool's heartbeat progress reporting the
+    // call id as parent_tool_use_id) must not fabricate a subagent card.
+    const cardUpdated = this.updateSubAgentContextFromTaskInput(state, parentToolUseId);
     const actionCandidates = this.extractSubAgentActionCandidates(message, state);
     const childTimelineItems = [
       ...this.extractSubAgentTimelineItems(message, state),
