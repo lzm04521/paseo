@@ -61,6 +61,14 @@ export class ClaudeSidechainTracker {
   private readonly isDescriptorOwnedElsewhere: () => boolean;
   private readonly needsSyntheticParentToolCard: (toolUseId: string) => boolean;
   private readonly getSettledParentToolCall: (toolUseId: string) => ClaudeToolCallItem | undefined;
+  /**
+   * A subagent's tool call, reported once when the tracker first sees it. Session stats count
+   * subagent work as the session's own, and this is the only place a child's tools are
+   * deduplicated — the same call arrives as a stream event and again in the finished message.
+   */
+  private readonly onToolUse: (toolName: string) => void;
+  /** The counted call failing. The use was already reported, so only the error is news. */
+  private readonly onToolError: (toolName: string) => void;
 
   constructor(input: {
     getToolInput: (toolUseId: string) => AgentMetadata | null | undefined;
@@ -76,11 +84,15 @@ export class ClaudeSidechainTracker {
      * after that answer, so its card keeps the settled status and output.
      */
     getSettledParentToolCall?: (toolUseId: string) => ClaudeToolCallItem | undefined;
+    onToolUse?: (toolName: string) => void;
+    onToolError?: (toolName: string) => void;
   }) {
     this.getToolInput = input.getToolInput;
     this.isDescriptorOwnedElsewhere = input.isDescriptorOwnedElsewhere ?? (() => false);
     this.needsSyntheticParentToolCard = input.needsSyntheticParentToolCard ?? (() => true);
     this.getSettledParentToolCall = input.getSettledParentToolCall ?? (() => undefined);
+    this.onToolUse = input.onToolUse ?? (() => undefined);
+    this.onToolError = input.onToolError ?? (() => undefined);
   }
 
   handleMessage(message: SDKMessage, parentToolUseId: string): AgentStreamEvent[] {
@@ -93,11 +105,12 @@ export class ClaudeSidechainTracker {
       } satisfies SubAgentActivityState);
     this.activeSidechains.set(parentToolUseId, state);
 
-    // The parent card is a launch marker: it changes only when the child is first seen or the
-    // task input names it differently, never with the child's activity.
-    const cardUpdated =
-      this.updateSubAgentContextFromTaskInput(state, parentToolUseId) || !existingState;
-    const actionCandidates = this.extractSubAgentActionCandidates(message);
+    // The parent card is a launch marker: it changes only when the task input
+    // names the child differently, never with the child's activity. A bare
+    // first frame (e.g. a main-agent tool's heartbeat progress reporting the
+    // call id as parent_tool_use_id) must not fabricate a subagent card.
+    const cardUpdated = this.updateSubAgentContextFromTaskInput(state, parentToolUseId);
+    const actionCandidates = this.extractSubAgentActionCandidates(message, state);
     const childTimelineItems = [
       ...this.extractSubAgentTimelineItems(message, state),
       ...this.extractSubAgentToolResults(message, state),
@@ -105,6 +118,7 @@ export class ClaudeSidechainTracker {
     for (const action of actionCandidates) {
       if (state.completedActionKeys.has(action.key)) continue;
       if (this.trackChildCall(state, action)) {
+        this.onToolUse(action.toolName);
         const toolCall = mapClaudeRunningToolCall({
           name: action.toolName,
           callId: action.key,
@@ -308,6 +322,9 @@ export class ClaudeSidechainTracker {
       if (toolCall) {
         state.runningCalls.delete(callId);
         state.completedActionKeys.add(callId);
+        if (block.is_error === true) {
+          this.onToolError(toolName);
+        }
         items.push(toolCall);
       }
     }
@@ -410,13 +427,19 @@ export class ClaudeSidechainTracker {
     return [{ key, toolName: block.name, input }];
   }
 
-  private extractSubAgentActionCandidates(message: SDKMessage): SubAgentActionCandidate[] {
-    return this.extractToolActionCandidates(message).filter(
+  private extractSubAgentActionCandidates(
+    message: SDKMessage,
+    state: SubAgentActivityState,
+  ): SubAgentActionCandidate[] {
+    return this.extractToolActionCandidates(message, state).filter(
       (action) => !isClaudeSubagentHandbackToolName(action.toolName),
     );
   }
 
-  private extractToolActionCandidates(message: SDKMessage): SubAgentActionCandidate[] {
+  private extractToolActionCandidates(
+    message: SDKMessage,
+    state: SubAgentActivityState,
+  ): SubAgentActionCandidate[] {
     if (message.type === "assistant") {
       return this.extractAssistantMessageActions(message);
     }
@@ -430,7 +453,15 @@ export class ClaudeSidechainTracker {
       if (!toolName) {
         return [];
       }
-      const key = readTrimmedString(message.tool_use_id) ?? `progress:${toolName}`;
+      const key = readTrimmedString(message.tool_use_id);
+      // Claude Code reports long-running tools through synthetic `-heartbeat-N`
+      // progress ids that carry no input and never receive a result. Treating an
+      // unknown id as a new action materializes an empty running card that
+      // shows a loading skeleton forever. Progress may only refresh a tool the
+      // subagent already announced.
+      if (!key || !state.runningCalls.has(key)) {
+        return [];
+      }
       return [{ key, toolName, input: null }];
     }
 

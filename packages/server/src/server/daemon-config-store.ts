@@ -26,13 +26,17 @@ interface SupportedMutableConfigPatch {
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
-  metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
+  metadataGeneration?: Partial<MutableDaemonConfig["metadataGeneration"]>;
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   idleRuntimeCleanup?: boolean;
   resumeOnStartup?: boolean;
   resumePrompt?: string;
   appendSystemPrompt?: string;
+  claudeImageDowngrade?: MutableDaemonConfig["claudeImageDowngrade"];
+  idleAutoRestart?: Partial<NonNullable<MutableDaemonConfig["idleAutoRestart"]>>;
+  fileSearch?: MutableDaemonConfig["fileSearch"];
+  powershellPath?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   skills?: MutableDaemonConfig["skills"];
@@ -193,6 +197,7 @@ const RELOADABLE_PATHS = [
   "daemon.autoArchiveAfterMerge",
   "daemon.enableTerminalAgentHooks",
   "daemon.appendSystemPrompt",
+  "daemon.powershellPath",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -221,6 +226,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.autoArchiveAfterMerge", "autoArchiveAfterMerge"],
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
+  ["daemon.powershellPath", "powershellPath"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["app.baseUrl", "app.baseUrl"],
@@ -293,8 +299,8 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.providers !== undefined ? { providers: patch.providers } : {}),
     ...(patch.removeProviders !== undefined ? { removeProviders: patch.removeProviders } : {}),
-    ...(patch.metadataGeneration?.providers !== undefined
-      ? { metadataGeneration: { providers: patch.metadataGeneration.providers } }
+    ...(patch.metadataGeneration !== undefined
+      ? { metadataGeneration: pickMetadataGenerationPatchFields(patch.metadataGeneration) }
       : {}),
     ...(patch.autoArchiveAfterMerge !== undefined
       ? { autoArchiveAfterMerge: patch.autoArchiveAfterMerge }
@@ -310,12 +316,40 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
       : {}),
+    ...pickForkDaemonPatchFields(patch),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(patch.features !== undefined ? { features: patch.features } : {}),
   };
+}
+
+// Fork-only passthrough patch fields; kept in a helper so the main picker stays
+// within the lint complexity budget as upstream adds fields.
+function pickForkDaemonPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
+  return {
+    ...(patch.claudeImageDowngrade !== undefined
+      ? { claudeImageDowngrade: patch.claudeImageDowngrade }
+      : {}),
+    ...(patch.idleAutoRestart !== undefined ? { idleAutoRestart: patch.idleAutoRestart } : {}),
+    ...(patch.fileSearch !== undefined ? { fileSearch: patch.fileSearch } : {}),
+    ...(patch.powershellPath !== undefined ? { powershellPath: patch.powershellPath } : {}),
+  };
+}
+
+// The upstream metadataGeneration patch only carries providers; fork patches may
+// also carry per-key instruction overrides, so forward every declared key.
+function pickMetadataGenerationPatchFields(
+  node: NonNullable<MutableDaemonConfigPatch["metadataGeneration"]>,
+): Partial<MutableDaemonConfig["metadataGeneration"]> {
+  const result: Record<string, unknown> = {};
+  if (node.providers !== undefined) result.providers = node.providers;
+  for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+    const entry = node[key];
+    if (isRecord(entry)) result[key] = entry;
+  }
+  return result as Partial<MutableDaemonConfig["metadataGeneration"]>;
 }
 
 export function applyMutableProviderConfigToOverrides(
@@ -444,6 +478,9 @@ export class DaemonConfigStore {
     const { previous: persistedBeforePatch, knownNext } = await this.persistConfig(
       patch,
       removedProviders,
+      // Fork fields persist their full merged state (deep-merged with defaults),
+      // matching the pre-0.5.1 fork semantics the settings cards rely on.
+      next,
     );
     const speechChanged = this.speechPersistedChanged(this.lastKnownPersisted, knownNext);
     if (configChanged) {
@@ -668,6 +705,7 @@ export class DaemonConfigStore {
   private async persistConfig(
     patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
     removeProviders: readonly string[],
+    merged?: MutableDaemonConfig,
   ): Promise<{ previous: PersistedConfig; knownNext: PersistedConfig }> {
     const persisted = await loadPersistedConfigAsync(this.paseoHome, this.logger);
     const merge = (source: PersistedConfig) =>
@@ -676,6 +714,7 @@ export class DaemonConfigStore {
         patch,
         removeProviders,
         persistRelayEnabled: this.relayEnabledMutable,
+        mergedMutable: merged,
       });
     const nextPersisted = merge(persisted);
     const knownNext = merge(this.lastKnownPersisted);
@@ -689,9 +728,15 @@ function mergeMutablePatchIntoPersistedConfig(params: {
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">;
   removeProviders: readonly string[];
   persistRelayEnabled: boolean;
+  mergedMutable?: MutableDaemonConfig;
 }): PersistedConfig {
-  const { persisted, patch, removeProviders, persistRelayEnabled } = params;
-  const daemon = mergeMutableDaemonPatch(persisted.daemon, patch, persistRelayEnabled);
+  const { persisted, patch, removeProviders, persistRelayEnabled, mergedMutable } = params;
+  const daemon = mergeMutableDaemonPatch(
+    persisted.daemon,
+    patch,
+    persistRelayEnabled,
+    mergedMutable,
+  );
   const agents = mergeMutableAgentPatch(persisted.agents, patch, removeProviders);
   const withSpeech = patch.features
     ? mergeSpeechSettingsPatch(persisted, patch.features)
@@ -733,15 +778,15 @@ function mergeMutableAgentPatch(
   if (providerOverrides) next["providers"] = providerOverrides;
   else delete next["providers"];
 
-  if (patch.metadataGeneration?.providers !== undefined) {
-    next["metadataGeneration"] = { providers: patch.metadataGeneration.providers };
-  } else if (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers) {
-    const removed = new Set(removeProviders);
-    next["metadataGeneration"] = {
-      providers: persistedAgents.metadataGeneration.providers.filter(
-        (entry) => !removed.has(entry.provider),
-      ),
-    };
+  if (
+    patch.metadataGeneration !== undefined ||
+    (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers)
+  ) {
+    next["metadataGeneration"] = mergePersistedMetadataGeneration(
+      persistedAgents?.metadataGeneration,
+      patch.metadataGeneration,
+      removeProviders,
+    );
   }
 
   if (patch.skills?.selection !== undefined) {
@@ -756,10 +801,43 @@ function mergeMutableAgentPatch(
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }
 
+// Persisted metadataGeneration is the base; a patch overrides only the keys it
+// declares (providers and/or instruction keys), so a providers-only patch keeps
+// daemon-level instructions and an instructions-only patch keeps providers.
+function mergePersistedMetadataGeneration(
+  persistedMetadataGeneration: unknown,
+  patchMetadataGeneration: Partial<MutableDaemonConfig["metadataGeneration"]> | undefined,
+  removeProviders: readonly string[],
+): Record<string, unknown> {
+  const previous = isRecord(persistedMetadataGeneration)
+    ? (persistedMetadataGeneration as Record<string, unknown>)
+    : {};
+  const { providers: previousProviders, ...previousInstructions } = previous;
+  const merged: Record<string, unknown> = { ...previousInstructions };
+  if (patchMetadataGeneration !== undefined) {
+    for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+      if (isRecord(patchMetadataGeneration[key])) {
+        delete merged[key];
+      }
+    }
+    Object.assign(merged, readMetadataGenerationInstructions(patchMetadataGeneration));
+  }
+  const providers =
+    patchMetadataGeneration?.providers ??
+    (removeProviders.length > 0
+      ? (Array.isArray(previousProviders) ? previousProviders : []).filter(
+          (entry) => !new Set(removeProviders).has((entry as { provider: string }).provider),
+        )
+      : previousProviders);
+  if (providers !== undefined) merged.providers = providers;
+  return merged;
+}
+
 function mergeMutableDaemonPatch(
   persistedDaemon: PersistedConfig["daemon"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
   persistRelayEnabled: boolean,
+  mergedMutable?: MutableDaemonConfig,
 ): PersistedConfig["daemon"] {
   const next = { ...persistedDaemon } as NonNullable<PersistedConfig["daemon"]>;
   if (persistRelayEnabled && patch.relay?.enabled !== undefined) {
@@ -782,6 +860,16 @@ function mergeMutableDaemonPatch(
     next.enableTerminalAgentHooks = patch.enableTerminalAgentHooks;
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
+  if (patch.claudeImageDowngrade !== undefined) {
+    next.claudeImageDowngrade = patch.claudeImageDowngrade;
+  }
+  if (patch.idleAutoRestart !== undefined) {
+    // Persist the full merged state (defaults filled in), not just the patch —
+    // partial patches must not shrink what config.json remembers.
+    next.idleAutoRestart = mergedMutable?.idleAutoRestart ?? patch.idleAutoRestart;
+  }
+  if (patch.fileSearch !== undefined) next.fileSearch = patch.fileSearch;
+  if (patch.powershellPath !== undefined) next.powershellPath = patch.powershellPath;
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;
@@ -795,4 +883,35 @@ function restartRecoveryPatch(patch: SupportedMutableConfigPatch) {
     ...(patch.resumeOnStartup !== undefined ? { resumeOnStartup: patch.resumeOnStartup } : {}),
     ...(patch.resumePrompt !== undefined ? { resumePrompt: patch.resumePrompt } : {}),
   };
+}
+
+const METADATA_GENERATION_INSTRUCTION_KEYS = [
+  "title",
+  "branchName",
+  "commitMessage",
+  "pullRequest",
+] as const;
+
+// Extracts the daemon-level metadataGeneration instructions (the global default
+// fallback) from the mutable config, dropping empty/whitespace-only entries so
+// the persisted file only carries intentional overrides. Mirrors the per-key
+// { instructions } shape used by paseo.json's metadataGeneration.
+function readMetadataGenerationInstructions(
+  metadataGeneration: unknown,
+): Record<string, { instructions: string }> {
+  if (!isRecord(metadataGeneration)) {
+    return {};
+  }
+  const result: Record<string, { instructions: string }> = {};
+  for (const key of METADATA_GENERATION_INSTRUCTION_KEYS) {
+    const entry = metadataGeneration[key];
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const instructions = entry["instructions"];
+    if (typeof instructions === "string" && instructions.trim().length > 0) {
+      result[key] = { instructions };
+    }
+  }
+  return result;
 }

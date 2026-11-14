@@ -2,14 +2,18 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  clampFileNavWidth,
   clampTreeRailWidth,
   clampSidebarWidth,
   DEFAULT_TREE_RAIL_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
+  DEFAULT_FILE_NAV_WIDTH,
   MAX_TREE_RAIL_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MAX_FILE_NAV_WIDTH,
   MIN_TREE_RAIL_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  MIN_FILE_NAV_WIDTH,
   migratePanelState,
   PanelPersistedStateSchema,
   selectIsAgentListOpen,
@@ -33,10 +37,14 @@ export type {
 export {
   DEFAULT_TREE_RAIL_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
+  DEFAULT_FILE_NAV_WIDTH,
   MAX_TREE_RAIL_WIDTH,
   MAX_SIDEBAR_WIDTH,
+  MAX_FILE_NAV_WIDTH,
   MIN_TREE_RAIL_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  MIN_FILE_NAV_WIDTH,
+  clampFileNavWidth,
   clampTreeRailWidth,
   selectIsAgentListOpen,
   selectIsCompactFileExplorerOpen,
@@ -66,6 +74,9 @@ export interface PanelState {
   // File panel's tree rail. The changes panel keeps its own flag in
   // `useChangesPreferences`; the two rails open and close independently.
   fileTreeVisible: boolean;
+  // New Workspace screen's desktop file-navigation column.
+  newWorkspaceFileNavOpen: boolean;
+  newWorkspaceFileNavWidth: number;
 
   // Actions
   toggleFocusMode: () => void;
@@ -90,6 +101,8 @@ export interface PanelState {
   toggleExplorerShowHiddenFiles: () => void;
   setTreeRailWidth: (width: number) => void;
   toggleFileTreeVisible: () => void;
+  toggleNewWorkspaceFileNav: () => void;
+  setNewWorkspaceFileNavWidth: (width: number) => void;
 }
 
 const DEFAULT_DESKTOP_OPEN = isWeb;
@@ -123,6 +136,8 @@ export const usePanelStore = create<PanelState>()(
       explorerShowHiddenFiles: true,
       treeRailWidth: DEFAULT_TREE_RAIL_WIDTH,
       fileTreeVisible: true,
+      newWorkspaceFileNavOpen: true,
+      newWorkspaceFileNavWidth: DEFAULT_FILE_NAV_WIDTH,
 
       toggleFocusMode: () =>
         set((state) => ({
@@ -235,6 +250,10 @@ export const usePanelStore = create<PanelState>()(
         set((state) => ({ explorerShowHiddenFiles: !state.explorerShowHiddenFiles })),
       setTreeRailWidth: (width) => set({ treeRailWidth: clampTreeRailWidth(width) }),
       toggleFileTreeVisible: () => set((state) => ({ fileTreeVisible: !state.fileTreeVisible })),
+      toggleNewWorkspaceFileNav: () =>
+        set((state) => ({ newWorkspaceFileNavOpen: !state.newWorkspaceFileNavOpen })),
+      setNewWorkspaceFileNavWidth: (width) =>
+        set({ newWorkspaceFileNavWidth: clampFileNavWidth(width) }),
     }),
     {
       name: "panel-state",
@@ -251,6 +270,8 @@ export const usePanelStore = create<PanelState>()(
         explorerShowHiddenFiles: state.explorerShowHiddenFiles,
         treeRailWidth: state.treeRailWidth,
         fileTreeVisible: state.fileTreeVisible,
+        newWorkspaceFileNavOpen: state.newWorkspaceFileNavOpen,
+        newWorkspaceFileNavWidth: state.newWorkspaceFileNavWidth,
       }),
     },
   ),

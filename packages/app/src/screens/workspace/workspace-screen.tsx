@@ -71,6 +71,7 @@ import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar
 import {
   isExplorerSidebarOpen,
   openExplorerSidebarView,
+  shouldAutoRevealExplorerSidebar,
   toggleExplorerSidebar,
   useIsExplorerSidebarOpen,
 } from "@/workspace-tabs/explorer-sidebar";
@@ -197,6 +198,7 @@ import {
   type BulkCloseConfirmationLabels,
   classifyBulkClosableTabs,
   closeBulkWorkspaceTabs,
+  protectLastAgentTab,
 } from "@/screens/workspace/workspace-bulk-close";
 import { resolveCloseAgentTabPolicy } from "@/subagents";
 import {
@@ -218,6 +220,7 @@ import {
   createWorkspaceFileTabTarget,
   normalizeWorkspaceFileLocation,
   type OpenFileDisposition,
+  resolveWorkspaceFilePaths,
   type WorkspaceFileLocation,
   type WorkspaceFileOpenRequest,
 } from "@/workspace/file-open";
@@ -1302,6 +1305,36 @@ function WorkspaceScreenContent({
   });
   const lastMainPaneId = lastMainPaneRef.current.paneId;
   const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
+  const autoOpenExplorerSidebar = useSettings((settings) => settings.autoOpenExplorerSidebar);
+  const autoOpenExplorerSidebarView = useSettings(
+    (settings) => settings.autoOpenExplorerSidebarView,
+  );
+  useEffect(() => {
+    // The preference re-arms on every workspace open (mount or key switch) and
+    // after the persisted layouts hydrate; it never closes an open sidebar.
+    // Revealing through the configured view lands the Explorer on that tab.
+    if (
+      !shouldAutoRevealExplorerSidebar({
+        enabled: autoOpenExplorerSidebar,
+        hydrated: hasHydratedWorkspaceLayoutStore,
+        isCompact: isMobile,
+        workspaceKey: persistenceKey,
+      })
+    ) {
+      return;
+    }
+    openExplorerSidebarView({
+      isCompact: isMobile,
+      workspaceKey: persistenceKey,
+      view: autoOpenExplorerSidebarView,
+    });
+  }, [
+    autoOpenExplorerSidebar,
+    autoOpenExplorerSidebarView,
+    hasHydratedWorkspaceLayoutStore,
+    isMobile,
+    persistenceKey,
+  ]);
   const workspaceSetupStatus = getWorkspaceSetupStatus(workspaceDescriptor);
   const claimFailedSetupSurface = useWorkspaceSetupStore((state) => state.claimFailedSetupSurface);
   const supportsSetupObservation = useHostFeature(normalizedServerId, "workspaceSetupObservation");
@@ -1330,6 +1363,7 @@ function WorkspaceScreenContent({
     [openTab],
   );
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
+  const explorerFileOpenMode = useSettings((settings) => settings.explorerFileOpenMode);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
@@ -1942,6 +1976,14 @@ function WorkspaceScreenContent({
   const handleCloseAgentTab = useCallback(
     async (input: { tabId: string; agentId: string }) => {
       const { tabId, agentId } = input;
+      const closingTab = allTabDescriptorsById.get(tabId);
+      if (closingTab) {
+        const { protectedAgentTabId } = protectLastAgentTab(uiTabs, [closingTab]);
+        if (protectedAgentTabId) {
+          toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+          return;
+        }
+      }
       await closeTab(tabId, async () => {
         if (!normalizedServerId) {
           return;
@@ -2004,12 +2046,14 @@ function WorkspaceScreenContent({
     },
     [
       archiveAgent,
+      allTabDescriptorsById,
       closeTab,
       closeWorkspaceTabWithCleanup,
       normalizedServerId,
       persistenceKey,
       t,
       toast,
+      uiTabs,
     ],
   );
 
@@ -2119,6 +2163,41 @@ function WorkspaceScreenContent({
       }
     },
     [toast, t],
+  );
+
+  const handleCopyFileRelativePath = useCallback(
+    async (path: string) => {
+      if (!path) return;
+      const resolved = workspaceDirectory
+        ? resolveWorkspaceFilePaths({ path, workspaceRoot: workspaceDirectory })
+        : null;
+      // 菜单项只在相对路径可解析时显示；键盘快捷键直达此处，解析失败时退化为绝对路径/原样路径。
+      const value = resolved?.relativePath ?? resolved?.absolutePath ?? path;
+      try {
+        await Clipboard.setStringAsync(value);
+        toast.copied(t("workspace.tabs.toasts.filePathCopiedLabel"));
+      } catch {
+        toast.error(t("workspace.tabs.toasts.copyFailed"));
+      }
+    },
+    [toast, t, workspaceDirectory],
+  );
+
+  const handleCopyFileFullPath = useCallback(
+    async (path: string) => {
+      if (!path) return;
+      const resolved = workspaceDirectory
+        ? resolveWorkspaceFilePaths({ path, workspaceRoot: workspaceDirectory })
+        : null;
+      const value = resolved?.absolutePath ?? path;
+      try {
+        await Clipboard.setStringAsync(value);
+        toast.copied(t("workspace.tabs.toasts.filePathCopiedLabel"));
+      } catch {
+        toast.error(t("workspace.tabs.toasts.copyFailed"));
+      }
+    },
+    [toast, t, workspaceDirectory],
   );
 
   const handleCopyResumeCommand = useCallback(
@@ -2233,7 +2312,15 @@ function WorkspaceScreenContent({
       title: string;
       logLabel: string;
     }): Promise<boolean> => {
-      const { tabsToClose, title, logLabel } = input;
+      const { title, logLabel } = input;
+      const { remainingTabsToClose: tabsToClose, protectedAgentTabId } = protectLastAgentTab(
+        uiTabs,
+        input.tabsToClose,
+      );
+      if (protectedAgentTabId && tabsToClose.length === 0) {
+        toast.show(t("workspace.tabs.toasts.cannotCloseLastAgent"), { variant: "warning" });
+        return false;
+      }
       if (tabsToClose.length === 0) {
         return true;
       }
@@ -2309,6 +2396,8 @@ function WorkspaceScreenContent({
       normalizedWorkspaceId,
       persistenceKey,
       t,
+      toast,
+      uiTabs,
     ],
   );
 
@@ -2486,7 +2575,8 @@ function WorkspaceScreenContent({
           }
           return true;
         case "workspace.tab.copy-file-path":
-          if (descriptor?.target.kind === "file") void handleCopyFilePath(descriptor.target.path);
+          if (descriptor?.target.kind === "file")
+            void handleCopyFileRelativePath(descriptor.target.path);
           return true;
         default:
           return false;
@@ -2495,7 +2585,7 @@ function WorkspaceScreenContent({
     [
       activeTab,
       handleCopyAgentId,
-      handleCopyFilePath,
+      handleCopyFileRelativePath,
       handleCopyResumeCommand,
       handleCopyTerminalId,
       handleReloadAgent,
@@ -2932,16 +3022,29 @@ function WorkspaceScreenContent({
         },
         onOpenPreferredTarget: (target, source) => {
           if (!persistenceKey) return;
-          openPreferredWorkspacePreview({
-            workspaceKey: persistenceKey,
-            serverId: normalizedServerId,
-            workspaceId: normalizedWorkspaceId,
-            explorerSidebarPaneId,
-            lastMainPaneId,
-            target,
-            source,
-            preferences: openInSidePane,
-          });
+          // "tab" mode skips preview-tab reuse: an open file is revealed, a new
+          // file gets its own tab instead of replacing the pane's preview.
+          const tabId =
+            explorerFileOpenMode === "tab" && target.kind === "file"
+              ? openPreferredWorkspaceTarget({
+                  workspaceKey: persistenceKey,
+                  target,
+                  source,
+                  preferences: openInSidePane,
+                })
+              : openPreferredWorkspacePreview({
+                  workspaceKey: persistenceKey,
+                  serverId: normalizedServerId,
+                  workspaceId: normalizedWorkspaceId,
+                  explorerSidebarPaneId,
+                  lastMainPaneId,
+                  target,
+                  source,
+                  preferences: openInSidePane,
+                });
+          // v0.13 dropped the tab-level fileNavigationRevision bump; the file panel
+          // re-handles line targets internally, so only pane navigation remains.
+          if (tabId) navigateToTabId(tabId);
         },
         onOpenTargetToSide:
           canRenderDesktopPaneSplits &&
@@ -2992,6 +3095,7 @@ function WorkspaceScreenContent({
       canRenderDesktopPaneSplits,
       openImportSheet,
       openInSidePane,
+      explorerFileOpenMode,
       revealWorkspaceChildTab,
       persistenceKey,
       replaceWorkspaceTabTarget,
@@ -3402,6 +3506,7 @@ function WorkspaceScreenContent({
             createTerminalDisabled={createTerminalDisabled}
             importAgentDisabled={!canOpenImportSheet}
             copyPathDisabled={!workspaceDirectory}
+            onCreateTerminal={handleCreateTerminal}
             onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
             onCreateBrowser={handleCreateBrowserTab}
             onOpenImportSheet={openImportSheet}
@@ -3472,10 +3577,12 @@ function WorkspaceScreenContent({
         closingTabIds={closingTabIds}
         onNavigateTab={navigateToTabId}
         onCloseTab={handleCloseTabById}
+        workspaceRoot={workspaceDirectory}
         onCopyResumeCommand={handleCopyResumeCommand}
         onCopyAgentId={handleCopyAgentId}
         onCopyTerminalId={handleCopyTerminalId}
-        onCopyFilePath={handleCopyFilePath}
+        onCopyFileRelativePath={handleCopyFileRelativePath}
+        onCopyFileFullPath={handleCopyFileFullPath}
         onReloadAgent={handleReloadAgent}
         onRenameTab={handleRenameTab}
         onCloseTabsToLeft={handleCloseTabsToLeftInPane}
@@ -3507,10 +3614,12 @@ function WorkspaceScreenContent({
     closingTabIds,
     navigateToTabId,
     handleCloseTabById,
+    workspaceDirectory,
     handleCopyResumeCommand,
     handleCopyAgentId,
     handleCopyTerminalId,
-    handleCopyFilePath,
+    handleCopyFileRelativePath,
+    handleCopyFileFullPath,
     handleReloadAgent,
     handleRenameTab,
     handleCloseTabsToLeftInPane,
@@ -3570,10 +3679,12 @@ function WorkspaceScreenContent({
             setHoveredCloseTabKey={setHoveredCloseTabKey}
             onNavigateTab={navigateToTabId}
             onCloseTab={handleCloseTabById}
+            workspaceRoot={workspaceDirectory}
             onCopyResumeCommand={handleCopyResumeCommand}
             onCopyAgentId={handleCopyAgentId}
             onCopyTerminalId={handleCopyTerminalId}
-            onCopyFilePath={handleCopyFilePath}
+            onCopyFileRelativePath={handleCopyFileRelativePath}
+            onCopyFileFullPath={handleCopyFileFullPath}
             onReloadAgent={handleReloadAgent}
             onRenameTab={handleRenameTab}
             onCloseTabsToLeft={handleCloseTabsToLeft}
@@ -3618,7 +3729,9 @@ function WorkspaceScreenContent({
         onCopyResumeCommand={handleCopyResumeCommand}
         onCopyAgentId={handleCopyAgentId}
         onCopyTerminalId={handleCopyTerminalId}
-        onCopyFilePath={handleCopyFilePath}
+        onCopyFileRelativePath={handleCopyFileRelativePath}
+        onCopyFileFullPath={handleCopyFileFullPath}
+        workspaceRoot={workspaceDirectory}
         onReloadAgent={handleReloadAgent}
         onRenameTab={handleRenameTab}
         onCloseTabsToLeft={handleCloseTabsToLeftInPane}
@@ -3659,7 +3772,9 @@ function WorkspaceScreenContent({
     handleCopyResumeCommand,
     handleCopyAgentId,
     handleCopyTerminalId,
-    handleCopyFilePath,
+    handleCopyFileRelativePath,
+    handleCopyFileFullPath,
+    workspaceDirectory,
     handleReloadAgent,
     handleRenameTab,
     handleCloseTabsToLeftInPane,

@@ -31,6 +31,7 @@ import type {
   AgentMode,
   AgentCapabilityFlags,
   AgentUsage,
+  AgentSessionStats,
   AgentPersistenceHandle,
 } from "@getpaseo/protocol/agent-types";
 import type {
@@ -86,6 +87,7 @@ export interface Agent {
   persistence: AgentPersistenceHandle | null;
   runtimeInfo?: AgentRuntimeInfo;
   lastUsage?: AgentUsage;
+  stats?: AgentSessionStats;
   lastError?: string | null;
   title: string | null;
   cwd: string;

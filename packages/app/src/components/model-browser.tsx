@@ -63,7 +63,7 @@ import {
 } from "@/components/model-browser-view";
 
 const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
-const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 400;
+const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 480;
 const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 80;
 const DESKTOP_MODEL_ROW_HEIGHT = 40;
 
@@ -777,48 +777,67 @@ function ModelRow({
     [],
   );
 
-  return (
-    <View
-      style={[styles.modelRowHoverBoundary, styles.browserModelRow]}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
+  // Held in a variable to keep the tooltip-wrapped tree under the JSX depth lint.
+  const rowPressable = (
+    <ModelBrowserPressable
+      onPress={onPress}
+      style={pressableStyle}
+      accessibilitySelected={isSelected}
+      testID={`model-row-${row.provider}-${row.modelId}`}
     >
-      <ModelBrowserPressable
-        onPress={onPress}
-        style={pressableStyle}
-        accessibilitySelected={isSelected}
-        testID={`model-row-${row.provider}-${row.modelId}`}
-      >
-        <View style={styles.browserRowContent}>
-          <View style={styles.browserRowLeading}>{leadingSlot}</View>
-          <View style={[styles.browserRowText, description && styles.browserRowTextInline]}>
-            <Text numberOfLines={1} style={styles.browserRowLabel}>
-              {row.modelLabel}
+      <View style={styles.browserRowContent}>
+        <View style={styles.browserRowLeading}>{leadingSlot}</View>
+        <View style={[styles.browserRowText, description && styles.browserRowTextInline]}>
+          <Text numberOfLines={1} style={styles.browserRowLabel}>
+            {row.modelLabel}
+          </Text>
+          {description ? (
+            <Text numberOfLines={1} style={styles.browserRowDescription}>
+              {description}
             </Text>
-            {description ? (
-              <Text numberOfLines={1} style={styles.browserRowDescription}>
-                {description}
-              </Text>
+          ) : null}
+        </View>
+        <View style={styles.browserRowTrailing}>
+          <View style={styles.browserRowSelection}>
+            {isSelected ? (
+              <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
             ) : null}
           </View>
-          <View style={styles.browserRowTrailing}>
-            <View style={styles.browserRowSelection}>
-              {isSelected ? (
-                <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
-              ) : null}
+          {profileAction ? <View style={styles.rowIconButton} /> : null}
+        </View>
+      </View>
+    </ModelBrowserPressable>
+  );
+
+  return (
+    <Tooltip delayDuration={250} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <View
+          style={[styles.modelRowHoverBoundary, styles.browserModelRow]}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
+        >
+          {rowPressable}
+          {/* The row renders a <button> on web, so its profile action sits beside it,
+              over the slot reserved above, rather than inside it. */}
+          {profileAction ? (
+            <View style={styles.modelRowProfileActionSlot} pointerEvents="box-none">
+              {profileAction}
             </View>
-            {profileAction ? <View style={styles.rowIconButton} /> : null}
-          </View>
+          ) : null}
         </View>
-      </ModelBrowserPressable>
-      {/* The row renders a <button> on web, so its profile action sits beside it,
-          over the slot reserved above, rather than inside it. */}
-      {profileAction ? (
-        <View style={styles.modelRowProfileActionSlot} pointerEvents="box-none">
-          {profileAction}
-        </View>
-      ) : null}
-    </View>
+      </TooltipTrigger>
+      {/* The inline label and description ellipsize, so the tooltip carries the
+          full model name, id, and qualified description. align="start" keeps it
+          clear of the profile action's own tooltip at the row's trailing edge. */}
+      <TooltipContent side="top" align="start" offset={8} maxWidth={480}>
+        <Text style={styles.tooltipText}>{row.modelLabel}</Text>
+        {row.modelId.length > 0 ? <Text style={styles.tooltipModelId}>{row.modelId}</Text> : null}
+        {description && description !== row.modelId ? (
+          <Text style={styles.tooltipDescription}>{description}</Text>
+        ) : null}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1701,8 +1720,17 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
   },
   tooltipText: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     color: theme.colors.foreground,
+  },
+  tooltipModelId: {
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.code,
+    color: theme.colors.foregroundMuted,
+  },
+  tooltipDescription: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
   virtualizedModelList: {
     flex: 1,
